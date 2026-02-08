@@ -1,0 +1,121 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Бясалгалын төв - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<section class="bg-gradient-to-r from-primary to-purple-700 text-gray-100 py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'center_title' 'Бясалгалын төв' %}</h1>
+        <p class="text-xl">{% editable 'center_subtitle' 'Гэгээрлийн замд хамт явах газар' %}</p>
+    </div>
+</section>
+
+<!-- Main Content -->
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <!-- Intro -->
+            <div class="mb-12">
+                <img src="{% static 'images/IMG_2282_1.jpg' %}" alt="Бясалгалын төв" class="w-full rounded-lg shadow-lg mb-8">
+                
+                <h2 class="text-3xl font-bold text-secondary mb-6">Манай төв</h2>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    Готопа бясалгалын төв нь бясалгал, гэгээрэлтэд сонирхолтой хүмүүсийн нийгэмлэг юм. Бид тайван, энх амгалан орчинд бясалгал хийх, багш нартай уулзах, адил сэтгэлгээтэй хүмүүстэй холбогдох боломжийг олгодог.
+                </p>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    Манай төв нь Улаанбаатар хотын төвд байрладаг бөгөөд орчин үеийн тоног төхөөрөмж, тав тухтай орчинтой.
+                </p>
+            </div>
+
+            <!-- Facilities -->
+            <div class="mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Төвийн тоног төхөөрөмж</h3>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="bg-light rounded-lg p-6">
+                        <h4 class="text-xl font-bold text-primary mb-3">Бясалгалын танхим</h4>
+                        <p class="text-gray-700">Тусгай бясалгалын танхимд 50 хүртэл хүн багтах боломжтой</p>
+                    </div>
+                    <div class="bg-light rounded-lg p-6">
+                        <h4 class="text-xl font-bold text-primary mb-3">Номын сан</h4>
+                        <p class="text-gray-700">Бясалгал, гэгээрэлтийн олон зууны ном, материалтай</p>
+                    </div>
+                    <div class="bg-light rounded-lg p-6">
+                        <h4 class="text-xl font-bold text-primary mb-3">Зочны өрөө</h4>
+                        <p class="text-gray-700">Хотоос ирсэн зочдод зориулсан тав тухтай өрөөнүүд</p>
+                    </div>
+                    <div class="bg-light rounded-lg p-6">
+                        <h4 class="text-xl font-bold text-primary mb-3">Цайны газар</h4>
+                        <p class="text-gray-700">Эрүүл мэндэд ашигтай органик цай, хоолтой</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule -->
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Ажлын цаг</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="font-bold">Даваа - Баасан:</span>
+                        <span>09:00 - 20:00</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="font-bold">Бямба:</span>
+                        <span>10:00 - 18:00</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="font-bold">Ням:</span>
+                        <span>10:00 - 16:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activities -->
+            <div class="mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Үйл ажиллагаа</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <div>
+                            <h4 class="font-bold text-lg">Өдөр тутмын бясалгал</h4>
+                            <p class="text-gray-700">Өглөө, орой бүр нээлттэй бясалгалын цаг</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <div>
+                            <h4 class="font-bold text-lg">Долоо хоногийн сургалт</h4>
+                            <p class="text-gray-700">Анхан, дунд, дээд шатны бясалгалын хичээл</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <div>
+                            <h4 class="font-bold text-lg">Семинар, уулзалт</h4>
+                            <p class="text-gray-700">Сар бүр багш нартай уулзалт, хэлэлцүүлэг</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <div>
+                            <h4 class="font-bold text-lg">Аялал, ретрит</h4>
+                            <p class="text-gray-700">Жилд хэд хэдэн удаа бясалгалын аялал</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Төвд зочлох уу?</h3>
+                <p class="mb-6">Бидэнтэй холбогдож, төвөөр зочлох цагаа товлоорой</p>
+                <a href="{% url 'main:contact' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
+                    Холбоо барих
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

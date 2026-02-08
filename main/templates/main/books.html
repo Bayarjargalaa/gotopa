@@ -1,0 +1,64 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Номууд - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<section class="bg-gradient-to-r from-primary to-purple-700 text-white py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'books_title' 'Номууд' %}</h1>
+        <p class="text-xl">{% editable 'books_subtitle' 'Гэгээрлийн зам руу хөтлөх номууд' %}</p>
+    </div>
+</section>
+
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Book 1 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/уншлагын ном.jpg' %}" alt="Ном" class="w-full h-80 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-secondary mb-2">Гэгээрлийн зам</h3>
+                        <p class="text-gray-600 mb-2">Гүрү Готопа</p>
+                        <p class="text-gray-700 mb-4">Бясалгалын үндсэн зарчмууд, практик дасгалууд</p>
+                        <p class="text-primary font-bold text-xl mb-4">45,000₮</p>
+                        <button class="w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90">Захиалах</button>
+                    </div>
+                </div>
+
+                <!-- Book 2 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/уншлагын ном.jpg' %}" alt="Ном" class="w-full h-80 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-secondary mb-2">Энергийн түлхүүр</h3>
+                        <p class="text-gray-600 mb-2">Гүрү Готопа</p>
+                        <p class="text-gray-700 mb-4">Дотоод энергийг ашиглах арга замууд</p>
+                        <p class="text-primary font-bold text-xl mb-4">38,000₮</p>
+                        <button class="w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90">Захиалах</button>
+                    </div>
+                </div>
+
+                <!-- Book 3 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/уншлагын ном.jpg' %}" alt="Ном" class="w-full h-80 object-cover">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-secondary mb-2">Хүн төрлөхтөнд барих бэлэг</h3>
+                        <p class="text-gray-600 mb-2">Гүрү Готопа</p>
+                        <p class="text-gray-700 mb-4">Готопа бясалгалын түүх, философи</p>
+                        <p class="text-primary font-bold text-xl mb-4">42,000₮</p>
+                        <button class="w-full bg-primary text-white py-2 rounded-lg hover:bg-opacity-90">Захиалах</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-12 bg-light rounded-lg p-8 text-center">
+                <h3 class="text-2xl font-bold text-secondary mb-4">Номыг хэрхэн захиалах вэ?</h3>
+                <p class="text-gray-700 mb-6">Утас: (+976) 70110205 эсвэл манай төвд зочлоорой</p>
+                <a href="{% url 'main:contact' %}" class="inline-block bg-primary text-white px-8 py-3 rounded-lg font-bold hover:bg-opacity-90">Холбоо барих</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

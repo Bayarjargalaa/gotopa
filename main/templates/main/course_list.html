@@ -1,0 +1,93 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Сургалтууд - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="mb-4">
+            <a href="{% url 'main:dashboard' %}" class="text-primary hover:underline">← Dashboard руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-bold text-secondary">Сургалтууд</h2>
+                {% if is_admin %}
+                <a href="{% url 'main:course_create' %}" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Шинэ сургалт
+                </a>
+                {% endif %}
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                {% for course in courses %}
+                <div class="border rounded-lg p-6 hover:shadow-lg transition-shadow {% if not course.is_active %}bg-gray-50 opacity-75{% endif %}">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-xl font-bold text-secondary">{{ course.name }}</h3>
+                        {% if not course.is_active %}
+                        <span class="px-3 py-1 bg-gray-400 text-white text-xs rounded-full">
+                            <i class="fas fa-ban mr-1"></i>Идэвхгүй
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="space-y-2 mb-4">
+                        <p class="text-sm">
+                            <span class="text-gray-600">Түвшин:</span>
+                            <span class="inline-block bg-primary text-white px-3 py-1 rounded-full text-xs ml-2">
+                                {{ course.get_level_display }}
+                            </span>
+                        </p>
+                        
+                        <p class="text-sm">
+                            <span class="text-gray-600">Багш:</span>
+                            <span class="font-bold">
+                                {% if course.teacher %}
+                                    {{ course.teacher.mongolian_name|default:course.teacher.user.username }}
+                                {% else %}
+                                    <span class="text-gray-400">Багш томилогдоогүй</span>
+                                {% endif %}
+                            </span>
+                        </p>
+                    </div>
+
+                    <div class="flex gap-2">
+                        {% if is_admin %}
+                        <a href="{% url 'main:course_edit' course.id %}" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-center">
+                            <i class="fas fa-edit mr-1"></i>Засах
+                        </a>
+                        <form method="post" action="{% url 'main:course_delete' course.id %}" class="flex-1" onsubmit="return confirm('{{ course.name }}-г устгахдаа итгэлтэй байна уу?');">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
+                                <i class="fas fa-trash mr-1"></i>Устгах
+                            </button>
+                        </form>
+                        {% else %}
+                            {% if course.available_slots > 0 %}
+                            <button class="flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                                Бүртгүүлэх
+                            </button>
+                            {% else %}
+                            <button class="flex-1 bg-gray-400 text-white px-4 py-2 rounded-lg cursor-not-allowed" disabled>
+                                Дүүрсэн
+                            </button>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-span-2 text-center py-12">
+                    <p class="text-gray-500 mb-4">Одоогоор идэвхтэй сургалт байхгүй байна.</p>
+                    {% if is_admin %}
+                    <a href="{% url 'main:course_create' %}" class="inline-block bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">
+                        <i class="fas fa-plus mr-2"></i>Шинэ сургалт нэмэх
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

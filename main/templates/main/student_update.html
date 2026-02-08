@@ -1,0 +1,338 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Сурагч засах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-2xl">
+        <div class="mb-4">
+            <a href="{% url 'main:student_list' %}" class="text-primary hover:underline">← Сурагчдын жагсаалт руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-3xl font-bold text-secondary mb-6">Сурагч засах</h2>
+
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Нэр -->
+                <div>
+                    <label for="mongolian_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Монгол нэр <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="mongolian_name" 
+                        name="mongolian_name" 
+                        required
+                        value="{{ student.mongolian_name }}"
+                        placeholder="Жишээ нь: Болд Баатар"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Утас -->
+                <div>
+                    <label for="phone_number" class="block text-sm font-medium text-gray-700 mb-2">
+                        Утасны дугаар <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="tel" 
+                        id="phone_number" 
+                        name="phone_number" 
+                        required
+                        value="{{ student.phone }}"
+                        placeholder="99001234"
+                        pattern="^\d{8}$"
+                        maxlength="8"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">
+                        <i class="fas fa-info-circle"></i> 8 оронтой тоо оруулна уу
+                    </p>
+                </div>
+
+                <!-- Имэйл -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                        Имэйл хаяг
+                    </label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        value="{{ student.user.email }}"
+                        placeholder="example@email.com"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Төрсөн өдөр -->
+                <div>
+                    <label for="birth_date" class="block text-sm font-medium text-gray-700 mb-2">
+                        Төрсөн өдөр
+                    </label>
+                    <input 
+                        type="date" 
+                        id="birth_date" 
+                        name="birth_date" 
+                        value="{{ student.birth_date|date:'Y-m-d' }}"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Хүйс -->
+                <div>
+                    <label for="gender" class="block text-sm font-medium text-gray-700 mb-2">
+                        Хүйс
+                    </label>
+                    <select 
+                        id="gender" 
+                        name="gender"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                        <option value="">Сонгох</option>
+                        <option value="M" {% if student.gender == 'M' %}selected{% endif %}>Эрэгтэй</option>
+                        <option value="F" {% if student.gender == 'F' %}selected{% endif %}>Эмэгтэй</option>
+                    </select>
+                </div>
+
+                <!-- Элссэн огноо -->
+                <div>
+                    <label for="enrollment_date" class="block text-sm font-medium text-gray-700 mb-2">
+                        Элссэн огноо
+                    </label>
+                    <input 
+                        type="date" 
+                        id="enrollment_date" 
+                        name="enrollment_date" 
+                        value="{{ student.enrollment_date|date:'Y-m-d' }}"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Хот/Аймаг -->
+                <div>
+                    <label for="city" class="block text-sm font-medium text-gray-700 mb-2">
+                        Хот/Аймаг
+                    </label>
+                    <input 
+                        type="text" 
+                        id="city" 
+                        name="city" 
+                        value="{{ student.city }}"
+                        placeholder="Жишээ нь: Улаанбаатар"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Дүүрэг/Сум -->
+                <div>
+                    <label for="district" class="block text-sm font-medium text-gray-700 mb-2">
+                        Дүүрэг/Сум
+                    </label>
+                    <input 
+                        type="text" 
+                        id="district" 
+                        name="district" 
+                        value="{{ student.district }}"
+                        placeholder="Жишээ нь: Баянзүрх дүүрэг"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Хаяг -->
+                <div>
+                    <label for="address" class="block text-sm font-medium text-gray-700 mb-2">
+                        Дэлгэрэнгүй хаяг
+                    </label>
+                    <textarea 
+                        id="address" 
+                        name="address" 
+                        rows="2"
+                        placeholder="Хороо, байр, тоот..."
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >{{ student.address }}</textarea>
+                </div>
+
+                <!-- Зураг -->
+                <div>
+                    <label for="photo" class="block text-sm font-medium text-gray-700 mb-2">
+                        Зураг
+                    </label>
+                    {% if student.photo %}
+                    <div class="mb-2">
+                        <img src="{{ student.photo.url }}" alt="Profile" class="w-32 h-32 object-cover rounded-lg border">
+                    </div>
+                    {% endif %}
+                    <input 
+                        type="file" 
+                        id="photo" 
+                        name="photo" 
+                        accept="image/*"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">
+                        <i class="fas fa-info-circle"></i> JPG, PNG форматтай зураг
+                    </p>
+                </div>
+
+                <!-- Тэмдэглэл -->
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">
+                        Тэмдэглэл
+                    </label>
+                    <textarea 
+                        id="notes" 
+                        name="notes" 
+                        rows="3"
+                        placeholder="Нэмэлт тэмдэглэл..."
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >{{ student.notes }}</textarea>
+                </div>
+
+                <!-- Идэвхтэй эсэх -->
+                <div class="flex items-center">
+                    <input 
+                        type="checkbox" 
+                        id="is_active" 
+                        name="is_active"
+                        {% if student.is_active_student %}checked{% endif %}
+                        class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
+                    >
+                    <label for="is_active" class="ml-2 text-sm font-medium text-gray-700">
+                        Идэвхтэй сурагч
+                    </label>
+                </div>
+
+                <!-- Одоогийн бүртгэлүүд -->
+                {% if enrollments %}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        <i class="fas fa-clipboard-list mr-2 text-primary"></i>Одоогийн бүртгэлүүд
+                    </label>
+                    <div class="border border-gray-300 rounded-lg p-4 space-y-2">
+                        {% for enrollment in enrollments %}
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200">
+                            <div class="flex-1">
+                                <div class="flex items-center">
+                                    <span class="font-medium text-gray-900">{{ enrollment.course.name }}</span>
+                                    {% if enrollment.course.level == 'BEGINNER' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Анхан</span>
+                                    {% elif enrollment.course.level == 'INTERMEDIATE' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Дунд</span>
+                                    {% else %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Ахисан</span>
+                                    {% endif %}
+                                    {% if enrollment.status == 'APPROVED' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                            <i class="fas fa-check-circle"></i> Баталсан
+                                        </span>
+                                    {% elif enrollment.status == 'PENDING' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                            <i class="fas fa-clock"></i> Хүлээгдэж буй
+                                        </span>
+                                    {% elif enrollment.status == 'COMPLETED' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                            <i class="fas fa-graduation-cap"></i> Төгссөн
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-sm text-gray-600 mt-1">
+                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ enrollment.course.teacher.mongolian_name }}
+                                    <span class="mx-2">•</span>
+                                    <i class="fas fa-calendar mr-1"></i>{{ enrollment.enrolled_date|date:"Y-m-d" }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Шинэ сургалт нэмэх -->
+                {% if courses %}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-plus-circle mr-2 text-primary"></i>Шинэ сургалт нэмэх
+                    </label>
+                    <div class="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto space-y-2">
+                        {% for course in courses %}
+                        {% if course.id not in enrolled_course_ids %}
+                        <label class="flex items-start p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input 
+                                type="checkbox" 
+                                name="new_courses" 
+                                value="{{ course.id }}"
+                                class="mt-1 mr-3 h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                            >
+                            <div class="flex-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-gray-900">{{ course.name }}</span>
+                                    {% if course.level == 'BEGINNER' %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Анхан</span>
+                                    {% elif course.level == 'INTERMEDIATE' %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Дунд</span>
+                                    {% else %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Ахисан</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-sm text-gray-600 mt-1">
+                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ course.teacher.mongolian_name }}
+                                    <span class="mx-2">•</span>
+                                    <i class="fas fa-users mr-1"></i>{{ course.enrolled_count }}/{{ course.max_students }}
+                                    {% if course.available_slots <= 0 %}
+                                        <span class="ml-2 text-red-600 font-semibold">(Дүүрсэн)</span>
+                                    {% elif course.available_slots <= 3 %}
+                                        <span class="ml-2 text-orange-600">({{ course.available_slots }} суудал үлдсэн)</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </label>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    <p class="mt-2 text-sm text-gray-500">
+                        <i class="fas fa-info-circle"></i> Сонгосон сургалтууд бүртгэлд нэмэгдэнэ.
+                    </p>
+                </div>
+                {% endif %}
+
+                <!-- Мэдээлэл -->
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-info-circle text-blue-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-700">
+                                <strong>Username:</strong> {{ student.user.username }}
+                            </p>
+                            <p class="text-sm text-blue-700 mt-1">
+                                <strong>Элссэн огноо:</strong> {{ student.enrollment_date|date:"Y-m-d"|default:"Тодорхойгүй" }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Товчнууд -->
+                <div class="flex justify-end gap-4">
+                    <a 
+                        href="{% url 'main:student_list' %}" 
+                        class="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    >
+                        <i class="fas fa-times mr-2"></i>Болих
+                    </a>
+                    <button 
+                        type="submit" 
+                        class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                    >
+                        <i class="fas fa-save mr-2"></i>Хадгалах
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

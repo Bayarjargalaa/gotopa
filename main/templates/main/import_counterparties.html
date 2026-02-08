@@ -1,0 +1,225 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Харилцагч импортлох - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-4xl">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
+        </div>
+
+        <!-- Гарчиг -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-3xl font-bold text-secondary mb-2">📊 Харилцагч импортлох</h2>
+            <p class="text-gray-600">Excel файлаас харилцагчдын мэдээллийг автоматаар оруулна</p>
+        </div>
+
+        <!-- Upload хэсэг -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="text-xl font-bold text-secondary mb-4">📤 Excel файл оруулах</h3>
+            
+            <form method="post" enctype="multipart/form-data" class="space-y-4">
+                {% csrf_token %}
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary transition-colors">
+                    <input type="file" 
+                           name="excel_file" 
+                           accept=".xlsx,.xls" 
+                           required
+                           class="block w-full text-sm text-gray-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-lg file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-primary file:text-white
+                                  hover:file:bg-opacity-90
+                                  cursor-pointer"
+                           id="excelFile">
+                    <p class="mt-2 text-sm text-gray-500">Excel файл сонгоно уу (.xlsx, .xls)</p>
+                </div>
+
+                <button type="submit" 
+                        class="w-full bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold text-lg">
+                    🚀 Импортлох
+                </button>
+            </form>
+
+            <!-- Статистик -->
+            <div class="mt-6 pt-6 border-t">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-4 bg-blue-50 rounded-lg">
+                        <div class="text-3xl font-bold text-blue-600">{{ total_counterparties }}</div>
+                        <div class="text-sm text-blue-700 mt-1">Нийт харилцагч</div>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <div class="text-3xl font-bold text-green-600">Excel</div>
+                        <div class="text-sm text-green-700 mt-1">Файлын формат</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Заавар -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h3 class="font-bold text-blue-800 mb-3 flex items-center">
+                <span class="text-xl mr-2">📋</span> Excel файлын формат
+            </h3>
+            <p class="text-sm text-blue-700 mb-3">Дараах баганууд байх ёстой:</p>
+            
+            <div class="bg-white rounded p-4 mb-4 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b">
+                            <th class="px-2 py-2 text-left text-blue-800">Баганын нэр</th>
+                            <th class="px-2 py-2 text-left text-blue-800">Тайлбар</th>
+                            <th class="px-2 py-2 text-center text-blue-800">Заавал</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-blue-900">
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Нэр</td>
+                            <td class="px-2 py-2">Харилцагчийн нэр</td>
+                            <td class="px-2 py-2 text-center">✅</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Төрөл</td>
+                            <td class="px-2 py-2">Нийлүүлэгч / Үйлчлүүлэгч / Хоёулаа</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Утас</td>
+                            <td class="px-2 py-2">Холбоо барих дугаар</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Имэйл</td>
+                            <td class="px-2 py-2">И-мэйл хаяг</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Хаяг</td>
+                            <td class="px-2 py-2">Байршил</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Регистр</td>
+                            <td class="px-2 py-2">Регистрийн дугаар</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Татвар</td>
+                            <td class="px-2 py-2">Татварын дугаар</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 font-mono bg-gray-50">Харилцах үлдэгдэл</td>
+                            <td class="px-2 py-2">Сөрөг=өр, Эерэг=авлага</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                        <tr>
+                            <td class="px-2 py-2 font-mono bg-gray-50">Тэмдэглэл</td>
+                            <td class="px-2 py-2">Нэмэлт мэдээлэл</td>
+                            <td class="px-2 py-2 text-center">❌</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="space-y-2 text-sm text-blue-700">
+                <p><strong>💡 Санамж:</strong></p>
+                <ul class="list-disc list-inside space-y-1 ml-4">
+                    <li>Excel файл <code class="bg-blue-100 px-1 rounded">.xlsx</code> эсвэл <code class="bg-blue-100 px-1 rounded">.xls</code> байх ёстой</li>
+                    <li>Эхний мөр нь баганы нэр (header) байна</li>
+                    <li>Давхардсан нэртэй харилцагч байвал шинэчлэгдэнэ</li>
+                    <li>Хоосон мөрүүд автоматаар алгасагдана</li>
+                </ul>
+            </div>
+
+            <!-- Жишээ татах товч -->
+            <div class="mt-4 pt-4 border-t border-blue-200">
+                <a href="/admin/main/counterparty/" 
+                   target="_blank"
+                   class="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+                    📥 Жишээ файл үүсгэх
+                </a>
+                <span class="text-sm text-blue-600 ml-2">
+                    (Жишээ файл: <code class="bg-blue-100 px-1 rounded">D:\Bayar\programming\python\харилцагчид_жишээ.xlsx</code>)
+                </span>
+            </div>
+        </div>
+
+        <!-- Сүүлд импортлогдсон харилцагчид -->
+        {% if counterparties %}
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold text-secondary mb-4">📝 Сүүлд нэмэгдсэн харилцагчид</h3>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Нэр</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Төрөл</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Утас</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Үлдэгдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for cp in counterparties %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2">{{ cp.name }}</td>
+                            <td class="px-4 py-2">
+                                {% if cp.counterparty_type == 'SUPPLIER' %}
+                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                                    {{ cp.get_counterparty_type_display }}
+                                </span>
+                                {% elif cp.counterparty_type == 'CUSTOMER' %}
+                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
+                                    {{ cp.get_counterparty_type_display }}
+                                </span>
+                                {% else %}
+                                <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                                    {{ cp.get_counterparty_type_display }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-2 text-gray-600">{{ cp.phone|default:"-" }}</td>
+                            <td class="px-4 py-2 text-right">
+                                {% if cp.balance < 0 %}
+                                <span class="text-red-600 font-bold">{{ cp.balance|floatformat:0 }}₮</span>
+                                {% elif cp.balance > 0 %}
+                                <span class="text-green-600 font-bold">+{{ cp.balance|floatformat:0 }}₮</span>
+                                {% else %}
+                                <span class="text-gray-500">0₮</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 text-center">
+                <a href="/admin/main/counterparty/" 
+                   class="inline-block text-primary hover:underline">
+                    Бүх харилцагч харах →
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+// Файл сонгох үед нэрийг харуулах
+document.getElementById('excelFile').addEventListener('change', function(e) {
+    const fileName = e.target.files[0]?.name;
+    if (fileName) {
+        // Filename харуулах notification эсвэл label
+        console.log('Selected file:', fileName);
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,181 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Банкны гүйлгээ импортлох - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-5xl">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
+        </div>
+
+        <!-- Гарчиг -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-3xl font-bold text-secondary mb-2">🏦 Банкны гүйлгээ импортлох</h2>
+            <p class="text-gray-600">Банкны хуулгын файлаас гүйлгээг автоматаар оруулна</p>
+        </div>
+
+        <!-- Upload хэсэг -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="text-xl font-bold text-secondary mb-4">📤 Хуулгын файл оруулах</h3>
+            
+            <form method="post" enctype="multipart/form-data" class="space-y-4">
+                {% csrf_token %}
+                
+                <!-- Банкны данс сонгох -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Банкны данс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="account" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                        <option value="">-- Данс сонгох --</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id }}">
+                                {{ account.code }} - {{ account.name }}
+                                {% if account.balance %}
+                                    (Үлдэгдэл: {{ account.balance|floatformat:0 }}₮)
+                                {% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="mt-1 text-sm text-gray-500">
+                        <i class="fas fa-info-circle text-blue-500"></i>
+                        Банкны харилцах дансаа сонгоно уу
+                    </p>
+                </div>
+
+                <!-- Файл оруулах -->
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary transition-colors">
+                    <input type="file" 
+                           name="excel_file" 
+                           accept=".xlsx,.xls" 
+                           required
+                           class="block w-full text-sm text-gray-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-lg file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-primary file:text-white
+                                  hover:file:bg-opacity-90
+                                  cursor-pointer"
+                           id="bankFile">
+                    <p class="mt-2 text-sm text-gray-500">Банкны хуулгын Excel файл сонгоно уу</p>
+                </div>
+
+                <button type="submit" 
+                        class="w-full bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold text-lg">
+                    🚀 Гүйлгээ импортлох
+                </button>
+            </form>
+
+            
+
+            <!-- Статистик -->
+            <div class="mt-6 pt-6 border-t">
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="text-center p-4 bg-blue-50 rounded-lg">
+                        <div class="text-3xl font-bold text-blue-600">{{ total_transactions }}</div>
+                        <div class="text-sm text-blue-700 mt-1">Нийт гүйлгээ</div>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <div class="text-3xl font-bold text-green-600">{{ bank_accounts.count }}</div>
+                        <div class="text-sm text-green-700 mt-1">Банкны данс</div>
+                    </div>
+                    <div class="text-center p-4 bg-purple-50 rounded-lg">
+                        <div class="text-3xl font-bold text-purple-600">2</div>
+                        <div class="text-sm text-purple-700 mt-1">Дэмжигдсэн банк</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Заавар -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h3 class="font-bold text-blue-800 mb-3 flex items-center">
+                <span class="text-xl mr-2">📋</span> Дэмжигдсэн форматууд
+            </h3>
+            <div class="bg-green-100 border border-green-300 rounded-lg p-4 mb-4">
+                <p class="text-green-800 font-semibold">
+                    ✅ Систем автоматаар таних: Файлын баганын нэрээс хамааран Хаан эсвэл Голомт банкны форматыг өөрөө таньж авна.
+                </p>
+            </div>
+{% endblock %}
+ 
+
+<script>
+// Debug: Form event tracking
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const submitBtn = document.querySelector('button[type="submit"]');
+    const accountSelect = document.querySelector('select[name="account"]');
+    const fileInput = document.querySelector('input[name="excel_file"]');
+    
+    console.log('=== FORM DEBUG INFO ===');
+    console.log('Form found:', form);
+    console.log('Submit button found:', submitBtn);
+    console.log('Account select found:', accountSelect);
+    console.log('File input found:', fileInput);
+    
+    // Товчны z-index болон overlay шалгах
+    if (submitBtn) {
+        const btnStyles = window.getComputedStyle(submitBtn);
+        console.log('Button z-index:', btnStyles.zIndex);
+        console.log('Button pointer-events:', btnStyles.pointerEvents);
+        
+        // Товч дээр байгаа бүх элементүүдийг олох
+        const btnRect = submitBtn.getBoundingClientRect();
+        const elementsAtPoint = document.elementsFromPoint(btnRect.left + btnRect.width/2, btnRect.top + btnRect.height/2);
+        console.log('🔍 Товчны дээр байгаа элементүүд:', elementsAtPoint);
+        
+        submitBtn.addEventListener('click', function(e) {
+            console.log('🔵 Товч ДАРАГДЛАА!');
+            console.log('Event:', e);
+            console.log('Account value:', accountSelect ? accountSelect.value : 'NOT FOUND');
+            console.log('File value:', fileInput ? fileInput.files.length : 'NOT FOUND');
+        });
+    }
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            console.log('🟢 FORM SUBMIT EVENT!');
+            console.log('Account:', accountSelect.value);
+            console.log('File:', fileInput.files[0] ? fileInput.files[0].name : 'NO FILE');
+            
+            // Validation шалгах
+            if (!accountSelect.value) {
+                console.log('❌ Account хоосон!');
+            }
+            if (!fileInput.files.length) {
+                console.log('❌ File хоосон!');
+            }
+        });
+    }
+    
+    // Account сонголт өөрчлөгдөх үед
+    if (accountSelect) {
+        accountSelect.addEventListener('change', function() {
+            console.log('Account сонгогдлоо:', this.value);
+        });
+    }
+    
+    // File сонгогдох үед
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            console.log('File сонгогдлоо:', this.files[0] ? this.files[0].name : 'NONE');
+        });
+    }
+    
+    // Sidebar overlay шалгах
+    const overlay = document.getElementById('sidebar-overlay');
+    if (overlay) {
+        const overlayStyles = window.getComputedStyle(overlay);
+        console.log('⚠️ Sidebar overlay олдлоо!');
+        console.log('Overlay display:', overlayStyles.display);
+        console.log('Overlay z-index:', overlayStyles.zIndex);
+        console.log('Overlay classes:', overlay.className);
+    }
+});
+</script>
+

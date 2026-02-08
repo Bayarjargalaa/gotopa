@@ -1,0 +1,126 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Худалдан авалтын жагсаалт - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
+        </div>
+
+        <!-- Гарчиг ба статистик -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-3xl font-bold text-secondary">Худалдан авалтын жагсаалт</h2>
+                <a href="/admin/main/purchase/add/" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                    + Шинэ худалдан авалт
+                </a>
+            </div>
+
+            <!-- Статистик -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div class="text-sm text-blue-600 mb-1">Нийт дүн</div>
+                    <div class="text-2xl font-bold text-blue-700">{{ total_amount|floatformat:0 }}₮</div>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <div class="text-sm text-green-600 mb-1">Төлсөн</div>
+                    <div class="text-2xl font-bold text-green-700">{{ total_paid|floatformat:0 }}₮</div>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                    <div class="text-sm text-red-600 mb-1">Үлдэгдэл</div>
+                    <div class="text-2xl font-bold text-red-700">{{ total_remaining|floatformat:0 }}₮</div>
+                </div>
+            </div>
+
+            <!-- Шүүлтүүр -->
+            <form method="get" class="flex gap-4 mb-6">
+                <select name="status" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
+                    <option value="">Бүх төлөв</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                    Шүүх
+                </button>
+            </form>
+        </div>
+
+        <!-- Худалдан авалтын жагсаалт -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Огноо</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Нийлүүлэгч</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Төлөв</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Нийт дүн</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Төлсөн</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Үлдэгдэл</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for purchase in purchases %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium">{{ purchase.id }}</td>
+                            <td class="px-4 py-3 text-sm">{{ purchase.purchase_date|date:"Y-m-d" }}</td>
+                            <td class="px-4 py-3 text-sm">{{ purchase.supplier.name }}</td>
+                            <td class="px-4 py-3">
+                                {% if purchase.status == 'PENDING' %}
+                                <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ purchase.get_status_display }}
+                                </span>
+                                {% elif purchase.status == 'PARTIAL' %}
+                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ purchase.get_status_display }}
+                                </span>
+                                {% else %}
+                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ purchase.get_status_display }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right font-bold">{{ purchase.total_amount|floatformat:0 }}₮</td>
+                            <td class="px-4 py-3 text-sm text-right text-green-600">{{ purchase.paid_amount|floatformat:0 }}₮</td>
+                            <td class="px-4 py-3 text-sm text-right text-red-600">{{ purchase.remaining_amount|floatformat:0 }}₮</td>
+                            <td class="px-4 py-3 text-center">
+                                <a href="/admin/main/purchase/{{ purchase.id }}/change/" 
+                                   class="text-primary hover:underline text-sm">
+                                    Засах
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                                <p class="mb-4">Худалдан авалт олдсонгүй</p>
+                                <a href="/admin/main/purchase/add/" class="inline-block bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                                    Шинэ худалдан авалт үүсгэх
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Тайлбар -->
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 class="font-bold text-blue-800 mb-2">💡 Санамж</h3>
+            <ul class="text-sm text-blue-700 space-y-1">
+                <li>• Худалдан авалт үүсгэхдээ барааны тоо ширхэг автоматаар нэмэгдэнэ</li>
+                <li>• Төлбөр төлөхдөө дансны үлдэгдэл шинэчлэгдэнэ</li>
+                <li>• Өр хэмжээ автоматаар тооцоологдоно</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

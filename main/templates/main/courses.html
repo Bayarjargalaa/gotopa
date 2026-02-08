@@ -1,0 +1,18 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Бясалгалын сургалтууд - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<div class="py-20 bg-white">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold text-center text-secondary mb-8">{% editable 'courses_title' 'Бясалгалын сургалтууд' %}</h1>
+        <div class="max-w-4xl mx-auto">
+            <p class="text-lg text-gray-600 leading-relaxed">
+                {% editable 'courses_description' 'Энэ хуудас удахгүй бэлэн болно...' %}
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

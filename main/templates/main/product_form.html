@@ -1,0 +1,156 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Бараа засах{% else %}Шинэ бараа нэмэх{% endif %} - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-3xl">
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <h1 class="text-3xl font-bold text-secondary mb-6">
+            {% if is_edit %}✏️ Бараа материал засах{% else %}➕ Шинэ бараа материал нэмэх{% endif %}
+        </h1>
+
+        <form method="POST" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Үндсэн мэдээлэл -->
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Барааны код <span class="text-red-500">*</span></label>
+                    <input type="text" name="code" value="{{ product.code }}" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <p class="text-xs text-gray-500 mt-1">Жишээ: BOOK-001, PROD-123</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Ангилал</label>
+                    <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                        <option value="">-- Сонгох --</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if product.category.id == cat.id %}selected{% endif %}>
+                            {{ cat.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Бүтээгдэхүүний нэр <span class="text-red-500">*</span></label>
+                <input type="text" name="name" value="{{ product.name }}" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Тайлбар</label>
+                <textarea name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">{{ product.description }}</textarea>
+            </div>
+
+            <!-- Үнийн мэдээлэл -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="font-bold mb-3">💰 Үнийн мэдээлэл</h3>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Худалдан авах үнэ <span class="text-red-500">*</span></label>
+                        <input type="number" name="purchase_price" value="{{ product.purchase_price }}" step="0.01" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Борлуулах үнэ <span class="text-red-500">*</span></label>
+                        <input type="number" name="selling_price" value="{{ product.selling_price }}" step="0.01" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Агуулах -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="font-bold mb-3">📦 Агуулахын мэдээлэл</h3>
+                <div class="grid md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Хэмжих нэгж</label>
+                        <select name="unit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                            {% for unit_code, unit_name in units %}
+                            <option value="{{ unit_code }}" {% if product.unit == unit_code %}selected{% endif %}>
+                                {{ unit_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if not is_edit %}
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Анхны үлдэгдэл</label>
+                        <input type="number" name="current_stock" value="{{ product.current_stock|default:0 }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                    {% else %}
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Одоогийн үлдэгдэл</label>
+                        <input type="text" value="{{ product.current_stock }}" disabled
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100">
+                        <p class="text-xs text-gray-500 mt-1">Хөдөлгөөнөөр өөрчлөгдөнө</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Доод үлдэгдэл</label>
+                        <input type="number" name="min_stock" value="{{ product.min_stock|default:0 }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Нийлүүлэгч -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="font-bold mb-3">🏢 Нийлүүлэгчийн мэдээлэл</h3>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Нийлүүлэгч</label>
+                        <input type="text" name="supplier" value="{{ product.supplier }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Холбоо барих</label>
+                        <input type="text" name="supplier_contact" value="{{ product.supplier_contact }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Зураг -->
+            <div>
+                <label class="block text-sm font-medium mb-2">Зураг</label>
+                <input type="file" name="image" accept="image/*"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                {% if product.image %}
+                <div class="mt-2">
+                    <img src="{{ product.image.url }}" alt="{{ product.name }}" class="h-32 rounded">
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Тэмдэглэл -->
+            <div>
+                <label class="block text-sm font-medium mb-2">Тэмдэглэл</label>
+                <textarea name="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">{{ product.notes }}</textarea>
+            </div>
+
+            {% if is_edit %}
+            <div class="flex items-center">
+                <input type="checkbox" name="is_active" id="is_active" {% if product.is_active %}checked{% endif %}
+                       class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                <label for="is_active" class="ml-2 text-sm font-medium">Идэвхтэй</label>
+            </div>
+            {% endif %}
+
+            <!-- Товчнууд -->
+            <div class="flex space-x-4">
+                <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
+                    ✓ Хадгалах
+                </button>
+                <a href="{% url 'main:inventory_list' %}" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-bold">
+                    ✗ Болих
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

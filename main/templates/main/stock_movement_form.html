@@ -1,0 +1,168 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Агуулахын хөдөлгөөн бүртгэх - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <h1 class="text-3xl font-bold text-secondary mb-6">📊 Агуулахын хөдөлгөөн бүртгэх</h1>
+
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Бүтээгдэхүүн <span class="text-red-500">*</span></label>
+                <select name="product" required id="product-select"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <option value="">-- Бүтээгдэхүүн сонгох --</option>
+                    {% for product in products %}
+                    <option value="{{ product.id }}" 
+                            data-purchase-price="{{ product.purchase_price }}"
+                            data-selling-price="{{ product.selling_price }}"
+                            data-stock="{{ product.current_stock }}">
+                        {{ product.code }} - {{ product.name }} (Үлдэгдэл: {{ product.current_stock }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Төрөл <span class="text-red-500">*</span></label>
+                <select name="movement_type" required id="movement-type"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    {% for type_code, type_name in movement_types %}
+                    <option value="{{ type_code }}">{{ type_name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">
+                    <span class="block">• Орлого - Бараа авах, үлдэгдэл нэмэгдэнэ</span>
+                    <span class="block">• Зарлага - Бараа зарах, үлдэгдэл буурна</span>
+                    <span class="block">• Тохируулга - Үлдэгдэл засварлах</span>
+                    <span class="block">• Буцаалт - Буцаан авах</span>
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Тоо ширхэг <span class="text-red-500">*</span></label>
+                    <input type="number" name="quantity" required min="1" id="quantity"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Нэгж үнэ <span class="text-red-500">*</span></label>
+                    <input type="number" name="price" required min="0" step="0.01" id="price"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <p class="text-xs text-gray-500 mt-1" id="price-hint"></p>
+                </div>
+            </div>
+
+            <div id="total-amount" class="bg-blue-50 p-4 rounded-lg hidden">
+                <p class="text-sm font-medium">Нийт дүн:</p>
+                <p class="text-2xl font-bold text-primary" id="total-display">0₮</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Баримтын дугаар</label>
+                <input type="text" name="reference_number"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">
+                    <span id="customer-label">Үйлчлүүлэгч/Нийлүүлэгч</span>
+                </label>
+                <input type="text" name="customer_name"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Тэмдэглэл</label>
+                <textarea name="notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"></textarea>
+            </div>
+
+            <div class="flex space-x-4">
+                <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
+                    ✓ Бүртгэх
+                </button>
+                <a href="{% url 'main:stock_movement_list' %}" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-bold">
+                    ✗ Болих
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const productSelect = document.getElementById('product-select');
+    const movementType = document.getElementById('movement-type');
+    const priceInput = document.getElementById('price');
+    const quantityInput = document.getElementById('quantity');
+    const priceHint = document.getElementById('price-hint');
+    const customerLabel = document.getElementById('customer-label');
+    const totalAmount = document.getElementById('total-amount');
+    const totalDisplay = document.getElementById('total-display');
+
+    // Бүтээгдэхүүн солих үед үнэ автоматаар орно
+    productSelect.addEventListener('change', function() {
+        const option = this.options[this.selectedIndex];
+        if (option.value) {
+            updatePrice();
+        }
+    });
+
+    // Төрөл солих үед label, үнэ өөрчлөгдөнө
+    movementType.addEventListener('change', function() {
+        updatePrice();
+        updateCustomerLabel();
+    });
+
+    // Үнэ, тоо ширхэг өөрчлөгдөхөд нийт дүн тооцоолно
+    priceInput.addEventListener('input', calculateTotal);
+    quantityInput.addEventListener('input', calculateTotal);
+
+    function updatePrice() {
+        const option = productSelect.options[productSelect.selectedIndex];
+        const type = movementType.value;
+        
+        if (option.value) {
+            if (type === 'IN') {
+                priceInput.value = option.dataset.purchasePrice;
+                priceHint.textContent = 'Худалдан авах үнэ';
+            } else if (type === 'OUT') {
+                priceInput.value = option.dataset.sellingPrice;
+                priceHint.textContent = 'Борлуулах үнэ';
+            } else {
+                priceHint.textContent = '';
+            }
+            calculateTotal();
+        }
+    }
+
+    function updateCustomerLabel() {
+        const type = movementType.value;
+        if (type === 'IN') {
+            customerLabel.textContent = 'Нийлүүлэгч';
+        } else if (type === 'OUT') {
+            customerLabel.textContent = 'Үйлчлүүлэгч';
+        } else {
+            customerLabel.textContent = 'Үйлчлүүлэгч/Нийлүүлэгч';
+        }
+    }
+
+    function calculateTotal() {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const price = parseFloat(priceInput.value) || 0;
+        const total = quantity * price;
+        
+        if (total > 0) {
+            totalDisplay.textContent = total.toLocaleString() + '₮';
+            totalAmount.classList.remove('hidden');
+        } else {
+            totalAmount.classList.add('hidden');
+        }
+    }
+});
+</script>
+{% endblock %}

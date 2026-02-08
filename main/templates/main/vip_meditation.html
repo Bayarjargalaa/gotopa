@@ -1,0 +1,85 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Зуны VIP бясалгал - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<section class="bg-gradient-to-r from-primary to-purple-700 text-gray py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'vip_title' 'Зуны VIP бясалгал' %}</h1>
+        <p class="text-xl">{% editable 'vip_subtitle' 'Багштай хамт байгальд бясалгал хийх онцгой туршлага' %}</p>
+    </div>
+</section>
+
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <img src="{% static 'images/hun_turulhtundbarih_beleg.jpg' %}" alt="VIP бясалгал" class="w-full rounded-lg shadow-lg mb-8">
+            
+            <h2 class="text-3xl font-bold text-secondary mb-6">Онцлог боломж</h2>
+            <p class="text-gray-700 text-lg leading-relaxed mb-8">
+                Зуны VIP бясалгал бол Гүрү Готопа багштай биечлэн уулзаж, гүнзгий бясалгалд орох онцгой боломж юм. Хөвсгөл аймгийн үзэсгэлэнт байгальд 7 хоног турш интенсив сургалт, бясалгал хийнэ.
+            </p>
+
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Хөтөлбөрт юу багтах вэ?</h3>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Гүрү Готопа багшийн хичээл</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Өдөрт 3 удаагийн бясалгалын практик</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Тусгай энергийн дасгалууд</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Хоол, байр орон</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Тээврийн үйлчилгээ (UB-Хөвсгөл-UB)</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Бясалгалын материал, ном</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 mb-12">
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h4 class="text-xl font-bold text-primary mb-4">Хуваарь</h4>
+                    <ul class="space-y-2 text-gray-700">
+                        <li><strong>Огноо:</strong> 2026.07.15 - 2026.07.22</li>
+                        <li><strong>Үргэлжлэх хугацаа:</strong> 7 өдөр, 6 шөнө</li>
+                        <li><strong>Газар:</strong> Хөвсгөл аймаг</li>
+                        <li><strong>Багтаамж:</strong> 30 хүн (хязгаарлагдмал)</li>
+                    </ul>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h4 class="text-xl font-bold text-primary mb-4">Төлбөр</h4>
+                    <p class="text-3xl font-bold text-primary mb-4">1,200,000₮</p>
+                    <ul class="space-y-2 text-gray-700 text-sm">
+                        <li>✓ Бүх зардал багтсан</li>
+                        <li>✓ Урьдчилгаа төлбөр: 400,000₮</li>
+                        <li>✓ Эрт бүртгүүлсэн 10% хөнгөлөлт</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Бүртгэл эхэллээ!</h3>
+                <p class="mb-6">Багтаамж хязгаарлагдмал тул эрт бүртгүүлээрэй</p>
+                <a href="{% url 'main:contact' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100">Бүртгүүлэх</a>
+                <p class="mt-4">Утас: (+976) 70110205</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

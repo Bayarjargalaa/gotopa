@@ -1,0 +1,203 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-secondary">
+                        Сайн байна уу, {{ profile.mongolian_name|default:user.username }}!
+                    </h1>
+                    <p class="text-gray-600 mt-2">
+                        <span class="inline-block bg-primary text-white px-3 py-1 rounded-full text-sm">
+                            {{ profile.get_role_display }}
+                        </span>
+                    </p>
+                </div>
+                <div class="text-right">
+                    <a href="{% url 'main:profile' %}" class="text-primary hover:underline">Хувийн мэдээлэл</a>
+                    <span class="mx-2">|</span>
+                    <a href="{% url 'main:logout' %}" class="text-gray-600 hover:text-red-600">Гарах</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Dashboard -->
+        {% if profile.is_admin %}
+        <div class="grid md:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Нийт сурагч</p>
+                        <p class="text-3xl font-bold text-primary">{{ total_students }}</p>
+                    </div>
+                    <div class="text-primary text-4xl">👥</div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Идэвхтэй сурагч</p>
+                        <p class="text-3xl font-bold text-green-600">{{ active_students }}</p>
+                    </div>
+                    <div class="text-green-600 text-4xl">✓</div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Багш нар</p>
+                        <p class="text-3xl font-bold text-blue-600">{{ total_teachers }}</p>
+                    </div>
+                    <div class="text-blue-600 text-4xl">👨‍🏫</div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Идэвхтэй сургалт</p>
+                        <p class="text-3xl font-bold text-purple-600">{{ total_courses }}</p>
+                    </div>
+                    <div class="text-purple-600 text-4xl">📚</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold mb-4">Сүүлийн бүртгэлүүд</h3>
+                <div class="space-y-3">
+                    {% for enrollment in recent_enrollments %}
+                    <div class="border-l-4 border-primary pl-4">
+                        <p class="font-bold">{{ enrollment.student.mongolian_name }}</p>
+                        <p class="text-sm text-gray-600">{{ enrollment.course.name }}</p>
+                        <p class="text-xs text-gray-500">{{ enrollment.enrolled_date }}</p>
+                    </div>
+                    {% empty %}
+                    <p class="text-gray-500">Бүртгэл байхгүй байна.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-xl font-bold mb-4">Хурдан холбоос</h3>
+                <div class="space-y-2">
+                    {% if user.is_staff or user.is_superuser %}
+                    <a href="/admin/" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        🔧 Admin панель
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'main:student_list' %}" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        👥 Сурагчдын жагсаалт
+                    </a>
+                    <a href="{% url 'main:course_list' %}" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        📚 Сургалтууд
+                    </a>
+                    {% if profile.role == 'MANAGER' or profile.role == 'ACCOUNTANT' or user.is_superuser %}
+                    <a href="{% url 'main:finance_dashboard' %}" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        💰 Санхүү
+                    </a>
+                    <a href="{% url 'main:inventory_list' %}" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        📦 Бараа материал
+                    </a>
+                    <a href="{% url 'main:stock_movement_list' %}" class="block bg-primary text-white px-4 py-3 rounded-lg hover:bg-opacity-90">
+                        📊 Агуулахын хөдөлгөөн
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Teacher Dashboard -->
+        {% if profile.is_teacher %}
+        <div class="grid md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-600 text-sm">Миний сургалт</p>
+                <p class="text-3xl font-bold text-primary">{{ my_courses.count }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-600 text-sm">Нийт сурагч</p>
+                <p class="text-3xl font-bold text-green-600">{{ total_students }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <a href="{% url 'main:course_list' %}" class="block bg-primary text-white px-4 py-2 rounded-lg text-center hover:bg-opacity-90">
+                    Сургалтууд харах
+                </a>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold mb-4">Миний сургалтууд</h3>
+            <div class="space-y-4">
+                {% for course in my_courses %}
+                <div class="border rounded-lg p-4">
+                    <h4 class="font-bold text-lg">{{ course.name }}</h4>
+                    <p class="text-gray-600">{{ course.get_level_display }}</p>
+                    <p class="text-sm text-gray-500">{{ course.start_date }} - {{ course.end_date }}</p>
+                    <p class="text-sm">Элссэн: {{ course.enrolled_count }}/{{ course.max_students }}</p>
+                </div>
+                {% empty %}
+                <p class="text-gray-500">Сургалт томилогдоогүй байна.</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Student Dashboard -->
+        {% if not profile.is_admin and not profile.is_teacher %}
+        <div class="grid md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-600 text-sm">Миний сургалт</p>
+                <p class="text-3xl font-bold text-primary">{{ my_enrollments.count }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-600 text-sm">Төлөх төлбөр</p>
+                <p class="text-3xl font-bold text-red-600">{{ pending_payments.count }}</p>
+            </div>            
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold mb-4">Миний элссэн сургалтууд</h3>
+            <div class="space-y-4">
+                {% for enrollment in my_enrollments %}
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="font-bold text-lg">{{ enrollment.course.name }}</h4>
+                            <p class="text-gray-600">{{ enrollment.course.get_level_display }}</p>
+                            <p class="text-sm text-gray-500">Багш: {{ enrollment.course.teacher.mongolian_name }}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="inline-block px-3 py-1 rounded-full text-sm
+                                {% if enrollment.status == 'APPROVED' %}bg-green-100 text-green-800
+                                {% elif enrollment.status == 'PENDING' %}bg-yellow-100 text-yellow-800
+                                {% elif enrollment.status == 'COMPLETED' %}bg-blue-100 text-blue-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ enrollment.get_status_display }}
+                            </span>
+                            {% if not enrollment.is_paid %}
+                            <p class="text-red-600 text-sm mt-2">Төлбөр төлөөгүй</p>
+                            {% else %}
+                            <p class="text-green-600 text-sm mt-2">✓ Төлсөн</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-gray-500">Та одоогоор ямар ч сургалтад элсээгүй байна.</p>
+                <a href="{% url 'main:beginner_meditation' %}" class="inline-block mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">
+                    Анхан шатны сургалтад бүртгүүлэх
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

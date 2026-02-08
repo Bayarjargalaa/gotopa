@@ -1,0 +1,98 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Готопа бясалгал гэж юу вэ? - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<section class="bg-gradient-to-r from-primary to-purple-700 text-gray-100 py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'gotopa_title' 'Готопа бясалгал гэж юу вэ?' %}</h1>
+        <p class="text-xl">{% editable 'gotopa_subtitle' 'Өндөр давтамжийн бясалгал - Хүн төрлөхтөнд барих бэлэг' %}</p>
+    </div>
+</section>
+
+<!-- Main Content -->
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <!-- Intro -->
+            <div class="mb-12">
+                <img src="{% static 'images/hun_turulhtundbarih_beleg.jpg' %}" alt="Готопа бясалгал" class="w-full rounded-lg shadow-lg mb-8">
+                
+                <h2 class="text-3xl font-bold text-secondary mb-6">Өндөр давтамжийн бясалгал</h2>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    Готопа бясалгал бол энхрий, гэгээрэлт, биеийн эрүүл мэнд, оюун санааны тэнцвэрт байдалд хүрэх замыг зааж өгдөг өндөр давтамжийн бясалгалын систем юм. Энэ нь мянга мянган жилийн өмнөх эртний мэргэн ухаантай өнөөгийн орчин үеийн шинжлэх ухааныг хослуулан, хүмүүст гүнзгий гэгээрлийн туршлагад хүрэх боломжийг олгодог.
+                </p>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    Готопа бясалгал нь дотоод энергийн давтамжийг өөрчлөх, мэдрэхүйн өргөтгөл, гэгээрлийн замд хүрэх үндсэн арга барилуудыг агуулдаг. Энэ бясалгалын онцлог нь түүний практик, амьдралд ашиглах боломжтой байдалд оршдог.
+                </p>
+            </div>
+
+            <!-- Benefits -->
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Готопа бясалгалын ашиг тус</h3>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Оюун санааны тайван байдал, стрессийг бууруулах</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Эрүүл мэнд, эрч хүч нэмэгдэх</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Анхаарал төвлөрөх чадвар сайжрах</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Дотоод энергийн түвшин өсөх</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Өөрийгөө танин мэдэх, гэгээрэлтэд хүрэх</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Харилцаа холбоо сайжрах, амьдралын чанар дээшлэх</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How it works -->
+            <div class="mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Бид хэрхэн бясалгал хийдэг вэ?</h3>
+                <div class="space-y-6">
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold text-secondary mb-2">1. Амьсгалын дасгал</h4>
+                        <p class="text-gray-700">Тусгай амьсгалын техникүүд ашиглан биеийн энергийн урсгалыг тохируулах</p>
+                    </div>
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold text-secondary mb-2">2. Мантра</h4>
+                        <p class="text-gray-700">Эртний ариун үгс, дуу авиаг давтах замаар оюун санааг тунгалаг болгох</p>
+                    </div>
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold text-secondary mb-2">3. Бясалгалын байрлал</h4>
+                        <p class="text-gray-700">Зөв байрлал, суудал ашиглан энергийн урсгалыг оновчтой болгох</p>
+                    </div>
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold text-secondary mb-2">4. Гүнзгий медитаци</h4>
+                        <p class="text-gray-700">Оюун санааны гүнд орж, дотоод мэдрэмжээ өргөжүүлэх</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Готопа бясалгалаар эхлэх үү?</h3>
+                <p class="mb-6">Анхан шатны бясалгалын хичээлд бүртгүүлэх</p>
+                <a href="{% url 'main:beginner_meditation' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
+                    Бүртгүүлэх
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

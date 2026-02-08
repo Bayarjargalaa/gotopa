@@ -1,0 +1,88 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Хувийн мэдээлэл - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="max-w-3xl mx-auto">
+            <!-- Back Button -->
+            <div class="mb-4">
+                <a href="{% url 'main:dashboard' %}" class="text-primary hover:underline">← Dashboard руу буцах</a>
+            </div>
+
+            <!-- Profile Card -->
+            <div class="bg-white rounded-lg shadow-md p-8">
+                <h2 class="text-3xl font-bold text-secondary mb-6">Хувийн мэдээлэл</h2>
+
+                <div class="space-y-4">
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Нэвтрэх нэр</p>
+                        <p class="text-lg font-bold">{{ user.username }}</p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Монгол нэр</p>
+                        <p class="text-lg font-bold">{{ profile.mongolian_name|default:"Бүртгээгүй" }}</p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Эрх</p>
+                        <p class="text-lg">
+                            <span class="inline-block bg-primary text-white px-4 py-2 rounded-full">
+                                {{ profile.get_role_display }}
+                            </span>
+                        </p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Утас</p>
+                        <p class="text-lg">{{ profile.phone|default:"Бүртгээгүй" }}</p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Хаяг</p>
+                        <p class="text-lg">{{ profile.address|default:"Бүртгээгүй" }}</p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Төрсөн өдөр</p>
+                        <p class="text-lg">{{ profile.birth_date|default:"Бүртгээгүй"|date:"Y-m-d" }}</p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Хүйс</p>
+                        <p class="text-lg">{{ profile.get_gender_display|default:"Бүртгээгүй" }}</p>
+                    </div>
+
+                    {% if profile.role == 'STUDENT' %}
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Идэвхтэй эсэх</p>
+                        <p class="text-lg">
+                            {% if profile.is_active_student %}
+                                <span class="text-green-600">✓ Идэвхтэй</span>
+                            {% else %}
+                                <span class="text-gray-600">Идэвхгүй</span>
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <div class="border-b pb-4">
+                        <p class="text-sm text-gray-600">Элссэн сургалт</p>
+                        <p class="text-lg font-bold text-primary">{{ profile.enrolled_courses_count }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="mt-8 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                    <p class="text-sm text-yellow-800">
+                        <strong>Анхаар:</strong> Хувийн мэдээллээ засахын тулд админтай холбогдоно уу эсвэл 
+                        <a href="/admin/" class="underline">Admin панель</a> руу нэвтрэнэ үү.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

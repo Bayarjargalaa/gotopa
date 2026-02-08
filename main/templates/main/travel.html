@@ -1,0 +1,51 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Аялал - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<section class="bg-gradient-to-r from-primary to-purple-700 text-white py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'travel_title' 'Бясалгалын аялал' %}</h1>
+        <p class="text-xl">{% editable 'travel_subtitle' 'Байгальд бясалгал хийх онцгой туршлага' %}</p>
+    </div>
+</section>
+
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <img src="{% static 'images/hun_turulhtundbarih_beleg.jpg' %}" alt="Аялал" class="w-full rounded-lg shadow-lg mb-8">
+            
+            <h2 class="text-3xl font-bold text-secondary mb-6">Бясалгалын ретрит</h2>
+            <p class="text-gray-700 text-lg mb-8">
+                Жилд хэд хэдэн удаа бид Монгол орны үзэсгэлэнт газруудад бясалгалын ретрит зохион байгуулдаг. Байгалийн тайван орчинд гүн гүнзгий бясалгал хийх, багш нартай уулзах, адил сэтгэлгээтэй хүмүүстэй холбогдох онцгой боломж.
+            </p>
+
+            <div class="bg-light rounded-lg p-8 mb-8">
+                <h3 class="text-2xl font-bold text-secondary mb-4">2026 оны аялалууд</h3>
+                <div class="space-y-6">
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold mb-2">Зуны VIP бясалгал</h4>
+                        <p class="text-gray-700 mb-2">Хугацаа: 2026.07.15 - 2026.07.22 (7 өдөр)</p>
+                        <p class="text-gray-700 mb-2">Газар: Хөвсгөл аймаг</p>
+                        <p class="text-primary font-bold">Төлбөр: 1,200,000₮</p>
+                    </div>
+                    <div class="border-l-4 border-primary pl-6">
+                        <h4 class="text-xl font-bold mb-2">Намрын бясалгал</h4>
+                        <p class="text-gray-700 mb-2">Хугацаа: 2026.09.10 - 2026.09.13 (3 өдөр)</p>
+                        <p class="text-gray-700 mb-2">Газар: Тэрэлж</p>
+                        <p class="text-primary font-bold">Төлбөр: 450,000₮</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Аялалд бүртгүүлэх</h3>
+                <p class="mb-6">Багтаамж хязгаарлагдмал. Эрт бүртгүүлээрэй!</p>
+                <a href="{% url 'main:contact' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100">Холбоо барих</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

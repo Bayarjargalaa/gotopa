@@ -1,0 +1,138 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Багш бүртгэх - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-2xl">
+        <div class="mb-4">
+            <a href="{% url 'main:teacher_list' %}" class="text-primary hover:underline">← Багш нарын жагсаалт руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-3xl font-bold text-secondary mb-6">Шинэ багш бүртгэх</h2>
+
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Нэр -->
+                <div>
+                    <label for="mongolian_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Монгол нэр <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="mongolian_name" 
+                        name="mongolian_name" 
+                        required
+                        placeholder="Жишээ нь: Доржийн Болд"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Түвшин -->
+                <div>
+                    <label for="role" class="block text-sm font-medium text-gray-700 mb-2">
+                        Багшийн түвшин <span class="text-red-500">*</span>
+                    </label>
+                    <select 
+                        id="role" 
+                        name="role" 
+                        required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                        <option value="">Сонгох</option>
+                        <option value="TEACHER_BEGINNER">Анхан шатны багш</option>
+                        <option value="TEACHER_INTERMEDIATE">Дунд шатны багш</option>
+                        <option value="TEACHER_ADVANCED">Дээд шатны багш</option>
+                    </select>
+                </div>
+
+                <!-- Утас -->
+                <div>
+                    <label for="phone_number" class="block text-sm font-medium text-gray-700 mb-2">
+                        Утасны дугаар <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="tel" 
+                        id="phone_number" 
+                        name="phone_number" 
+                        required
+                        placeholder="99001234"
+                        pattern="^\d{8}$"
+                        maxlength="8"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">
+                        <i class="fas fa-info-circle"></i> 8 оронтой тоо оруулна уу
+                    </p>
+                </div>
+
+                <!-- Имэйл -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                        Имэйл хаяг
+                    </label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        placeholder="example@email.com"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Хаяг -->
+                <div>
+                    <label for="address" class="block text-sm font-medium text-gray-700 mb-2">
+                        Хаяг
+                    </label>
+                    <textarea 
+                        id="address" 
+                        name="address" 
+                        rows="3"
+                        placeholder="Хот, дүүрэг, хороо, байр..."
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    ></textarea>
+                </div>
+
+                <!-- Тайлбар -->
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-info-circle text-blue-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-blue-700">
+                                <strong>Анхааруулга:</strong>
+                            </p>
+                            <ul class="mt-2 text-sm text-blue-700 list-disc list-inside space-y-1">
+                                <li>Username автоматаар үүснэ: <code>teacher_XXXXXXXX</code></li>
+                                <li>Анхны нууц үг: Утасны дугаарын сүүлийн 8 орон</li>
+                                <li>Багш утас, имэйл, username-ээрээ нэвтэрч болно</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Товчнууд -->
+                <div class="flex justify-end gap-4">
+                    <a 
+                        href="{% url 'main:teacher_list' %}" 
+                        class="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    >
+                        <i class="fas fa-times mr-2"></i>Болих
+                    </a>
+                    <button 
+                        type="submit" 
+                        class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                    >
+                        <i class="fas fa-user-plus mr-2"></i>Багш бүртгэх
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

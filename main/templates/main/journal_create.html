@@ -1,0 +1,149 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Журналын бичилт үүсгэх - Готопа{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-light py-8">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h1 class="text-3xl font-bold text-secondary mb-2">Шинэ журналын бичилт</h1>
+            <p class="text-gray-600">Дебит-Кредитийн гүйлгээ бүртгэх</p>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <form method="POST" id="journalForm">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Гүйлгээний дугаар -->
+                    <div>
+                        <label for="entry_number" class="block text-sm font-medium text-gray-700 mb-2">
+                            Гүйлгээний дугаар <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" name="entry_number" id="entry_number" 
+                               value="{{ next_number }}" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+
+                    <!-- Огноо -->
+                    <div>
+                        <label for="entry_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            Огноо <span class="text-red-500">*</span>
+                        </label>
+                        <input type="date" name="entry_date" id="entry_date" 
+                               value="{{ today|date:'Y-m-d' }}" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+                </div>
+
+                <!-- Дебит данс -->
+                <div class="mb-6">
+                    <label for="debit_account" class="block text-sm font-medium text-gray-700 mb-2">
+                        Дебит данс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="debit_account" id="debit_account" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Дебит данс сонгох --</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Кредит данс -->
+                <div class="mb-6">
+                    <label for="credit_account" class="block text-sm font-medium text-gray-700 mb-2">
+                        Кредит данс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="credit_account" id="credit_account" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Кредит данс сонгох --</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Дүн -->
+                <div class="mb-6">
+                    <label for="amount" class="block text-sm font-medium text-gray-700 mb-2">
+                        Дүн (₮) <span class="text-red-500">*</span>
+                    </label>
+                    <input type="number" name="amount" id="amount" 
+                           step="0.01" min="0" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                           placeholder="0.00">
+                </div>
+
+                <!-- Тайлбар -->
+                <div class="mb-6">
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                        Тайлбар <span class="text-red-500">*</span>
+                    </label>
+                    <textarea name="description" id="description" rows="4" required
+                              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="Гүйлгээний тайлбар..."></textarea>
+                </div>
+
+                <!-- Товчууд -->
+                <div class="flex items-center justify-between pt-6 border-t">
+                    <a href="{% url 'main:journal_list' %}" class="text-gray-600 hover:text-gray-900">
+                        <i class="fas fa-arrow-left mr-2"></i>Буцах
+                    </a>
+                    <div class="space-x-4">
+                        <button type="reset" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                            Цэвэрлэх
+                        </button>
+                        <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition">
+                            <i class="fas fa-save mr-2"></i>Хадгалах
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Зөвлөмж -->
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-info-circle text-blue-600"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">Дебит-Кредит зарчим</h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>Дебит (+)</strong>: Актив нэмэгдэх, Өглөг/Капитал буурах</li>
+                            <li><strong>Кредит (+)</strong>: Актив буурах, Өглөг/Капитал нэмэгдэх</li>
+                            <li>Дебит дүн = Кредит дүн (тэнцвэртэй байх ёстой)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form баталгаажуулалт
+document.getElementById('journalForm').addEventListener('submit', function(e) {
+    const debit = document.getElementById('debit_account').value;
+    const credit = document.getElementById('credit_account').value;
+    
+    if (debit === credit) {
+        e.preventDefault();
+        alert('Дебит болон Кредит данс ижил байж болохгүй!');
+        return false;
+    }
+});
+
+// Дүнг форматлах
+document.getElementById('amount').addEventListener('blur', function() {
+    if (this.value) {
+        this.value = parseFloat(this.value).toFixed(2);
+    }
+});
+</script>
+{% endblock %}

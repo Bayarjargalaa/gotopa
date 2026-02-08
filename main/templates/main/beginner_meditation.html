@@ -1,0 +1,143 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Анхан шатны бясалгал - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<section class="bg-gradient-to-r from-primary to-purple-700 text-gray py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'beginner_title' 'Анхан шатны бясалгал' %}</h1>
+        <p class="text-xl">{% editable 'beginner_subtitle' 'Бясалгалын замын эхлэл' %}</p>
+    </div>
+</section>
+
+<!-- Main Content -->
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-12">
+                <img src="{% static 'images/IMG_2282_1.jpg' %}" alt="Анхан шат" class="w-full rounded-lg shadow-lg mb-8">
+                
+                <h2 class="text-3xl font-bold text-secondary mb-6">Хэнд зориулсан вэ?</h2>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    Анхан шатны бясалгал нь бясалгалын талаар огт мэдлэггүй эсвэл бага туршлагатай хүмүүст зориулагдсан үндсэн хөтөлбөр юм. Энэ хичээл нь та бүхэнд бясалгалын үндсэн ойлголт, техник, арга барилыг энгийн, ойлгомжтой хэлбэрээр зааж өгнө.
+                </p>
+            </div>
+
+            <!-- Curriculum -->
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Сургалтын агуулга</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">1</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Бясалгалын үндэс</h4>
+                            <p class="text-gray-700">Бясалгал гэж юу вэ? Яагаад бясалгал хийх хэрэгтэй вэ?</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">2</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Зөв суудал, байрлал</h4>
+                            <p class="text-gray-700">Бясалгалын зөв суудал, гарын байрлал</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">3</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Амьсгалын дасгал</h4>
+                            <p class="text-gray-700">Үндсэн амьсгалын техникүүд</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">4</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Анхаарлын төвлөрөл</h4>
+                            <p class="text-gray-700">Оюун санааг тайвшруулах дасгалууд</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">5</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Үндсэн мантра</h4>
+                            <p class="text-gray-700">Энгийн мантра давтах практик</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3 font-bold">6</span>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1">Өдөр тутмын практик</h4>
+                            <p class="text-gray-700">Амьдралдаа хэрэглэх дасгалууд</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Details -->
+            <div class="grid md:grid-cols-2 gap-8 mb-12">
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h4 class="text-xl font-bold text-primary mb-4">Хичээлийн хуваарь</h4>
+                    <ul class="space-y-2 text-gray-700">
+                        <li><strong>Үргэлжлэх хугацаа:</strong> 4 долоо хоног</li>
+                        <li><strong>Хичээлийн тоо:</strong> Долоо хоногт 2 удаа</li>
+                        <li><strong>Нэг хичээлийн үргэлжлэх хугацаа:</strong> 2 цаг</li>
+                        <li><strong>Цаг:</strong> Бямба, Ням 10:00-12:00</li>
+                    </ul>
+                </div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h4 class="text-xl font-bold text-primary mb-4">Төлбөр</h4>
+                    <ul class="space-y-2 text-gray-700">
+                        <li><strong>Сургалтын төлбөр:</strong> 200,000₮</li>
+                        <li><strong>Материал:</strong> Үнэгүй</li>
+                        <li><strong>Сертификат:</strong> Үнэгүй</li>
+                        <li><strong>Хөнгөлөлт:</strong> Оюутан 20%</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Requirements -->
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-4">Та юу авах вэ?</h3>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Бясалгалын үндсэн техникүүд</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Гарын авлага, материал</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Өдөр тутмын практикийн зөвлөгөө</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Төгсөлтийн сертификат</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Бясалгалын нийгэмлэгт элсэх эрх</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">✓</span>
+                        <p class="text-gray-700">Дараагийн шатны сургалтад элсэх эрх</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Бүртгүүлэх</h3>
+                <p class="mb-6">Дараагийн хичээл: 2026.01.15 (Бямба) эхэлнэ</p>
+                <a href="{% url 'main:contact' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
+                    Бүртгүүлэх →
+                </a>
+                <p class="mt-4 text-sm">Утас: (+976) 70110205</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

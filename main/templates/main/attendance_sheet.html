@@ -1,0 +1,398 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}{{ course.name }} - Ирцийн хуудас - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-secondary mb-2">{{ course.name }} - Ирцийн хуудас</h1>
+            <div class="flex items-center text-gray-600 space-x-4">
+                <span><i class="fas fa-chalkboard-teacher mr-2"></i>{{ course.teacher.mongolian_name }}</span>
+                <span><i class="fas fa-users mr-2"></i>{{ enrollments|length }} сурагч</span>
+            </div>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+            <div class="mb-4 p-4 rounded-lg {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% else %}bg-green-50 text-green-800 border border-green-200{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        {% if enrollments %}
+            <form method="POST">
+                {% csrf_token %}
+                
+                <!-- Он/сар шүүлт -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex items-end gap-4 mb-4">
+                        <div>
+                            <label for="filter_year" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-calendar-alt mr-2 text-primary"></i>Он
+                            </label>
+                            <select id="filter_year" 
+                                    onchange="filterByMonth()"
+                                    class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <option value="">-- Он сонгох --</option>
+                                {% for year in year_range %}
+                                <option value="{{ year }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>{{ year }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filter_month" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-calendar mr-2 text-primary"></i>Сар
+                            </label>
+                            <select id="filter_month" 
+                                    onchange="filterByMonth()"
+                                    class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <option value="">-- Сар сонгох --</option>
+                                <option value="1" {% if selected_month == "1" %}selected{% endif %}>1-р сар</option>
+                                <option value="2" {% if selected_month == "2" %}selected{% endif %}>2-р сар</option>
+                                <option value="3" {% if selected_month == "3" %}selected{% endif %}>3-р сар</option>
+                                <option value="4" {% if selected_month == "4" %}selected{% endif %}>4-р сар</option>
+                                <option value="5" {% if selected_month == "5" %}selected{% endif %}>5-р сар</option>
+                                <option value="6" {% if selected_month == "6" %}selected{% endif %}>6-р сар</option>
+                                <option value="7" {% if selected_month == "7" %}selected{% endif %}>7-р сар</option>
+                                <option value="8" {% if selected_month == "8" %}selected{% endif %}>8-р сар</option>
+                                <option value="9" {% if selected_month == "9" %}selected{% endif %}>9-р сар</option>
+                                <option value="10" {% if selected_month == "10" %}selected{% endif %}>10-р сар</option>
+                                <option value="11" {% if selected_month == "11" %}selected{% endif %}>11-р сар</option>
+                                <option value="12" {% if selected_month == "12" %}selected{% endif %}>12-р сар</option>
+                            </select>
+                        </div>
+                        <button type="button" 
+                                onclick="clearFilter()"
+                                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                            <i class="fas fa-times mr-2"></i>Цэвэрлэх
+                        </button>
+                    </div>
+                    
+                    <!-- Огноо нэмэх хэсэг -->
+                    <div class="flex items-end gap-4 pt-4 border-t">
+                        <div class="flex-1">
+                            <label for="new_date" class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-calendar-plus mr-2 text-primary"></i>Шинэ огноо нэмэх
+                            </label>
+                            <input type="date" 
+                                   id="new_date" 
+                                   name="new_date"
+                                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        </div>
+                        <button type="button" 
+                                onclick="addDateColumn()"
+                                class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition">
+                            <i class="fas fa-plus mr-2"></i>Нэмэх
+                        </button>
+                        <button type="button" 
+                                onclick="document.getElementById('new_date').value = new Date().toISOString().split('T')[0]"
+                                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                            <i class="fas fa-calendar-day mr-2"></i>Өнөөдөр
+                        </button>
+                    </div>
+                    <p class="mt-2 text-sm text-gray-500">
+                        💡 Огноо нэмээд дараа нь хадгалах товч дарна
+                    </p>
+                </div>
+
+                <!-- Ирцийн хүснэгт -->
+                <div class="bg-white rounded-lg shadow overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200" id="attendanceTable">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th rowspan="2" class="sticky left-0 bg-gray-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-300">
+                                    № / Нэр
+                                </th>
+                                {% for month_key, dates in dates_by_month.items %}
+                                <th colspan="{{ dates|length }}" class="px-4 py-2 text-center text-sm font-bold text-primary uppercase border-l-2 border-primary bg-blue-50">
+                                    {{ dates.0|date:"Y оны m-р сар" }}
+                                </th>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                {% for month_key, dates in dates_by_month.items %}
+                                    {% for date in dates %}
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] date-header {% if forloop.first %}border-l-2 border-primary{% endif %}" data-date="{{ date|date:'Y-m-d' }}">
+                                        <div>{{ date|date:"d" }}</div>
+                                        <div class="text-xs font-normal text-gray-400">{{ date|date:"D" }}</div>
+                                        <button type="button" 
+                                                onclick="removeDateColumn('{{ date|date:'Y-m-d' }}')"
+                                                class="text-red-500 hover:text-red-700 mt-1">
+                                            <i class="fas fa-times-circle"></i>
+                                        </button>
+                                    </th>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for enrollment in enrollments %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="sticky left-0 bg-white px-6 py-4 whitespace-nowrap border-r border-gray-300">
+                                    <div class="flex items-center">
+                                        <div class="text-sm font-medium text-gray-900 mr-2">{{ forloop.counter }}.</div>
+                                        <div>
+                                            <div class="text-sm font-medium text-gray-900">{{ enrollment.student.mongolian_name }}</div>
+                                            <div class="text-xs text-gray-500">{{ enrollment.student.phone }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                {% for month_key, dates in dates_by_month.items %}
+                                    {% for date in dates %}
+                                    <td class="px-4 py-4 text-center date-cell {% if forloop.first %}border-l-2 border-primary{% endif %}" data-date="{{ date|date:'Y-m-d' }}" data-enrollment="{{ enrollment.id }}">
+                                        <input type="checkbox" 
+                                               name="attendance_{{ enrollment.id }}_{{ date|date:'Y-m-d' }}"
+                                               {% if enrollment.id in attendance_data and date in attendance_data|get_item:enrollment.id %}checked{% endif %}
+                                               class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+                                    </td>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Статистик -->
+                <div class="grid grid-cols-4 gap-4 mt-6">
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-3xl font-bold text-primary">{{ enrollments|length }}</div>
+                        <div class="text-sm text-gray-600 mt-1">Нийт сурагч</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-3xl font-bold text-blue-600">{{ total_days }}</div>
+                        <div class="text-sm text-gray-600 mt-1">Хичээлийн өдөр</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-3xl font-bold text-green-600" id="avgAttendance">-</div>
+                        <div class="text-sm text-gray-600 mt-1">Дундаж ирц (%)</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-gray-700" id="totalChecked">0</div>
+                        <div class="text-sm text-gray-600 mt-1">Чагтласан тоо</div>
+                    </div>
+                </div>
+
+                <!-- Товчнууд -->
+                <div class="flex items-center justify-between mt-6">
+                    <a href="{% url 'main:attendance_list' %}" 
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Буцах
+                    </a>
+                    <div class="flex gap-4">
+                        <button type="button" 
+                                onclick="checkAllVisible()"
+                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                            <i class="fas fa-check-square mr-2"></i>Бүгдийг чагтлах
+                        </button>
+                        <button type="button" 
+                                onclick="uncheckAllVisible()"
+                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                            <i class="fas fa-square mr-2"></i>Бүгдийг арилгах
+                        </button>
+                        <button type="submit" 
+                                class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 focus:outline-none transition">
+                            <i class="fas fa-save mr-2"></i>
+                            Хадгалах
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+        {% else %}
+            <!-- Хоосон төлөв -->
+            <div class="bg-white rounded-lg shadow p-12 text-center">
+                <i class="fas fa-users-slash text-6xl text-gray-300 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Сурагч байхгүй байна</h3>
+                <p class="text-gray-500 mb-6">Энэ сургалтад бүртгэлтэй идэвхтэй сурагч олдсонгүй.</p>
+                <a href="{% url 'main:attendance_list' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-opacity-90 transition">
+                    <i class="fas fa-arrow-left mr-2"></i>
+                    Буцах
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Он/сараар шүүлт хийх
+function filterByMonth() {
+    const year = document.getElementById('filter_year').value;
+    const month = document.getElementById('filter_month').value;
+    
+    if (year && month) {
+        window.location.href = `?year=${year}&month=${month}`;
+    } else if (year) {
+        alert('Сар сонгоно уу!');
+    } else if (month) {
+        alert('Он сонгоно уу!');
+    }
+}
+
+// Шүүлт цэвэрлэх
+function clearFilter() {
+    window.location.href = window.location.pathname;
+}
+
+// Статистик тооцоолох
+function updateStats() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
+    const checked = Array.from(checkboxes).filter(cb => cb.checked).length;
+    const total = checkboxes.length;
+    const avgPercent = total > 0 ? Math.round((checked / total) * 100) : 0;
+    
+    document.getElementById('totalChecked').textContent = checked;
+    document.getElementById('avgAttendance').textContent = avgPercent + '%';
+}
+
+// Бүх checkbox-д listener нэмэх
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateStats);
+    });
+    updateStats();
+});
+
+// Шинэ огноо нэмэх
+function addDateColumn() {
+    const dateInput = document.getElementById('new_date');
+    const dateValue = dateInput.value;
+    
+    if (!dateValue) {
+        alert('Огноо сонгоно уу!');
+        return;
+    }
+    
+    // Аль хэдийн байгаа эсэхийг шалгах
+    const existingDates = document.querySelectorAll('.date-header');
+    for (let header of existingDates) {
+        if (header.dataset.date === dateValue) {
+            alert('Энэ огноо аль хэдийн нэмэгдсэн байна!');
+            return;
+        }
+    }
+    
+    // Огноог форматлах
+    const date = new Date(dateValue);
+    const day = date.getDate();
+    const dayName = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'][date.getDay()];
+    
+    // Header нэмэх
+    const table = document.getElementById('attendanceTable');
+    const headerRow = table.querySelector('thead tr:last-child');
+    const newHeader = document.createElement('th');
+    newHeader.className = 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] date-header';
+    newHeader.dataset.date = dateValue;
+    newHeader.innerHTML = `
+        <div>${day}</div>
+        <div class="text-xs font-normal text-gray-400">${dayName}</div>
+        <button type="button" 
+                onclick="removeDateColumn('${dateValue}')"
+                class="text-red-500 hover:text-red-700 mt-1">
+            <i class="fas fa-times-circle"></i>
+        </button>
+    `;
+    headerRow.appendChild(newHeader);
+    
+    // Сурагч бүрт checkbox нэмэх
+    const bodyRows = table.querySelectorAll('tbody tr');
+    bodyRows.forEach(row => {
+        const firstCell = row.querySelector('.date-cell');
+        const enrollmentId = firstCell.dataset.enrollment;
+        const newCell = document.createElement('td');
+        newCell.className = 'px-4 py-4 text-center date-cell';
+        newCell.dataset.date = dateValue;
+        newCell.dataset.enrollment = enrollmentId;
+        newCell.innerHTML = `
+            <input type="checkbox" 
+                   name="attendance_${enrollmentId}_${dateValue}"
+                   class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+        `;
+        row.appendChild(newCell);
+        
+        // Listener нэмэх
+        newCell.querySelector('input').addEventListener('change', updateStats);
+    });
+    
+    // Input-г цэвэрлэх
+    dateInput.value = '';
+    updateStats();
+    alert('Огноо нэмэгдлээ! Хадгалах товч дарна уу.');
+}
+
+// Огноо хасах
+function removeDateColumn(dateValue) {
+    // Ирц бүртгэгдсэн эсэхийг шалгах
+    const dateCells = document.querySelectorAll(`.date-cell[data-date="${dateValue}"]`);
+    let hasAttendance = false;
+    
+    dateCells.forEach(cell => {
+        const checkbox = cell.querySelector('input[type="checkbox"]');
+        if (checkbox && checkbox.checked) {
+            hasAttendance = true;
+        }
+    });
+    
+    if (hasAttendance) {
+        alert('⚠️ Энэ огноонд ирц бүртгэгдсэн тул устгах боломжгүй!\n\nЭхлээд бүх сурагчдын чагтыг арилгаад дахин оролдоно уу.');
+        return;
+    }
+    
+    if (!confirm('Энэ огноог устгах уу?')) {
+        return;
+    }
+    
+    // Header устгах
+    const headers = document.querySelectorAll('.date-header');
+    headers.forEach(header => {
+        if (header.dataset.date === dateValue) {
+            header.remove();
+        }
+    });
+    
+    // Баганы нүд устгах
+    dateCells.forEach(cell => cell.remove());
+    
+    updateStats();
+}
+
+// Бүгдийг чагтлах
+function checkAllVisible() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
+    checkboxes.forEach(cb => cb.checked = true);
+    updateStats();
+}
+
+// Бүгдийг арилгах
+function uncheckAllVisible() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateStats();
+}
+</script>
+
+<style>
+/* Sticky column for student names */
+.sticky {
+    position: sticky;
+    z-index: 10;
+}
+
+.sticky.left-0 {
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+/* Checkbox hover effect */
+input[type="checkbox"]:hover {
+    transform: scale(1.1);
+}
+</style>
+{% endblock %}

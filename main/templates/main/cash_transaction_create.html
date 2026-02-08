@@ -1,0 +1,507 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Кассын гүйлгээ оруулах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-4xl">
+        <!-- Гарчиг -->
+        <div class="mb-6">
+            <h2 class="text-3xl font-bold text-secondary">💵 Шинэ кассын гүйлгээ</h2>
+            <p class="text-gray-600 mt-1">Бэлэн мөнгөний орлого эсвэл зарлага бүртгэх</p>
+        </div>
+
+        <!-- Форм -->
+        <form method="post" class="bg-white rounded-lg shadow-md p-6">
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Огноо -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Огноо <span class="text-red-500">*</span></label>
+                    <input type="date" name="transaction_date" required 
+                           value="{% now 'Y-m-d' %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Кассын данс -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Кассын данс <span class="text-red-500">*</span></label>
+                    <select name="cash_account" required 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in cash_accounts %}
+                            <option value="{{ account.code }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Орлого -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Орлого (₮)</label>
+                    <input type="number" name="income_amount" step="0.01" min="0" 
+                           placeholder="0"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <p class="text-xs text-gray-500 mt-1">Орлого эсвэл зарлага аль нэгийг бөглөнө</p>
+                </div>
+
+                <!-- Зарлага -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Зарлага (₮)</label>
+                    <input type="number" name="expense_amount" step="0.01" min="0" 
+                           placeholder="0"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+
+            <!-- Тайлбар -->
+            <div class="mt-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Тайлбар <span class="text-red-500">*</span></label>
+                <textarea name="description" required rows="3" 
+                          placeholder="Гүйлгээний утга, тайлбар..."
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <!-- Эсрэг данс -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Эсрэг данс</label>
+                    <select name="offset_account" id="offsetAccount"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in accounts %}
+                            <option value="{{ account.id }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-blue-600 mt-1">💡 Эсрэг данс сонгосон тохиолдолд автоматаар журналд холбогдоно</p>
+                </div>
+
+                <!-- Мөнгөн гүйлгээний үзүүлэлт -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Мөнгөн гүйлгээний үзүүлэлт 
+                        <span id="cashFlowRequired" class="text-red-500" style="display:none;">*</span>
+                    </label>
+                    <select name="cash_flow_indicator" id="cashFlowIndicator"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for indicator in cash_flow_indicators %}
+                            <option value="{{ indicator.id }}" data-flow-type="{{ indicator.flow_type }}">
+                                {{ indicator.code }} - {{ indicator.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-600 mt-1">Мөнгөн гүйлгээний тайланд ашиглагдана</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <!-- Орлогын төрөл -->
+                <div id="incomeTypeField">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Орлогын төрөл</label>
+                    <select name="income_type" id="incomeType"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for code, label in income_types %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Зарлагын төрөл -->
+                <div id="expenseTypeField" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Зарлагын төрөл</label>
+                    <select name="expense_type" id="expenseType"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for code, label in expense_types %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Сурагчийн төлбөрийн хуваарилалт -->
+            <div id="studentFields" style="display: none;" class="mt-6 border-t pt-6">
+                <h3 class="text-lg font-bold text-secondary mb-4">Сурагчийн төлбөрийн хуваарилалт</h3>
+                <p class="text-sm text-gray-600 mb-4">Нэг орлогоос олон сурагч, олон сар, олон анги сонгож болно</p>
+                
+                <div id="allocationsContainer"></div>
+                
+                <button type="button" id="addAllocationBtn" 
+                        class="mt-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    + Хуваарилалт нэмэх
+                </button>
+            </div>
+
+            <!-- Алдааны мэдээлэл -->
+            <div id="validationErrors" class="hidden mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">Алдаа илэрлээ</h3>
+                        <div id="errorList" class="mt-2 text-sm text-red-700">
+                            <ul class="list-disc list-inside space-y-1"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Товчнууд -->
+            <div class="mt-6 flex gap-4">
+                <button type="submit" id="submitBtn" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
+                    💾 Хадгалах
+                </button>
+                <a href="{% url 'main:cash_transaction_list' %}" 
+                   class="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-bold">
+                    ← Буцах
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Орлогын төрөл сонгоход сурагчийн талбарууд харуулах
+const incomeType = document.getElementById('incomeType');
+const studentFields = document.getElementById('studentFields');
+const allocationsContainer = document.getElementById('allocationsContainer');
+const addAllocationBtn = document.getElementById('addAllocationBtn');
+const offsetAccount = document.getElementById('offsetAccount');
+const cashFlowIndicator = document.getElementById('cashFlowIndicator');
+const cashFlowRequired = document.getElementById('cashFlowRequired');
+const incomeAmountInput = document.querySelector('[name="income_amount"]');
+const expenseAmountInput = document.querySelector('[name="expense_amount"]');
+const incomeTypeField = document.getElementById('incomeTypeField');
+const expenseTypeField = document.getElementById('expenseTypeField');
+const incomeTypeSelect = document.getElementById('incomeType');
+const expenseTypeSelect = document.getElementById('expenseType');
+
+let allocationIndex = 0;
+
+// Мөнгөн гүйлгээний үзүүлэлтүүдийг орлого/зарлагаар шүүх
+function filterCashFlowIndicators() {
+    const incomeAmount = parseFloat(incomeAmountInput.value) || 0;
+    const expenseAmount = parseFloat(expenseAmountInput.value) || 0;
+    const options = cashFlowIndicator.querySelectorAll('option');
+    
+    options.forEach(option => {
+        if (option.value === '') {
+            option.style.display = 'block'; // "-- Сонгоно уу --" үргэлж харуулах
+            return;
+        }
+        
+        const flowType = option.getAttribute('data-flow-type');
+        
+        // Орлого оруулж байвал INCOME эсвэл BOTH харуулах
+        if (incomeAmount > 0 && expenseAmount === 0) {
+            option.style.display = (flowType === 'INCOME' || flowType === 'BOTH') ? 'block' : 'none';
+        }
+        // Зарлага оруулж байвал EXPENSE эсвэл BOTH харуулах
+        else if (expenseAmount > 0 && incomeAmount === 0) {
+            option.style.display = (flowType === 'EXPENSE' || flowType === 'BOTH') ? 'block' : 'none';
+        }
+        // Хоёулаа 0 бол бүгдийг харуулах
+        else {
+            option.style.display = 'block';
+        }
+    });
+    
+    // Одоо сонгогдсон үзүүлэлт нуугдсан бол арилгах
+    const selectedOption = cashFlowIndicator.options[cashFlowIndicator.selectedIndex];
+    if (selectedOption && selectedOption.style.display === 'none') {
+        cashFlowIndicator.value = '';
+    }
+}
+
+// Орлого/зарлага оруулахад төрөл харуулах/нуух
+function toggleIncomeTypeField() {
+    const incomeAmount = parseFloat(incomeAmountInput.value) || 0;
+    const expenseAmount = parseFloat(expenseAmountInput.value) || 0;
+    
+    // Зарлага оруулбал орлогын төрөл нуух, зарлагын төрөл харуулах
+    if (expenseAmount > 0 && incomeAmount === 0) {
+        incomeTypeField.style.display = 'none';
+        expenseTypeField.style.display = 'block';
+        incomeTypeSelect.value = ''; // Утгыг цэвэрлэх
+        studentFields.style.display = 'none';
+    }
+    // Орлого оруулбал зарлагын төрөл нуух, орлогын төрөл харуулах
+    else if (incomeAmount > 0 && expenseAmount === 0) {
+        incomeTypeField.style.display = 'block';
+        expenseTypeField.style.display = 'none';
+        expenseTypeSelect.value = ''; // Утгыг цэвэрлэх
+    }
+    // Хоёулаа 0 эсвэл хоёулаа утгатай бол хоёулаа нуух
+    else {
+        incomeTypeField.style.display = 'none';
+        expenseTypeField.style.display = 'none';
+        incomeTypeSelect.value = '';
+        expenseTypeSelect.value = '';
+        studentFields.style.display = 'none';
+    }
+    
+    // Мөнгөн гүйлгээний үзүүлэлтүүдийг шүүх
+    filterCashFlowIndicators();
+    
+    validateForm();
+}
+
+// Input талбаруудад listener нэмэх
+incomeAmountInput.addEventListener('input', () => {
+    toggleIncomeTypeField();
+    calculateTotalAllocation();
+});
+expenseAmountInput.addEventListener('input', toggleIncomeTypeField);
+
+// Анхны төлөв шалгах
+toggleIncomeTypeField();
+
+// Эсрэг данс сонгоход мөнгөн гүйлгээний үзүүлэлт заавал болгох
+offsetAccount.addEventListener('change', function() {
+    if (this.value) {
+        cashFlowRequired.style.display = 'inline';
+    } else {
+        cashFlowRequired.style.display = 'none';
+    }
+    validateForm();
+});
+
+// Мөнгөн гүйлгээний үзүүлэлт сонгоход validation дахин шалгах
+cashFlowIndicator.addEventListener('change', validateForm);
+
+// Зарлагын төрөл сонгоход validation дахин шалгах
+expenseTypeSelect.addEventListener('change', validateForm);
+
+incomeType.addEventListener('change', function() {
+    if (this.value === 'STUDENT_PAYMENT') {
+        studentFields.style.display = 'block';
+        // Анхны хуваарилалт автоматаар нэмэх
+        if (allocationIndex === 0) {
+            addAllocation();
+        }
+    } else {
+        studentFields.style.display = 'none';
+        allocationsContainer.innerHTML = '';
+        allocationIndex = 0;
+    }
+    validateForm();
+});
+
+// Хуваарилалт нэмэх функц
+function addAllocation() {
+    const div = document.createElement('div');
+    div.className = 'border rounded-lg p-4 mb-4 bg-gray-50';
+    div.innerHTML = `
+        <div class="flex justify-between items-center mb-3">
+            <h4 class="font-bold text-secondary">Хуваарилалт #${allocationIndex + 1}</h4>
+            <button type="button" onclick="this.parentElement.parentElement.remove()" 
+                    class="text-red-500 hover:text-red-700">
+                ✕ Устгах
+            </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Сурагч</label>
+                <select name="allocations[${allocationIndex}][student]" 
+                        onchange="loadStudentCourses(this, ${allocationIndex})"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                    <option value="">-- Сонгоно уу --</option>
+                    {% for student in students %}
+                        <option value="{{ student.id }}">{{ student.mongolian_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Анги</label>
+                <select name="allocations[${allocationIndex}][course]" id="course_${allocationIndex}"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                    <option value="">-- Эхлээд сурагч сонгоно уу --</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Он</label>
+                <input type="number" name="allocations[${allocationIndex}][year]" 
+                       value="{% now 'Y' %}" min="2024" max="2030"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Сар</label>
+                <input type="number" name="allocations[${allocationIndex}][month]" 
+                       value="{% now 'n' %}" min="1" max="12"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Дүн (₮)</label>
+                <input type="number" name="allocations[${allocationIndex}][amount]" 
+                       step="0.01" min="0" placeholder="0"
+                       onchange="calculateTotalAllocation()"
+                       oninput="validateForm()"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+            </div>
+        </div>
+    `;
+    allocationsContainer.appendChild(div);
+    allocationIndex++;
+    validateForm();
+}
+
+// Нийт хуваарилалт тооцоолох
+function calculateTotalAllocation() {
+    const incomeAmount = parseFloat(document.querySelector('[name="income_amount"]').value) || 0;
+    let totalAllocated = 0;
+    
+    // Бүх хуваарилалтын дүнг нэгтгэх
+    document.querySelectorAll('[name^="allocations"][name$="[amount]"]').forEach(input => {
+        totalAllocated += parseFloat(input.value) || 0;
+    });
+    
+    // Үр дүнг харуулах элемент байвал харуулах
+    let summaryDiv = document.getElementById('allocationSummary');
+    if (!summaryDiv && incomeAmount > 0) {
+        summaryDiv = document.createElement('div');
+        summaryDiv.id = 'allocationSummary';
+        summaryDiv.className = 'mt-4 p-4 rounded-lg';
+        document.getElementById('studentFields').appendChild(summaryDiv);
+    }
+    
+    if (summaryDiv && incomeAmount > 0) {
+        const remaining = incomeAmount - totalAllocated;
+        const isValid = Math.abs(remaining) < 0.01; // Бага зөрүү зөвшөөрөх
+        
+        summaryDiv.className = `mt-4 p-4 rounded-lg ${isValid ? 'bg-green-50 border border-green-300' : 'bg-red-50 border border-red-300'}`;
+        summaryDiv.innerHTML = `
+            <div class="text-sm">
+                <div class="flex justify-between mb-2">
+                    <span class="font-medium">Орлогын дүн:</span>
+                    <span class="font-bold">${incomeAmount.toLocaleString()}₮</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="font-medium">Хуваарилсан дүн:</span>
+                    <span class="font-bold">${totalAllocated.toLocaleString()}₮</span>
+                </div>
+                <div class="flex justify-between pt-2 border-t ${isValid ? 'border-green-300 text-green-700' : 'border-red-300 text-red-700'}">
+                    <span class="font-bold">${isValid ? '✓ Тэнцүү байна' : '✗ Зөрүүтэй байна'}:</span>
+                    <span class="font-bold">${remaining.toLocaleString()}₮</span>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Validation дахин шалгах
+    validateForm();
+}
+
+// Форм validation
+function validateForm() {
+    const errors = [];
+    const submitBtn = document.getElementById('submitBtn');
+    const errorDiv = document.getElementById('validationErrors');
+    const errorList = errorDiv.querySelector('ul');
+    
+    // 1. Орлого/зарлага шалгах
+    const incomeAmount = parseFloat(document.querySelector('[name="income_amount"]').value) || 0;
+    const expenseAmount = parseFloat(document.querySelector('[name="expense_amount"]').value) || 0;
+    
+    if (incomeAmount === 0 && expenseAmount === 0) {
+        errors.push('Орлого эсвэл зарлага заавал бөглөнө үү');
+    }
+    
+    if (incomeAmount > 0 && expenseAmount > 0) {
+        errors.push('Орлого эсвэл зарлага аль нэгийг л бөглөнө үү (хоёуланг биш)');
+    }
+    
+    // 2. Эсрэг данс сонгосон бол мөнгөн гүйлгээний үзүүлэлт заавал
+    const offsetAccountValue = offsetAccount.value;
+    const cashFlowIndicatorValue = cashFlowIndicator.value;
+    
+    if (offsetAccountValue && !cashFlowIndicatorValue) {
+        errors.push('Эсрэг данс сонгосон бол мөнгөн гүйлгээний үзүүлэлт заавал сонгоно уу');
+    }
+    
+    // 3. Зарлага дээр эсрэг данс сонгосон бол зарлагын төрөл заавал
+    const expenseTypeValue = expenseTypeSelect.value;
+    if (expenseAmount > 0 && incomeAmount === 0 && offsetAccountValue && !expenseTypeValue) {
+        errors.push('Зарлага дээр эсрэг данс сонгосон бол зарлагын төрөл заавал сонгоно уу');
+    }
+    
+    // 4. Сурагчийн төлбөрийн хуваарилалт шалгах (зөвхөн сурагчийн төлбөр үед)
+    const incomeTypeValue = incomeTypeSelect.value;
+    if (incomeTypeValue === 'STUDENT_PAYMENT' && incomeAmount > 0 && expenseAmount === 0) {
+        let totalAllocated = 0;
+        let hasAllocations = false;
+        
+        document.querySelectorAll('[name^="allocations"][name$="[amount]"]').forEach(input => {
+            const amount = parseFloat(input.value) || 0;
+            if (amount > 0) {
+                hasAllocations = true;
+                totalAllocated += amount;
+            }
+        });
+        
+        if (!hasAllocations) {
+            errors.push('Сурагчийн төлбөр хуваарилалт нэмнө үү');
+        } else if (Math.abs(totalAllocated - incomeAmount) >= 0.01) {
+            errors.push(`Хуваарилалтын нийт дүн (${totalAllocated.toLocaleString()}₮) орлогын дүнтэй (${incomeAmount.toLocaleString()}₮) тэнцүү байх ёстой`);
+        }
+    }
+    
+    // Алдаа харуулах
+    if (errors.length > 0) {
+        errorList.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
+        errorDiv.classList.remove('hidden');
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        submitBtn.classList.remove('hover:bg-opacity-90');
+        return false;
+    } else {
+        errorDiv.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        submitBtn.classList.add('hover:bg-opacity-90');
+        return true;
+    }
+}
+
+// Сурагчийн ангиудыг AJAX-аар татах
+function loadStudentCourses(selectElement, index) {
+    const studentId = selectElement.value;
+    const courseSelect = document.getElementById('course_' + index);
+    
+    if (!studentId) {
+        courseSelect.innerHTML = '<option value="">-- Эхлээд сурагч сонгоно уу --</option>';
+        return;
+    }
+    
+    courseSelect.innerHTML = '<option value="">Ачаалж байна...</option>';
+    
+    fetch(`/api/student-courses/${studentId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.courses && data.courses.length > 0) {
+                courseSelect.innerHTML = '<option value="">-- Сонгоно уу --</option>';
+                data.courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course.id;
+                    option.textContent = `${course.name} (${course.level})`;
+                    courseSelect.appendChild(option);
+                });
+            } else {
+                courseSelect.innerHTML = '<option value="">Элссэн анги байхгүй</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            courseSelect.innerHTML = '<option value="">Алдаа гарлаа</option>';
+        });
+}
+
+// Хуваарилалт нэмэх товчны event listener
+addAllocationBtn.addEventListener('click', addAllocation);
+</script>
+{% endblock %}

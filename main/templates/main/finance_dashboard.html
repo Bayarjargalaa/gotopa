@@ -1,0 +1,172 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Санхүү - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-secondary mb-6">💰 Санхүү ба мөнгөн хөрөнгө</h1>
+
+    <!-- Дансуудын үлдэгдэл -->
+    <div class="grid md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Касс</p>
+            <p class="text-3xl font-bold text-green-600">{{ total_cash|floatformat:0 }}₮</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Банк</p>
+            <p class="text-3xl font-bold text-blue-600">{{ total_bank|floatformat:0 }}₮</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Нийт мөнгө</p>
+            <p class="text-3xl font-bold text-primary">{{ total_balance|floatformat:0 }}₮</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Нийлүүлэгчдэд өр</p>
+            <p class="text-3xl font-bold text-red-600">{{ suppliers_debt|floatformat:0 }}₮</p>
+        </div>
+    </div>
+
+    <!-- Холбоосууд -->
+    <div class="grid md:grid-cols-4 gap-6 mb-6">
+        <a href="{% url 'main:journal_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">📖 Ерөнхий журнал</h3>
+            <p class="text-purple-100 text-sm">Дебит-Кредит гүйлгээ бүртгэх</p>
+        </a>
+        <a href="{% url 'main:purchase_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">🛒 Худалдан авалт</h3>
+            <p class="text-gray-600 text-sm">Нийлүүлэгчээс бараа худалдан авах</p>
+        </a>
+        <a href="{% url 'main:sale_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">🛍️ Борлуулалт</h3>
+            <p class="text-gray-600 text-sm">Үйлчлүүлэгчдэд бараа зарах</p>
+        </a>
+        <a href="{% url 'main:transaction_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">💵 Гүйлгээ</h3>
+            <p class="text-gray-600 text-sm">Мөнгөн хөрөнгийн орлого/зарлага</p>
+        </a>
+    </div>
+
+    <!-- Импорт холбоосууд -->
+    <div class="grid md:grid-cols-4 gap-6 mb-6">
+        <a href="{% url 'main:chart_of_accounts_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-primary">
+            <h3 class="text-xl font-bold mb-2 text-primary">📋 Дансны төлөвлөгөө</h3>
+            <p class="text-gray-600 text-sm">Дансны төлөвлөгөө харах</p>
+        </a>
+        <a href="{% url 'main:account_opening_balance' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-green-500">
+            <h3 class="text-xl font-bold mb-2 text-green-600">⚖️ Эхний үлдэгдэл</h3>
+            <p class="text-gray-600 text-sm">Дансуудын эхний үлдэгдэл оруулах</p>
+        </a>
+        <a href="{% url 'main:bank_transaction_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-blue-500">
+            <h3 class="text-xl font-bold mb-2 text-blue-600">🏦 Банкны гүйлгээ</h3>
+            <p class="text-gray-600 text-sm">Импортолсон гүйлгээ харах, эсрэг данс холбох</p>
+        </a>
+        <a href="{% url 'main:import_counterparties' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">📊 Харилцагч импорт</h3>
+            <p class="text-gray-600 text-sm">Excel файлаас харилцагч оруулах</p>
+        </a>
+    </div>
+
+    <!-- Банкны импорт -->
+    <div class="grid md:grid-cols-4 gap-6 mb-6">
+        <a href="{% url 'main:import_bank_transactions' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h3 class="text-xl font-bold mb-2">📥 Банкны импорт</h3>
+            <p class="text-gray-600 text-sm">Голомт/Хаан банкны хуулга импортлох</p>
+        </a>
+    </div>
+
+    <!-- Дансуудын дэлгэрэнгүй -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-2xl font-bold mb-4">📊 Дансуудын үлдэгдэл</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-3 text-left">Дансны нэр</th>
+                        <th class="px-4 py-3 text-left">Төрөл</th>
+                        <th class="px-4 py-3 text-left">Банк</th>
+                        <th class="px-4 py-3 text-right">Үлдэгдэл</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in accounts %}
+                    <tr class="border-t">
+                        <td class="px-4 py-3 font-semibold">{{ account.name }}</td>
+                        <td class="px-4 py-3">{{ account.get_account_type_display }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ account.bank_name|default:"-" }}</td>
+                        <td class="px-4 py-3 text-right font-bold text-lg">
+                            {{ account.balance|floatformat:0 }}₮
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-6 text-center text-gray-500">
+                            Данс бүртгээгүй байна.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Сүүлийн гүйлгээнүүд болон худалдаа -->
+    <div class="grid md:grid-cols-2 gap-6">
+        <!-- Сүүлийн гүйлгээнүүд -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">📋 Сүүлийн гүйлгээнүүд</h3>
+                <a href="{% url 'main:transaction_list' %}" class="text-primary hover:text-opacity-80">Бүгд →</a>
+            </div>
+            <div class="space-y-3">
+                {% for txn in recent_transactions %}
+                <div class="border-l-4 {% if txn.transaction_type == 'INCOME' %}border-green-500{% else %}border-red-500{% endif %} pl-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-semibold">{{ txn.description }}</p>
+                            <p class="text-xs text-gray-500">
+                                {{ txn.account.name }} • {{ txn.transaction_date }}
+                            </p>
+                        </div>
+                        <p class="font-bold {% if txn.transaction_type == 'INCOME' %}text-green-600{% else %}text-red-600{% endif %}">
+                            {% if txn.transaction_type == 'INCOME' %}+{% else %}-{% endif %}{{ txn.amount|floatformat:0 }}₮
+                        </p>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-center py-4">Гүйлгээ байхгүй</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Худалдан авалт/Борлуулалт -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-bold mb-4">📦 Сүүлийн худалдаа</h3>
+            
+            <h4 class="font-bold text-sm text-gray-700 mb-2">Худалдан авалт:</h4>
+            <div class="space-y-2 mb-4">
+                {% for purchase in recent_purchases %}
+                <div class="flex justify-between items-center text-sm">
+                    <span>{{ purchase.supplier.name }}</span>
+                    <span class="font-bold">{{ purchase.total_amount|floatformat:0 }}₮</span>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-sm">Байхгүй</p>
+                {% endfor %}
+            </div>
+
+            <h4 class="font-bold text-sm text-gray-700 mb-2 mt-4">Борлуулалт:</h4>
+            <div class="space-y-2">
+                {% for sale in recent_sales %}
+                <div class="flex justify-between items-center text-sm">
+                    <span>{{ sale.customer.name|default:"Бэлэн" }}</span>
+                    <span class="font-bold text-green-600">{{ sale.total_amount|floatformat:0 }}₮</span>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 text-sm">Байхгүй</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

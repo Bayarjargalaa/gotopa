@@ -1,0 +1,161 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Гүйлгээний жагсаалт - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
+        </div>
+
+        <!-- Гарчиг ба статистик -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-3xl font-bold text-secondary">Гүйлгээний жагсаалт</h2>
+                <a href="/admin/main/transaction/add/" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                    + Шинэ гүйлгээ
+                </a>
+            </div>
+
+            <!-- Статистик -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <div class="text-sm text-green-600 mb-1">Нийт орлого</div>
+                    <div class="text-2xl font-bold text-green-700">{{ total_income|floatformat:0 }}₮</div>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                    <div class="text-sm text-red-600 mb-1">Нийт зардал</div>
+                    <div class="text-2xl font-bold text-red-700">{{ total_expense|floatformat:0 }}₮</div>
+                </div>
+            </div>
+
+            <!-- Шүүлтүүр -->
+            <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Төрөл</label>
+                    <select name="type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
+                        <option value="">Бүгд</option>
+                        {% for value, label in transaction_types %}
+                        <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Данс</label>
+                    <select name="account" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
+                        <option value="">Бүгд</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}" {% if selected_account == account.id|stringformat:"s" %}selected{% endif %}>
+                            {{ account.name }} ({{ account.balance|floatformat:0 }}₮)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                        Шүүх
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Гүйлгээний жагсаалт -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Огноо</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Төрөл</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Данс</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Харилцагч</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тайлбар</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Дүн</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for transaction in transactions %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm">
+                                {{ transaction.transaction_date|date:"Y-m-d" }}
+                                <div class="text-xs text-gray-500">{{ transaction.created_at|date:"H:i" }}</div>
+                            </td>
+                            <td class="px-4 py-3">
+                                {% if transaction.transaction_type == 'INCOME' %}
+                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ transaction.get_transaction_type_display }}
+                                </span>
+                                {% elif transaction.transaction_type == 'EXPENSE' %}
+                                <span class="inline-block bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ transaction.get_transaction_type_display }}
+                                </span>
+                                {% else %}
+                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                                    {{ transaction.get_transaction_type_display }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                {{ transaction.account.name }}
+                                {% if transaction.transaction_type == 'TRANSFER' and transaction.to_account %}
+                                <div class="text-xs text-gray-500">→ {{ transaction.to_account.name }}</div>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if transaction.counterparty %}
+                                {{ transaction.counterparty.name }}
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-600">
+                                {{ transaction.description|truncatewords:10 }}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right">
+                                {% if transaction.transaction_type == 'INCOME' %}
+                                <span class="text-green-600 font-bold">+{{ transaction.amount|floatformat:0 }}₮</span>
+                                {% elif transaction.transaction_type == 'EXPENSE' %}
+                                <span class="text-red-600 font-bold">-{{ transaction.amount|floatformat:0 }}₮</span>
+                                {% else %}
+                                <span class="text-blue-600 font-bold">{{ transaction.amount|floatformat:0 }}₮</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <a href="/admin/main/transaction/{{ transaction.id }}/change/" 
+                                   class="text-primary hover:underline text-sm">
+                                    Засах
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                <p class="mb-4">Гүйлгээ олдсонгүй</p>
+                                <a href="/admin/main/transaction/add/" class="inline-block bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                                    Шинэ гүйлгээ үүсгэх
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Тайлбар -->
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 class="font-bold text-blue-800 mb-2">💡 Санамж</h3>
+            <ul class="text-sm text-blue-700 space-y-1">
+                <li>• <strong>Орлого:</strong> Дансанд мөнгө орох гүйлгээ</li>
+                <li>• <strong>Зардал:</strong> Дансаас мөнгө гарах гүйлгээ</li>
+                <li>• <strong>Шилжүүлэг:</strong> Данс хооронд мөнгө шилжүүлэх</li>
+                <li>• Гүйлгээ үүсгэхдээ дансны үлдэгдэл автоматаар шинэчлэгдэнэ</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

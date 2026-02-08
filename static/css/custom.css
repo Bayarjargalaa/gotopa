@@ -1,0 +1,55 @@
+/* Custom styles for Gotopa Meditation Center */
+
+/* Font for script text */
+.font-script {
+    font-family: 'Yellowtail', cursive;
+}
+
+/* Smooth transitions */
+* {
+    transition: all 0.3s ease;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #b5245b;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #8b1a45;
+}
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Custom button hover effects */
+button, a {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Card hover effects */
+.card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(181, 36, 91, 0.2);
+}
+
+/* Mobile dropdown rotate animation */
+.rotate-180 {
+    transform: rotate(180deg);
+}
+
+/* Smooth transition for mobile dropdown icons */
+.transition-transform {
+    transition: transform 0.3s ease;
+}

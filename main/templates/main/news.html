@@ -1,0 +1,88 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Мэдээлэл - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<section class="bg-gradient-to-r from-primary to-purple-700 text-white py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'news_title' 'Мэдээ мэдээлэл' %}</h1>
+        <p class="text-xl">{% editable 'news_subtitle' 'Бясалгалын ертөнцийн сүүлийн үеийн мэдээ' %}</p>
+    </div>
+</section>
+
+<!-- News Section -->
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- News 1 -->
+                <article class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/IMG_2282_1.jpg' %}" alt="Мэдээ" class="w-full h-64 object-cover">
+                    <div class="p-6">
+                        <div class="text-primary text-sm mb-2">2026.01.04</div>
+                        <h3 class="text-2xl font-bold text-secondary mb-3">Шинэ жилийн бясалгалын хөтөлбөр эхэллээ</h3>
+                        <p class="text-gray-700 mb-4">
+                            2026 оны эхний хагас жилийн бясалгалын хичээлүүд эхэллээ. Анхан шатны бясалгалд бүртгэл үргэлжилж байна.
+                        </p>
+                        <a href="#" class="text-primary font-bold hover:underline">Дэлгэрэнгүй →</a>
+                    </div>
+                </article>
+
+                <!-- News 2 -->
+                <article class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/уншлагын ном.jpg' %}" alt="Ном" class="w-full h-64 object-cover">
+                    <div class="p-6">
+                        <div class="text-primary text-sm mb-2">2025.12.20</div>
+                        <h3 class="text-2xl font-bold text-secondary mb-3">Шинэ ном хэвлэгдэн гарлаа</h3>
+                        <p class="text-gray-700 mb-4">
+                            "Гэгээрлийн зам" нэртэй Гүрү Готопа багшийн шинэ ном худалдаанд гарлаа. Номын дэлгүүрүүдээс авах боломжтой.
+                        </p>
+                        <a href="{% url 'main:books' %}" class="text-primary font-bold hover:underline">Дэлгэрэнгүй →</a>
+                    </div>
+                </article>
+
+                <!-- News 3 -->
+                <article class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/hun_turulhtundbarih_beleg.jpg' %}" alt="Аялал" class="w-full h-64 object-cover">
+                    <div class="p-6">
+                        <div class="text-primary text-sm mb-2">2025.12.15</div>
+                        <h3 class="text-2xl font-bold text-secondary mb-3">Зуны VIP бясалгалын бүртгэл эхэллээ</h3>
+                        <p class="text-gray-700 mb-4">
+                            2026 оны зуны VIP бясалгалын хөтөлбөрт бүртгүүлэх боломжтой боллоо. Багтаамж хязгаарлагдмал.
+                        </p>
+                        <a href="{% url 'main:vip_meditation' %}" class="text-primary font-bold hover:underline">Дэлгэрэнгүй →</a>
+                    </div>
+                </article>
+
+                <!-- News 4 -->
+                <article class="bg-white rounded-lg shadow-lg overflow-hidden">
+                    <img src="{% static 'images/IMG_2292_1.jpg' %}" alt="Семинар" class="w-full h-64 object-cover">
+                    <div class="p-6">
+                        <div class="text-primary text-sm mb-2">2025.12.01</div>
+                        <h3 class="text-2xl font-bold text-secondary mb-3">Олон улсын бясалгалын хурал амжилттай боллоо</h3>
+                        <p class="text-gray-700 mb-4">
+                            Дэлхийн 20 гаруй орноос 500 гаруй оролцогчтой олон улсын бясалгалын хурал амжилттай зохион байгуулагдлаа.
+                        </p>
+                        <a href="#" class="text-primary font-bold hover:underline">Дэлгэрэнгүй →</a>
+                    </div>
+                </article>
+            </div>
+
+            <!-- Newsletter Signup -->
+            <div class="mt-16 bg-primary text-white rounded-lg p-8 text-center">
+                <h3 class="text-2xl font-bold mb-4">Мэдээлэл хүлээн авах</h3>
+                <p class="mb-6">Шинэ сургалт, семинар, мэдээний талаар имэйлээр мэдээлэл авах</p>
+                <form class="max-w-md mx-auto flex gap-4">
+                    <input type="email" placeholder="Имэйл хаяг" class="flex-1 px-4 py-3 rounded-lg text-gray-800">
+                    <button type="submit" class="bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
+                        Бүртгүүлэх
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

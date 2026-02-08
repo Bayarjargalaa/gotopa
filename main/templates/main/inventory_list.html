@@ -1,0 +1,141 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Бараа материалын бүртгэл - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Гарчиг ба товчнууд -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-secondary">📦 Бараа материалын бүртгэл</h1>
+        <div class="space-x-2">
+            <a href="{% url 'main:product_create' %}" class="bg-primary text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
+                + Шинэ бараа нэмэх
+            </a>
+            <a href="{% url 'main:stock_movement_create' %}" class="bg-green-600 text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
+                📊 Хөдөлгөөн бүртгэх
+            </a>
+            <a href="{% url 'main:stock_movement_list' %}" class="bg-blue-600 text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
+                📋 Хөдөлгөөний жагсаалт
+            </a>
+        </div>
+    </div>
+
+    <!-- Статистик -->
+    <div class="grid md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Нийт бүтээгдэхүүн</p>
+            <p class="text-3xl font-bold text-primary">{{ total_products }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Үлдэгдлийн үнэ</p>
+            <p class="text-3xl font-bold text-green-600">{{ total_stock_value|floatformat:0 }}₮</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <p class="text-gray-600 text-sm">Үлдэгдэл бага</p>
+            <p class="text-3xl font-bold text-red-600">{{ low_stock_count }}</p>
+        </div>
+    </div>
+
+    <!-- Хайлт ба шүүлт -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <form method="GET" class="grid md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium mb-2">Хайх</label>
+                <input type="text" name="q" value="{{ query }}" placeholder="Нэр, код, нийлүүлэгч..." 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-2">Ангилал</label>
+                <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <option value="">Бүгд</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>
+                        {{ cat.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-2">Төлөв</label>
+                <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <option value="">Бүгд</option>
+                    <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Идэвхтэй</option>
+                    <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Идэвхгүй</option>
+                    <option value="low_stock" {% if selected_status == 'low_stock' %}selected{% endif %}>Үлдэгдэл бага</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                    🔍 Хайх
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Бүтээгдэхүүний жагсаалт -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Код</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Нэр</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Ангилал</th>
+                        <th class="px-4 py-3 text-right text-sm font-semibold">Худалдан авах үнэ</th>
+                        <th class="px-4 py-3 text-right text-sm font-semibold">Борлуулах үнэ</th>
+                        <th class="px-4 py-3 text-center text-sm font-semibold">Үлдэгдэл</th>
+                        <th class="px-4 py-3 text-center text-sm font-semibold">Нэгж</th>
+                        <th class="px-4 py-3 text-center text-sm font-semibold">Төлөв</th>
+                        <th class="px-4 py-3 text-center text-sm font-semibold">Үйлдэл</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr class="border-t hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm font-mono">{{ product.code }}</td>
+                        <td class="px-4 py-3">
+                            <div class="font-semibold">{{ product.name }}</div>
+                            {% if product.supplier %}
+                            <div class="text-xs text-gray-500">{{ product.supplier }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{ product.category.name|default:"-" }}</td>
+                        <td class="px-4 py-3 text-right text-sm">{{ product.purchase_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-3 text-right text-sm">{{ product.selling_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-3 text-center">
+                            {% if product.is_low_stock %}
+                            <span class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-bold">
+                                ⚠️ {{ product.current_stock }}
+                            </span>
+                            {% else %}
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-bold">
+                                {{ product.current_stock }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-center text-sm">{{ product.get_unit_display }}</td>
+                        <td class="px-4 py-3 text-center">
+                            {% if product.is_active %}
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Идэвхтэй</span>
+                            {% else %}
+                            <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">Идэвхгүй</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <a href="{% url 'main:product_edit' product.id %}" class="text-primary hover:text-opacity-80 mr-2">✏️ Засах</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                            Бүтээгдэхүүн олдсонгүй.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

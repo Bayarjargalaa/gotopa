@@ -1,0 +1,80 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load content_tags %}
+
+{% block title %}Гүрү Готопа багш - Готопа бясалгалын төв{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<section class="bg-gradient-to-r from-primary to-purple-700 text-white py-20">
+    <div class="container mx-auto px-4">
+        <h1 class="text-5xl font-bold mb-4">{% editable 'guru_title' 'Гүрү Готопа багш' %}</h1>
+        <p class="text-xl">{% editable 'guru_subtitle' 'Гэгээрлийн замд удирдагч' %}</p>
+    </div>
+</section>
+
+<!-- Main Content -->
+<section class="py-16">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="grid md:grid-cols-2 gap-12 items-center mb-12">
+                <div>
+                    <img src="{% static 'images/bagshin_zurag.jpg' %}" alt="Гүрү Готопа" class="w-full rounded-lg shadow-lg">
+                </div>
+                <div>
+                    <h2 class="text-3xl font-bold text-secondary mb-6">Гүрү Готопа</h2>
+                    <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                        Гүрү Готопа бол өндөр давтамжийн бясалгалын мастер, гэгээрэлтэд хүрсэн багш бөгөөд олон мянган хүмүүсийг бясалгалын замд удирдаж ирсэн.
+                    </p>
+                    <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                        Багш нь 30 гаруй жилийн турш янз бүрийн гэгээрэлтийн арга барилыг судалж, практик хийсний үр дүнд өөрийн өвөрмөц систем бүтээсэн.
+                    </p>
+                    <p class="text-gray-700 text-lg leading-relaxed">
+                        Түүний зааж буй бясалгалын аргууд нь энгийн бөгөөд үр дүнтэй, хэн бүхэнд ойлгомжтой байдлаараа онцлог юм.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Philosophy -->
+            <div class="bg-light rounded-lg p-8 mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Багшийн үзэл санаа</h3>
+                <blockquote class="text-gray-700 text-lg italic border-l-4 border-primary pl-6">
+                    "Гэгээрэлт гэдэг нь алс хол дахь зүйл биш, харин энд яг одоо, бидний дотор байдаг. Зөвхөн түүнийг олж харах хэрэгтэй."
+                </blockquote>
+            </div>
+
+            <!-- Achievements -->
+            <div class="mb-12">
+                <h3 class="text-2xl font-bold text-secondary mb-6">Үйл ажиллагаа</h3>
+                <div class="space-y-4">
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <p class="text-gray-700">10,000 гаруй хүн бясалгалын хичээлд хамрагдсан</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <p class="text-gray-700">15 гаруй ном, эрдэм шинжилгээний өгүүлэл бичсэн</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <p class="text-gray-700">Олон улсын бясалгалын хурал, семинарт зохион байгуулалттай оролцсон</p>
+                    </div>
+                    <div class="flex items-start">
+                        <span class="text-primary text-2xl mr-3">•</span>
+                        <p class="text-gray-700">Монгол болон дэлхийн өнцөг булан бүрт бясалгалын төв байгуулсан</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="text-center bg-primary text-white rounded-lg p-8">
+                <h3 class="text-2xl font-bold mb-4">Багштай уулзах уу?</h3>
+                <p class="mb-6">Зуны VIP бясалгалд оролцож, багштай биечлэн уулзах боломжтой</p>
+                <a href="{% url 'main:vip_meditation' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
+                    Дэлгэрэнгүй
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
