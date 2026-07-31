@@ -1,4 +1,4 @@
-# Copilot Instructions - Готопа Бясалгалын Төв
+﻿# Copilot Instructions - Готопа Бясалгалын Төв
 
 ## Project Overview
 **Готопа бясалгалын төв** - Django-based meditation center management platform with multi-role authentication, course enrollment system, and custom phone/email login.
@@ -168,8 +168,8 @@ print(f"Unprocessed transactions: {unprocessed}")
 
 ## Code Conventions
 
-### Design System - PRIMARY COLOR PURPLE (#b5245b)
-**CRITICAL RULE**: All primary actions, links, buttons MUST use purple (#b5245b), NOT blue/other colors.
+### Design System - PRIMARY COLOR PURPLE (#AB334C)
+**CRITICAL RULE**: All primary actions, links, buttons MUST use purple (#AB334C), NOT blue/other colors.
 
 Tailwind classes in [main/templates/main/base.html](main/templates/main/base.html):
 ```html
@@ -183,7 +183,7 @@ Tailwind classes in [main/templates/main/base.html](main/templates/main/base.htm
 <script>
   tailwind.config = {
     theme: { extend: { colors: {
-      primary: '#b5245b',    // Purple (ягаан)
+      primary: '#AB334C',    // Purple (ягаан)
       secondary: '#222631',   // Dark gray (text)
       light: '#f8f9fa'        // Light gray (background)
     }}}
@@ -387,4 +387,4 @@ course.available_slots  # max_students - enrolled_count
 
 ---
 
-**REMEMBER**: This is a Mongolian language platform. All user-facing text, messages, error strings MUST be in Mongolian. Purple (#b5245b) is the brand color - do not use blue for primary actions!
+**REMEMBER**: This is a Mongolian language platform. All user-facing text, messages, error strings MUST be in Mongolian. Purple (#AB334C) is the brand color - do not use blue for primary actions!

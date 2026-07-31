@@ -1,0 +1,159 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Хэрэглэгчийн удирдлага - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-secondary">👥 Хэрэглэгчийн удирдлага</h1>
+            <a href="{% url 'main:dashboard' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400">
+                ← Буцах
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="mb-6 bg-gray-50 p-4 rounded-lg">
+            <form method="GET" class="flex gap-4 items-end">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium mb-2">Хайх</label>
+                    <input type="text" name="search" value="{{ request.GET.search }}" 
+                           placeholder="Нэр, утас, имэйл..."
+                           class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Роль</label>
+                    <select name="role" class="px-3 py-2 border rounded-lg">
+                        <option value="">-- Бүгд --</option>
+                        <option value="PRESIDENT" {% if request.GET.role == 'PRESIDENT' %}selected{% endif %}>Тэргүүн</option>
+                        <option value="DIRECTOR" {% if request.GET.role == 'DIRECTOR' %}selected{% endif %}>Захирал</option>
+                        <option value="MANAGER" {% if request.GET.role == 'MANAGER' %}selected{% endif %}>Менежер</option>
+                        <option value="ACCOUNTANT" {% if request.GET.role == 'ACCOUNTANT' %}selected{% endif %}>Нягтлан</option>
+                        <option value="TEACHER_BEGINNER" {% if request.GET.role == 'TEACHER_BEGINNER' %}selected{% endif %}>Багш (анхан)</option>
+                        <option value="TEACHER_INTERMEDIATE" {% if request.GET.role == 'TEACHER_INTERMEDIATE' %}selected{% endif %}>Багш (дунд)</option>
+                        <option value="TEACHER_ADVANCED" {% if request.GET.role == 'TEACHER_ADVANCED' %}selected{% endif %}>Багш (ахисан)</option>
+                        <option value="STUDENT" {% if request.GET.role == 'STUDENT' %}selected{% endif %}>Сурагч</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Статус</label>
+                    <select name="status" class="px-3 py-2 border rounded-lg">
+                        <option value="">-- Бүгд --</option>
+                        <option value="active" {% if request.GET.status == 'active' %}selected{% endif %}>Идэвхтэй</option>
+                        <option value="staff" {% if request.GET.status == 'staff' %}selected{% endif %}>Staff</option>
+                        <option value="superuser" {% if request.GET.status == 'superuser' %}selected{% endif %}>Superuser</option>
+                    </select>
+                </div>
+                <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">
+                    🔍 Хайх
+                </button>
+            </form>
+        </div>
+
+        <!-- Users Table -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white border border-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Монгол нэр</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Нэвтрэх нэр</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Утас</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Роль</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Бүлгүүд</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Статус</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold">Үйлдэл</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr class="border-t hover:bg-gray-50">
+                        <td class="px-4 py-3">{{ user.profile.full_name|default:"-" }}</td>
+                        <td class="px-4 py-3 font-mono text-sm">{{ user.username }}</td>
+                        <td class="px-4 py-3">{{ user.profile.phone|default:"-" }}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if user.profile.is_admin %}bg-red-100 text-red-800
+                                {% elif user.profile.is_accountant %}bg-blue-100 text-blue-800
+                                {% elif user.profile.is_teacher %}bg-green-100 text-green-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ user.profile.get_role_display }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-1">
+                                {% for group in user.groups.all %}
+                                <span class="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">
+                                    {{ group.name }}
+                                </span>
+                                {% empty %}
+                                <span class="text-gray-400 text-sm">-</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex gap-1">
+                                {% if user.is_superuser %}
+                                <span class="px-2 py-1 text-xs bg-red-600 text-white rounded">SU</span>
+                                {% endif %}
+                                {% if user.is_staff %}
+                                <span class="px-2 py-1 text-xs bg-yellow-600 text-white rounded">Staff</span>
+                                {% endif %}
+                                {% if not user.is_active %}
+                                <span class="px-2 py-1 text-xs bg-gray-400 text-white rounded">Inactive</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <a href="{% url 'main:user_edit' user.id %}" 
+                               class="inline-flex items-center px-3 py-1 bg-primary text-white rounded hover:bg-opacity-90">
+                                ✏️ Засах
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            Хэрэглэгч олдсонгүй
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if users.has_other_pages %}
+        <div class="mt-6 flex justify-center gap-2">
+            {% if users.has_previous %}
+            <a href="?page={{ users.previous_page_number }}&{{ request.GET.urlencode }}" 
+               class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">← Өмнөх</a>
+            {% endif %}
+            
+            <span class="px-4 py-2 bg-primary text-white rounded">
+                {{ users.number }} / {{ users.paginator.num_pages }}
+            </span>
+            
+            {% if users.has_next %}
+            <a href="?page={{ users.next_page_number }}&{{ request.GET.urlencode }}" 
+               class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Дараах →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Info -->
+        <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p class="text-sm text-blue-800">
+                <strong>💡 Зөвлөмж:</strong> Хэрэглэгчийн эрх тохируулахдаа:
+            </p>
+            <ul class="mt-2 ml-6 text-sm text-blue-700 list-disc space-y-1">
+                <li><strong>Superuser</strong> бол бүх эрхтэй - анхааралтай ашиглах</li>
+                <li><strong>Staff status</strong> админ панел руу нэвтрэх эрх олгоно</li>
+                <li><strong>Groups</strong> ашиглан цэсний эрх удирдана (санал болгож байна)</li>
+                <li><strong>Role</strong> нь үндсэн эрхийн түвшинг тодорхойлно</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

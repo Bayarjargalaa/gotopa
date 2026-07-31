@@ -2,399 +2,286 @@
 {% load static %}
 {% load content_tags %}
 
+{% block page_id %}home{% endblock %}
+
+{% block content_class %}{% endblock %}
+
 {% block content %}
-<!-- Hero Section - Slider -->
-<section class="relative h-screen bg-cover" style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('{% static "images/z_040.JPG" %}'); background-position: center top;">
-    <div class="container mx-auto px-4 h-full flex items-center">
-        <div class="max-w-2xl">
-            <p class="text-white text-3xl mb-4">
-                {% editable 'home_hero_subtitle' 'Готопа бясалгал бол' %}
-            </p>
-            <h1 class="text-4xl font-bold text-white mb-6 leading-tight">
-                {% editable 'home_hero_title' 'Хүн төрөлхтөнд барих бэлэг' %}
-            </h1>
-            <p class="text-white text-xl mb-8">
-                {% editable 'home_hero_description' 'Өндөр давтамжийн бясалгал' %}
-            </p>
-            <div class="flex gap-4">
-                <a href="{% url 'main:gotopa_meditation' %}" class="inline-block bg-primary text-white px-6 py-3 rounded-lg text-md font-bold hover:bg-opacity-90 transition-all uppercase">
-                    {% editable 'home_hero_btn_learn' 'Дэлгэрэнгүй' %}
-                </a>
-                {% if not user.is_authenticated %}
-                <a href="{% url 'main:register' %}" class="inline-block bg-white text-primary px-6 py-3 rounded-lg text-md font-bold hover:bg-gray-100 transition-all uppercase">
-                    {% editable 'home_hero_btn_register' 'Бүртгүүлэх' %}
-                </a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</section>
+<!-- ЗАГВАРЫН ДАГУУХ БҮТЭН НЭГЭН ДЭЛГЭЦИЙН ХУУДАС -->
+<div class="h-[calc(100vh-56px)] grid grid-rows-[42fr_9fr_27fr_22fr] overflow-hidden">
 
-<!-- Features Section -->
-<section class="bg-primary text-white py-8">
-    <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Feature 1 -->
-            <div class="text-center">
-                <div class="bg-white text-primary w-20 h-20 rounded-full flex items-center justify-center mx-auto mt-6 mb-4">
-                    <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 3.5a1.5 1.5 0 013 0V4a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-.5a1.5 1.5 0 000 3h.5a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-.5a1.5 1.5 0 00-3 0v.5a1 1 0 01-1 1H6a1 1 0 01-1-1v-3a1 1 0 00-1-1h-.5a1.5 1.5 0 010-3H4a1 1 0 001-1V6a1 1 0 011-1h3a1 1 0 001-1v-.5z"></path>
-                    </svg>
-                </div>
-                <h3 class="text-2xl font-bold mb-2">{% editable 'home_feature1_title' 'Бясалгал гэж юу вэ?' %}</h3>
-                <p class="mb-6">{% editable 'home_feature1_desc' 'Бид хэрхэн бясалгал хийдэг вэ?' %}</p>
-            </div>
-            
-            <!-- Feature 2 -->
-            <div class="text-center">
-                <div class="bg-white text-primary w-20 h-20 rounded-full flex items-center justify-center mx-auto mt-6 mb-4">
-                    <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path>
-                    </svg>
-                </div>
-                <h3 class="text-2xl font-bold mb-2">{% editable 'home_feature2_title' 'Ном' %}</h3>
-                <p class="mb-6">{% editable 'home_feature2_desc' 'Хэвлэгдэн гарсан номууд' %}</p>
-            </div>
-            
-            <!-- Feature 3 -->
-            <div class="text-center">
-                <div class="bg-white text-primary w-20 h-20 rounded-full flex items-center justify-center mx-auto mt-6 mb-4">
-                    <svg class="w-10 h-10" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"></path>
-                    </svg>
-                </div>
-                <h3 class="text-2xl font-bold mb-2">{% editable 'home_feature3_title' 'Тайлбар үгс' %}</h3>
-                <p class="mb-6">{% editable 'home_feature3_desc' 'Сайтад орсон үгсийн тайлбарууд' %}</p>
-            </div>
-        </div>
-    </div>
-</section>
+  <!-- ══ МӨР 1: HERO SLIDER ══ -->
+  <div class="relative overflow-hidden">
+    <img class="hero-slide absolute inset-0 w-full h-full object-fill opacity-0 transition-opacity duration-1000"
+         src="{% static 'images/web_undsenzureg.png' %}" alt="">    
 
-<!-- About Section -->
-<section class="py-20 bg-white">
-    <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-                <h4 class="text-primary text-xl mb-4">{% editable 'home_about_subtitle' 'Бясалгалыг сонгох давуу талууд' %}</h4>
-                <h2 class="text-4xl font-bold text-secondary mb-6">
-                    {% editable 'home_about_title' 'Оюун санааны амар амгаланд суралцах болно' %}
-                </h2>
-                <p class="text-gray-600 mb-8">
-                    {% editable 'home_about_desc' 'Бид таньд бясалгалын мэдлэгийг эхнээс зааж, дээд шатны мэдлэгийг шат дараатай системтэйгээр сургах болно.' %}
-                </p>
-                <ul class="space-y-4 mb-8">
-                    <li class="flex items-start">
-                        <svg class="w-6 h-6 text-primary mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>{% editable 'home_about_benefit1' 'Гүрү Готопа багш заана' %}</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-6 h-6 text-primary mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>{% editable 'home_about_benefit2' 'Анхан шатны 3 сарын сургалт: Долоо хоног бүр 2 удаа, 5 цаг орно.' %}</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-6 h-6 text-primary mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>{% editable 'home_about_benefit3' 'Хичээллэх тав тухтай орчин' %}</span>
-                    </li>
-                    <li class="flex items-start">
-                        <svg class="w-6 h-6 text-primary mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>{% editable 'home_about_benefit4' 'Баталгаажсан үр дүн' %}</span>
-                    </li>
-                </ul>
-                <a href="{% url 'main:about' %}" class="inline-block border-2 border-primary text-primary px-8 py-3 rounded-lg hover:bg-primary hover:text-white transition-all">
-                    Бидний тухай
-                </a>
-            </div>
-            <div class="relative">
-                <div class="absolute top-0 right-0 w-16 h-16 bg-primary rounded-full flex items-center justify-center text-white text-2xl">
-                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 3.5a1.5 1.5 0 013 0V4a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-.5a1.5 1.5 0 000 3h.5a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-.5a1.5 1.5 0 00-3 0v.5a1 1 0 01-1 1H6a1 1 0 01-1-1v-3a1 1 0 00-1-1h-.5a1.5 1.5 0 010-3H4a1 1 0 001-1V6a1 1 0 011-1h3a1 1 0 001-1v-.5z"></path>
-                    </svg>
-                </div>
-                <img src="{% static 'images/IMG_2065_1.jpg' %}" alt="Бясалгал" class="w-full rounded-lg shadow-lg">
-            </div>
-        </div>
-    </div>
-</section>
+    <div class="absolute inset-0"
+         style="background:linear-gradient(to right,rgba(255,255,255,0.55) 45%,rgba(255,255,255,0) 75%);"></div>
 
-<!-- Benefits Section -->
-<section class="py-20 bg-light">
-    <div class="container mx-auto px-4">
-        <div class="text-center mb-12">
-            <h4 class="text-primary text-xl mb-4">Бясалгалын ач тус</h4>
-            <h2 class="text-4xl font-bold text-secondary">
-                Өөрийн мөн чанарыг танин мэдэхэд онцгой үр дүнтэй.
-            </h2>
-        </div>
+    <div class="absolute inset-0 flex flex-col justify-center px-16">      
+      <h1 class="leading-none mb-3.5 text-primary"
+          style="font-size:clamp(4.2rem,5.5vw,4.0rem);letter-spacing:0.02em;font-family:'Playfair Display',Georgia,serif;font-weight:500;">
+        ГОТОПА АКАДЕМИ
+      </h1>
+      <p class="text-primary/70 leading-relaxed mb-5 max-w-[440px]"
+         style="font-size:clamp(1.9rem,1.4vw,1.1rem);">
+        Өндөр давтамжийг мэдэрч<br>Өөртөө итгэе
+      </p>
+      <div class="flex gap-3 flex-wrap">
+        <a href="{% url 'main:course_list' %}"
+           class="inline-flex items-center px-6 py-2.5 bg-primary text-white text-[0.72rem] font-extrabold uppercase tracking-[0.1em] rounded no-underline hover:opacity-90 transition-opacity">
+          СУРГАЛТЫН ХӨТӨЛБӨРҮҮД &nbsp;&rarr;
+        </a>
+        {% if not user.is_authenticated %}
+        <a href="{% url 'main:register' %}"
+           class="inline-flex items-center px-6 py-2.5 border-2 border-primary text-primary text-[0.72rem] font-extrabold uppercase tracking-[0.1em] rounded no-underline hover:bg-primary hover:text-white transition-colors">
+          БҮРТГҮҮЛЭХ &nbsp;&rarr;
+        </a>
+        {% endif %}
+      </div>
     </div>
-</section>
 
-<!-- Services Section -->
-<section class="py-20 bg-white">
-    <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Service 1 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg cursor-pointer">
-                <img src="{% static 'images/IMG_2282_1.jpg' %}" alt="Гэгээн гэрэл" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6">
-                    <p class="text-primary text-sm mb-2">Гэгээн гэрэл</p>
-                    <h3 class="text-2xl font-bold mb-4">Өндөр давтамжийн бясалгал</h3>
-                    <div class="flex items-center justify-between">
-                        <a href="{% url 'main:gotopa_meditation' %}" class="text-secondary hover:text-primary transition-colors">Дэлгэрэнгүй →</a>
-                        <div class="text-primary text-3xl">✽</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Service 2 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg cursor-pointer">
-                <img src="{% static 'images/IMG_2292_1.jpg' %}" alt="Сүнсээ сэрээх" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6">
-                    <p class="text-primary text-sm mb-2">Сүнсээ сэрээх</p>
-                    <h3 class="text-2xl font-bold mb-4">Авшиг авах</h3>
-                    <div class="flex items-center justify-between">
-                        <a href="{% url 'main:guru_gotopa' %}" class="text-secondary hover:text-primary transition-colors">Дэлгэрэнгүй →</a>
-                        <div class="text-primary text-3xl">☸</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Service 3 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg cursor-pointer">
-                <img src="{% static 'images/уншлагын ном.jpg' %}" alt="Сургаалиуд" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6">
-                    <p class="text-primary text-sm mb-2">Сургаалиуд</p>
-                    <h3 class="text-2xl font-bold mb-4">Бурхад, Хутагт мэргэдийн сургааль</h3>
-                    <div class="flex items-center justify-between">
-                        <a href="{% url 'main:books' %}" class="text-secondary hover:text-primary transition-colors">Дэлгэрэнгүй →</a>
-                        <div class="text-primary text-3xl">☯</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex gap-2">
+      <button class="hero-dot w-2.5 h-2.5 rounded-full bg-white opacity-100 border-none cursor-pointer p-0" data-index="0"></button>
+      <button class="hero-dot w-2.5 h-2.5 rounded-full bg-white opacity-40 border-none cursor-pointer p-0" data-index="1"></button>
+      <button class="hero-dot w-2.5 h-2.5 rounded-full bg-white opacity-40 border-none cursor-pointer p-0" data-index="2"></button>
     </div>
-</section>
+  </div>
 
-<!-- Registration Section -->
-<section class="py-20 bg-gray-50">
-    <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-                <img src="{% static 'images/huzuuni_zuult.jpg' %}" alt="Бясалгал" class="w-full rounded-lg shadow-lg">
-            </div>
-            <div>
-                <h4 class="text-primary text-xl mb-4">Бясалгалд бүртгүүлэх</h4>
-                <h2 class="text-4xl font-bold text-secondary mb-8">
-                    Та өөрийн цагийг сонгон бүртгүүлнэ үү.
-                </h2>
-                
-                <!-- Registration Options -->
-                <div class="space-y-4">
-                    <div class="bg-white p-6 rounded-lg shadow-md flex items-center justify-between hover:shadow-lg transition-shadow">
-                        <div class="flex items-center space-x-4">
-                            <div class="text-primary text-3xl">✽</div>
-                            <div>
-                                <h3 class="text-xl font-bold">Анхан шатны бясалгал</h3>
-                                <p class="text-gray-600">Долоо хоногт 2 удаа</p>
-                            </div>
-                        </div>
-                        <a href="{% url 'main:beginner_meditation' %}" class="text-primary hover:text-secondary transition-colors">Бүртгүүлэх →</a>
-                    </div>
-                    
-                    <div class="bg-white p-6 rounded-lg shadow-md flex items-center justify-between hover:shadow-lg transition-shadow">
-                        <div class="flex items-center space-x-4">
-                            <div class="text-primary text-3xl">☸</div>
-                            <div>
-                                <h3 class="text-xl font-bold">Зуны VIP бясалгал</h3>
-                                <p class="text-gray-600">6 Өдөр</p>
-                            </div>
-                        </div>
-                        <a href="{% url 'main:vip_meditation' %}" class="text-primary hover:text-secondary transition-colors">Бүртгүүлэх →</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+  <!-- ══ МӨР 2: STATS BAR ══ -->
+  <div class="grid grid-cols-4 bg-white shadow-md border-t-[3px] border-primary z-10">
 
-<!-- Fan Club Section -->
-<section class="py-20 bg-primary text-white">
-    <div class="container mx-auto px-4">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-12 items-center">
-            <div class="lg:col-span-2">
-                <h4 class="text-xl mb-4">Гүрү Готопа Фэн клуб</h4>
-                <h2 class="text-4xl font-bold">
-                    Манай клуб нь бясалгалын төвийн үйл ажиллагаанд сайн дураар оролцдог ашгийн бус байгууллага юм.
-                </h2>
-            </div>
-            <div class="text-center">
-                <div class="text-6xl mb-4">☸</div>
-            </div>
-        </div>
+    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+      <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342"/>
+      </svg>
+      <div>
+        <p class="text-[1.35rem] font-black text-secondary leading-none">15 жил</p>
+        <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Тасралтгүй үйл ажиллагаа</p>
+      </div>
     </div>
-</section>
 
-<!-- Teachers Section -->
-<section class="py-20 bg-white">
-    <div class="container mx-auto px-4">
-        <div class="text-center mb-12">
-            <h4 class="text-primary text-xl mb-4">Готопа багш</h4>
-            <h2 class="text-4xl font-bold text-secondary mb-4">
-                Өндөр давтамжийн бясалгалын үндсэн мэдлэг чадвар, нарийн техникүүдийг үе шаттай заан сургаж байна.
-            </h2>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <!-- Teacher 1 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg">
-                <img src="{% static 'images/gotopa_logo.jpg' %}" alt="Гүрү Готопа" class="w-full h-96 object-cover">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6 transform translate-y-12 group-hover:translate-y-0 transition-transform duration-300">
-                    <p class="text-primary text-sm">Гүрү Готопа Их багш</p>
-                    <h3 class="text-2xl font-bold">.Доржготов</h3>
-                    <!-- Social Links -->
-                    <div class="flex space-x-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <a href="#" class="text-primary hover:text-secondary">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Teacher 2 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg">
-                <img src="{% static 'images/bagshin_zurag.jpg' %}" alt="Багш" class="w-full h-96 object-cover">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6 transform translate-y-12 group-hover:translate-y-0 transition-transform duration-300">
-                    <p class="text-primary text-sm">Анхан шатны багш</p>
-                    <h3 class="text-2xl font-bold">Нэр 1</h3>
-                    <div class="flex space-x-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <a href="#" class="text-primary hover:text-secondary">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Teacher 3 -->
-            <div class="group relative overflow-hidden rounded-lg shadow-lg">
-                <img src="{% static 'images/erkhi.jpg' %}" alt="Багш" class="w-full h-96 object-cover">
-                <div class="absolute bottom-0 left-0 right-0 bg-white p-6 transform translate-y-12 group-hover:translate-y-0 transition-transform duration-300">
-                    <p class="text-primary text-sm">Анхан шатны багш</p>
-                    <h3 class="text-2xl font-bold">Нэр 2</h3>
-                    <div class="flex space-x-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <a href="#" class="text-primary hover:text-secondary">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+      <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+      </svg>
+      <div>
+        <p class="text-[1.35rem] font-black text-secondary leading-none">3000+</p>
+        <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Төгсөгчид</p>
+      </div>
     </div>
-</section>
 
-<!-- Testimonials Section -->
-<section class="py-20 bg-light">
-    <div class="container mx-auto px-4">
-        <div class="text-center mb-12">
-            <h4 class="text-primary text-xl mb-4">Бясалгагчдын сэтгэгдэл</h4>
-            <h2 class="text-4xl font-bold text-secondary">Бясалгалын тухай</h2>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Testimonial 1 -->
-            <div class="bg-white p-8 rounded-lg shadow-md">
-                <div class="flex items-center mb-4">
-                    <span class="text-primary text-2xl">★★★★★</span>
-                </div>
-                <p class="text-gray-600 mb-6 italic">
-                    "I appreciate your coaching center really good environment and excellent student training. You are continuously handle student training wonderfully. Thanks for your great service."
-                </p>
-                <div class="flex items-center">
-                    <img src="{% static 'images/5budaa.jpg' %}" alt="Бясалгагч" class="w-16 h-16 rounded-full mr-4 object-cover">
-                    <div>
-                        <h4 class="font-bold">Батсайханы Оргил</h4>
-                        <p class="text-sm text-gray-500">Анхан шатны бясалгагч</p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Testimonial 2 -->
-            <div class="bg-white p-8 rounded-lg shadow-md">
-                <div class="flex items-center mb-4">
-                    <span class="text-primary text-2xl">★★★★☆</span>
-                </div>
-                <p class="text-gray-600 mb-6 italic">
-                    "I appreciate your coaching center really good environment and excellent student training. You are continuously handle student training wonderfully. Thanks for your great service."
-                </p>
-                <div class="flex items-center">
-                    <img src="{% static 'images/орхимж.jpg' %}" alt="Бясалгагч" class="w-16 h-16 rounded-full mr-4 object-cover">
-                    <div>
-                        <h4 class="font-bold">Мөнхбатын Алимаа</h4>
-                        <p class="text-sm text-gray-500">Дээд шатны бясалгагч</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+      <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+      </svg>
+      <div>
+        <p class="text-[1.35rem] font-black text-secondary leading-none">30+</p>
+        <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Сургалтын хөтөлбөр</p>
+      </div>
     </div>
-</section>
 
-<!-- News/Blog Section -->
-<section class="py-20 bg-primary text-white">
-    <div class="container mx-auto px-4">
-        <div class="text-center mb-12">
-            <h4 class="text-xl mb-4">Мэдээ мэдээлэл</h4>
-            <h2 class="text-4xl font-bold">Үйл ажиллагаа</h2>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Blog Post 1 -->
-            <div class="bg-white text-secondary rounded-lg overflow-hidden shadow-lg group">
-                <img src="{% static 'images/galin_zai.jpg' %}" alt="Мэдээ" class="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="p-6">
-                    <div class="text-primary text-sm mb-2">26 Jul</div>
-                    <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">Сургалт зохион байгуулах</h3>
-                    <p class="text-gray-600 mb-4 text-sm">Veniam quis nostrud exercitation ud exercitation ullamco ut aliquip. Duis aute irure dolor...</p>
-                    <div class="flex items-center text-sm text-gray-500">
-                        <span class="mr-4">👤 Төвийн үйл ажмллагаа</span>
-                        <span>📁 Бясалгал</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Blog Post 2 -->
-            <div class="bg-white text-secondary rounded-lg overflow-hidden shadow-lg group">
-                <img src="{% static 'images/efer_tos.jpg' %}" alt="Мэдээ" class="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="p-6">
-                    <div class="text-primary text-sm mb-2">03 Jun</div>
-                    <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">Аялал зохион байгуулагдав</h3>
-                    <p class="text-gray-600 mb-4 text-sm">Veniam quis nostrud exercitation ud exercitation ullamco ut aliquip. Duis aute irure dolor...</p>
-                    <div class="flex items-center text-sm text-gray-500">
-                        <span class="mr-4">👤 Төвөөс зохион байгуулав</span>
-                        <span>📁 Буйр нуурын тахилга</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Blog Post 3 -->
-            <div class="bg-white text-secondary rounded-lg overflow-hidden shadow-lg group">
-                <img src="{% static 'images/gotopafan_cover.jpg' %}" alt="Мэдээ" class="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-300">
-                <div class="p-6">
-                    <div class="text-primary text-sm mb-2">03 Jun</div>
-                    <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">Тархины хакер нэвтрүүлэгт оролцов</h3>
-                    <p class="text-gray-600 mb-4 text-sm">Veniam quis nostrud exercitation ud exercitation ullamco ut aliquip. Duis aute irure dolor...</p>
-                    <div class="flex items-center text-sm text-gray-500">
-                        <span class="mr-4">👤 Гүрү Готопа</span>
-                        <span>📁 Ярилцлага</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="flex items-center gap-3.5 px-6">
+      <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+      </svg>
+      <div>
+        <p class="text-[1.35rem] font-black text-secondary leading-none">Өдөр бүр</p>
+        <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Бясалгалын хөтөлбөр</p>
+      </div>
     </div>
-</section>
+
+  </div>
+
+  <!-- ══ МӨР 3: MISSION + 4 COURSE КАРТ ══ -->
+  <div class="grid grid-cols-[300px_1fr] overflow-hidden bg-gray-100 border-t border-gray-200">
+
+    <!-- Зүүн: улаан mission карт -->
+    <div class="bg-primary p-7 flex flex-col overflow-hidden m-3 rounded-xl">
+      <h3 class="text-white text-[0.62rem] font-black uppercase tracking-[0.14em] mb-3">
+        БИДНИЙ ЭРХЭМ ЗОРИЛГО
+      </h3>
+      <p class="text-white/90 text-[0.75rem] leading-relaxed flex-1 overflow-hidden">
+        Бид дотоод гэрлийн хүчээр дээд ухамсарт хөтөлдөг шинэ эриний бясалгалыг түгээн дэлгэрүүлнэ.
+      </p>
+      <div class="border-t border-white/25 pt-3 mt-3">
+        <p class="text-white/90 text-[0.68rem] font-bold italic">
+          Багш Ж.Доржготов
+        </p>
+        <p class="text-white/60 text-[0.6rem] mt-1">
+          Готопа академийн үүсгэн байгуулагч
+        </p>
+      </div>
+    </div>
+
+    <!-- Баруун: гарчиг + 4 хичээлийн карт -->
+    <div class="flex flex-col overflow-hidden py-3 pr-3">
+
+      <div class="px-1 pb-2.5 flex justify-between items-center flex-shrink-0">
+        <h2 class="text-[0.78rem] font-black uppercase tracking-[0.1em] text-secondary">
+          СУРГАЛТЫН ХӨТӨЛБӨРҮҮД
+        </h2>
+        <a href="{% url 'main:course_list' %}" class="text-primary text-[0.65rem] font-bold no-underline">
+          Бүгдийг харах &rarr;
+        </a>
+      </div>
+
+      <div class="flex-1 grid grid-cols-4 gap-3 overflow-hidden">
+
+        <!-- Card 1 -->
+        <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
+          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+            <img src="{% static 'images/1.jpg' %}" alt="Анхан шатны бясалгал"
+                 class="absolute inset-0 w-full h-full object-cover">
+          </div>
+          <div class="px-3 py-2 flex-shrink-0">
+            <h4 class="text-[0.72rem] font-extrabold text-secondary mb-1 leading-tight">Анхан шатны бясалгал</h4>
+            <p class="text-[0.6rem] text-gray-500 mb-1.5 leading-snug">Бясалгалын үндсэн мэдлэг, дадлага олгох хөтөлбөр</p>
+            <a href="{% url 'main:course_list' %}" class="text-primary text-[0.62rem] font-bold no-underline">Дэлгэрэнгүй &rarr;</a>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
+          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+            <img src="{% static 'images/6.jpg' %}" alt="Дунд шатны бясалгал"
+                 class="absolute inset-0 w-full h-full object-cover">
+          </div>
+          <div class="px-3 py-2 flex-shrink-0">
+            <h4 class="text-[0.72rem] font-extrabold text-secondary mb-1 leading-tight">Дунд шатны бясалгал</h4>
+            <p class="text-[0.6rem] text-gray-500 mb-1.5 leading-snug">Бясалгалын дадлыг гүнзгийрүүлэх, ухамсар хөгжүүлэх</p>
+            <a href="{% url 'main:course_list' %}" class="text-primary text-[0.62rem] font-bold no-underline">Дэлгэрэнгүй &rarr;</a>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
+          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+            <img src="{% static 'images/4.jpg' %}" alt="Багшийн анги"
+                 class="absolute inset-0 w-full h-full object-cover">
+          </div>
+          <div class="px-3 py-2 flex-shrink-0">
+            <h4 class="text-[0.72rem] font-extrabold text-secondary mb-1 leading-tight">Багшийн анги</h4>
+            <p class="text-[0.6rem] text-gray-500 mb-1.5 leading-snug">Бясалгал заах багш бэлтгэх мэргэжлийн хөтөлбөр</p>
+            <a href="{% url 'main:course_list' %}" class="text-primary text-[0.62rem] font-bold no-underline">Дэлгэрэнгүй &rarr;</a>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
+          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+            <img src="{% static 'images/3.jpg' %}" alt="Тусгай сургалтууд"
+                 class="absolute inset-0 w-full h-full object-cover">
+          </div>
+          <div class="px-3 py-2 flex-shrink-0">
+            <h4 class="text-[0.72rem] font-extrabold text-secondary mb-1 leading-tight">Тусгай сургалтууд</h4>
+            <p class="text-[0.6rem] text-gray-500 mb-1.5 leading-snug">Гүнзгийрүүлсэн, тусгай зориулалтын сургалтууд</p>
+            <a href="{% url 'main:course_list' %}" class="text-primary text-[0.62rem] font-bold no-underline">Дэлгэрэнгүй &rarr;</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ МӨР 4: TIMELINE + БАРИЛГЫН ТӨСӨЛ ══ -->
+  <div class="grid grid-cols-2 overflow-hidden bg-white border-t border-gray-200">
+
+    <!-- Зүүн: Timeline -->
+    <div class="px-8 py-4 flex flex-col justify-center border-r border-gray-200">
+
+      <div class="flex items-center gap-4 mb-5">
+        <h2 class="text-[0.78rem] font-black uppercase tracking-[0.1em] text-secondary">
+          15 ЖИЛИЙН ЗАМНАЛ
+        </h2>
+        <a href="{% url 'main:about' %}" class="text-primary text-[0.62rem] font-bold no-underline whitespace-nowrap">
+          Дэлгэрэнгүй түүх &rarr;
+        </a>
+      </div>
+
+      <div class="relative">
+        <div class="absolute top-[5px] left-0 right-0 h-0.5 bg-gray-200"></div>
+        <div class="absolute top-[5px] left-0 h-0.5 bg-primary" style="width:82%;"></div>
+
+        <div class="grid grid-cols-6 relative">
+
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-secondary leading-none">2011</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">Академи үүсгэн байгуулагдав</p>
+          </div>
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-secondary leading-none">2013</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">Анхны төгсөгчид гарав</p>
+          </div>
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-secondary leading-none">2016</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">Багшийн анги эхлэв</p>
+          </div>
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-secondary leading-none">2019</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">Шинэ барилга теслийн эхлэл</p>
+          </div>
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-secondary leading-none">2023</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">Олон улсын түнжлэл өргөжив</p>
+          </div>
+          <div class="flex flex-col items-center text-center">
+            <div class="w-3 h-3 rounded-full bg-primary ring-[3px] ring-primary/20 relative z-10 mb-2 flex-shrink-0"></div>
+            <p class="text-[0.62rem] font-extrabold text-primary leading-none">2025</p>
+            <p class="text-[0.55rem] text-gray-400 mt-[3px] leading-tight">15 жилийн ойн шинэчлэл</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Баруун: Шинэ барилгын төсөл -->
+    <div class="relative overflow-hidden">
+      <img src="{% static 'images/5.jpg' %}" alt="Шинэ барилга"
+           class="absolute inset-0 w-full h-full object-cover">
+      <div class="absolute inset-0"
+           style="background:linear-gradient(to left,rgba(0,0,0,0.65) 0%,rgba(0,0,0,0.1) 100%);"></div>
+      <div class="absolute inset-0 flex flex-col justify-center items-end text-right px-8 py-5">
+        <h3 class="text-white text-[0.9rem] font-black uppercase tracking-[0.08em] mb-2"
+            style="text-shadow:0 1px 6px rgba(0,0,0,0.4);">
+          ШИНЭ БАРИЛГЫН ТӨСӨЛ
+        </h3>
+        <p class="text-white/90 text-[0.72rem] leading-relaxed mb-4 max-w-[280px]"
+           style="text-shadow:0 1px 4px rgba(0,0,0,0.3);">
+          Илүү их оюутанд, илүү сайн орчин бүрдүүлэхийн тулд бидэнтэй нэгдээрэй.
+        </p>
+        <a href="{% url 'main:contact' %}"
+           class="inline-flex items-center gap-1.5 px-5 py-2 bg-primary text-white text-[0.7rem] font-extrabold uppercase tracking-[0.08em] rounded no-underline hover:opacity-90 transition-opacity">
+          ХАНДИВ ӨГӨХ &nbsp;&#9825;
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var slides = document.querySelectorAll('.hero-slide');
+  var dots   = document.querySelectorAll('.hero-dot');
+  var cur = 0;
+  function goTo(n) {
+    slides[cur].style.opacity = '0';
+    dots[cur].style.opacity   = '0.4';
+    cur = (n + slides.length) % slides.length;
+    slides[cur].style.opacity = '1';
+    dots[cur].style.opacity   = '1';
+  }
+  dots.forEach(function (d) {
+    d.addEventListener('click', function () { goTo(parseInt(this.dataset.index)); });
+  });
+  setInterval(function () { goTo(cur + 1); }, 5000);
+}());
+</script>
 {% endblock %}

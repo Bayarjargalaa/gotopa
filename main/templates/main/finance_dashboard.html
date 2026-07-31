@@ -27,85 +27,111 @@
         </div>
     </div>
 
-    <!-- Холбоосууд -->
-    <div class="grid md:grid-cols-4 gap-6 mb-6">
-        <a href="{% url 'main:journal_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">📖 Ерөнхий журнал</h3>
-            <p class="text-purple-100 text-sm">Дебит-Кредит гүйлгээ бүртгэх</p>
-        </a>
-        <a href="{% url 'main:purchase_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">🛒 Худалдан авалт</h3>
-            <p class="text-gray-600 text-sm">Нийлүүлэгчээс бараа худалдан авах</p>
-        </a>
-        <a href="{% url 'main:sale_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">🛍️ Борлуулалт</h3>
-            <p class="text-gray-600 text-sm">Үйлчлүүлэгчдэд бараа зарах</p>
-        </a>
-        <a href="{% url 'main:transaction_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">💵 Гүйлгээ</h3>
-            <p class="text-gray-600 text-sm">Мөнгөн хөрөнгийн орлого/зарлага</p>
-        </a>
+    <div class="bg-purple-50 border-l-4 border-primary rounded-lg p-4 mb-6">
+        <p class="text-sm text-gray-700">Дансны төлөвлөгөөний эхний үлдэгдэл дээр банк/кассын гүйлгээний орлого, зарлагыг нэмж/хасч тооцсон нийт эцсийн үлдэгдэл</p>
+        <p class="text-2xl font-bold text-primary mt-1">{{ cash_bank_total_closing|floatformat:0 }}₮</p>
     </div>
 
-    <!-- Импорт холбоосууд -->
-    <div class="grid md:grid-cols-4 gap-6 mb-6">
-        <a href="{% url 'main:chart_of_accounts_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-primary">
-            <h3 class="text-xl font-bold mb-2 text-primary">📋 Дансны төлөвлөгөө</h3>
-            <p class="text-gray-600 text-sm">Дансны төлөвлөгөө харах</p>
-        </a>
-        <a href="{% url 'main:account_opening_balance' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-green-500">
-            <h3 class="text-xl font-bold mb-2 text-green-600">⚖️ Эхний үлдэгдэл</h3>
-            <p class="text-gray-600 text-sm">Дансуудын эхний үлдэгдэл оруулах</p>
-        </a>
-        <a href="{% url 'main:bank_transaction_list' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-2 border-blue-500">
-            <h3 class="text-xl font-bold mb-2 text-blue-600">🏦 Банкны гүйлгээ</h3>
-            <p class="text-gray-600 text-sm">Импортолсон гүйлгээ харах, эсрэг данс холбох</p>
-        </a>
-        <a href="{% url 'main:import_counterparties' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">📊 Харилцагч импорт</h3>
-            <p class="text-gray-600 text-sm">Excel файлаас харилцагч оруулах</p>
-        </a>
+    <!-- Банкны данс тус бүрийн үлдэгдэл -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-secondary">🏦 Банкны данс тус бүрийн үлдэгдэл</h2>
+            <p class="text-sm text-gray-500">Нийт банк: <span class="font-bold text-blue-700">{{ total_bank|floatformat:0 }}₮</span></p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {% for row in bank_account_balances %}
+            <div class="border border-blue-100 rounded-lg p-4 bg-blue-50/40">
+                <p class="text-xs text-blue-700 font-semibold mb-1">{{ row.account.code }}</p>
+                <p class="font-semibold text-secondary mb-3">{{ row.account.name }}</p>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Эхний:</span>
+                        <span>{{ row.opening_balance|floatformat:0 }}₮</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Орлого:</span>
+                        <span class="text-green-700">+{{ row.total_income|floatformat:0 }}₮</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Зарлага:</span>
+                        <span class="text-red-700">-{{ row.total_expense|floatformat:0 }}₮</span>
+                    </div>
+                    <div class="pt-2 mt-2 border-t flex justify-between font-bold">
+                        <span>Эцсийн:</span>
+                        <span class="text-blue-700">{{ row.closing_balance|floatformat:0 }}₮</span>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-full text-center text-gray-500 py-6">
+                Банкны данс олдсонгүй.
+            </div>
+            {% endfor %}
+        </div>
     </div>
 
-    <!-- Банкны импорт -->
-    <div class="grid md:grid-cols-4 gap-6 mb-6">
-        <a href="{% url 'main:import_bank_transactions' %}" class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <h3 class="text-xl font-bold mb-2">📥 Банкны импорт</h3>
-            <p class="text-gray-600 text-sm">Голомт/Хаан банкны хуулга импортлох</p>
-        </a>
+    <!-- Банкны гүйлгээний статистик -->
+    <div class="grid md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+            <p class="text-gray-600 text-sm">Банкны нийт гүйлгээ</p>
+            <p class="text-3xl font-bold text-blue-600">{{ bank_tx_total }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+            <p class="text-gray-600 text-sm">Холбогдсон гүйлгээ</p>
+            <p class="text-3xl font-bold text-green-600">{{ bank_tx_linked }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+            <p class="text-gray-600 text-sm">Холбоогүй гүйлгээ</p>
+            <p class="text-3xl font-bold text-yellow-600">{{ bank_tx_unlinked }}</p>
+        </div>
     </div>
 
     <!-- Дансуудын дэлгэрэнгүй -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 class="text-2xl font-bold mb-4">📊 Дансуудын үлдэгдэл</h2>
+        <h2 class="text-2xl font-bold mb-4">📊 Данс тус бүрийн эцсийн үлдэгдэл</h2>
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-gray-100">
                     <tr>
+                        <th class="px-4 py-3 text-left">Код</th>
                         <th class="px-4 py-3 text-left">Дансны нэр</th>
                         <th class="px-4 py-3 text-left">Төрөл</th>
-                        <th class="px-4 py-3 text-left">Банк</th>
-                        <th class="px-4 py-3 text-right">Үлдэгдэл</th>
+                        <th class="px-4 py-3 text-right">Эхний үлдэгдэл</th>
+                        <th class="px-4 py-3 text-right text-green-700">Орлого</th>
+                        <th class="px-4 py-3 text-right text-red-700">Зарлага</th>
+                        <th class="px-4 py-3 text-right">Эцсийн үлдэгдэл</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for account in accounts %}
+                    {% for row in cash_bank_balances %}
                     <tr class="border-t">
-                        <td class="px-4 py-3 font-semibold">{{ account.name }}</td>
-                        <td class="px-4 py-3">{{ account.get_account_type_display }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">{{ account.bank_name|default:"-" }}</td>
+                        <td class="px-4 py-3 font-mono text-sm">{{ row.account.code }}</td>
+                        <td class="px-4 py-3 font-semibold">{{ row.account.name }}</td>
+                        <td class="px-4 py-3">{{ row.account.get_account_type_display }}</td>
+                        <td class="px-4 py-3 text-right">{{ row.opening_balance|floatformat:0 }}₮</td>
+                        <td class="px-4 py-3 text-right text-green-700">+{{ row.total_income|floatformat:0 }}₮</td>
+                        <td class="px-4 py-3 text-right text-red-700">-{{ row.total_expense|floatformat:0 }}₮</td>
                         <td class="px-4 py-3 text-right font-bold text-lg">
-                            {{ account.balance|floatformat:0 }}₮
+                            {{ row.closing_balance|floatformat:0 }}₮
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="4" class="px-4 py-6 text-center text-gray-500">
+                        <td colspan="7" class="px-4 py-6 text-center text-gray-500">
                             Данс бүртгээгүй байна.
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% if cash_bank_balances %}
+                <tfoot>
+                    <tr class="border-t-2 border-gray-300 bg-gray-50">
+                        <td colspan="6" class="px-4 py-3 text-right font-bold text-gray-700">Нийт эцсийн үлдэгдэл:</td>
+                        <td class="px-4 py-3 text-right text-xl font-bold text-primary">{{ cash_bank_total_closing|floatformat:0 }}₮</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>

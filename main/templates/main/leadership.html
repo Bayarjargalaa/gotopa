@@ -1,0 +1,155 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Удирдлага - Готопа Академи{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="relative overflow-hidden bg-gradient-to-br from-rose-50 via-white to-pink-50">
+  <div class="absolute inset-0 opacity-20"
+       style="background-image:radial-gradient(circle at 70% 40%, #AB334C 0%, transparent 50%);">
+  </div>
+  <div class="absolute top-0 left-0 right-0 h-1 bg-primary"></div>
+  <div class="relative max-w-5xl mx-auto px-6 py-20">
+    <p class="text-[0.7rem] text-primary font-black uppercase tracking-[0.22em] mb-3">ГОТОПА АКАДЕМИ</p>
+    <h1 class="text-5xl font-black text-secondary mb-4" style="font-family:'Playfair Display',Georgia,serif;">Удирдлага</h1>
+    <p class="text-gray-500 text-[1rem] max-w-xl">Готопа Академийн үндэс суурийг тавьж, гэрэлтүүлсэн удирдлагын баг</p>
+    <div class="w-16 h-0.5 bg-primary mt-6"></div>
+  </div>
+</div>
+
+<!-- 3 удирдах зөвлөлийн гишүүд -->
+<div class="max-w-5xl mx-auto px-6 py-16">
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+    <!-- 1. Үүсгэн байгуулагч их багш -->
+    <div class="group relative bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-500 border border-gray-100">
+      <!-- Зураг хэсэг -->
+      <div class="relative overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200" style="aspect-ratio:3/4;">
+        <img src="{% static 'images/guru_gotopa.jpg' %}" alt="Үүсгэн байгуулагч их багш"
+             class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <!-- Зураг байхгүй үед -->
+        <div class="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/30 hidden items-center justify-center" style="display:flex;">
+          <svg class="w-24 h-24 text-white/40" fill="none" stroke="currentColor" stroke-width="0.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <!-- Overlay gradient -->
+        <div class="absolute inset-0 bg-gradient-to-t from-secondary/80 via-transparent to-transparent"></div>
+        <!-- Badge -->
+        <div class="absolute top-4 left-4">
+          <span class="bg-primary text-white text-[0.6rem] font-black uppercase tracking-[0.1em] px-3 py-1.5 rounded-full shadow-lg">
+            Үүсгэн байгуулагч
+          </span>
+        </div>
+        <!-- Нэр overlay -->
+        <div class="absolute bottom-0 left-0 right-0 px-6 pb-5">
+          <p class="text-white/70 text-[0.65rem] font-bold uppercase tracking-[0.12em] mb-0.5">ИХ БАГШ</p>
+          <h3 class="text-white text-xl font-black" style="font-family:'Playfair Display',Georgia,serif;">Гүрү Готопа</h3>
+        </div>
+      </div>
+      <!-- Мэдээлэл -->
+      <div class="px-6 py-5">
+        <p class="text-gray-500 text-[0.83rem] leading-relaxed">
+          Готопа Академийг үүсгэн байгуулагч, бясалгалын их багш. Дотоод ухамсар, гэрэлтүүлгийн замыг хүн бүрт нээж өгөх амьдралын зорилготой.
+        </p>
+        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+          <span class="text-[0.72rem] text-primary font-semibold">Академийн тэргүүн</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Ачит багш -->
+    <div class="group relative bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-500 border border-gray-100 md:mt-8">
+      <div class="relative overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200" style="aspect-ratio:3/4;">
+        <img src="{% static 'images/achit_bagsh.jpg' %}" alt="Ачит багш"
+             class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="absolute inset-0 bg-gradient-to-br from-secondary/20 to-secondary/30 hidden items-center justify-center" style="display:flex;">
+          <svg class="w-24 h-24 text-white/40" fill="none" stroke="currentColor" stroke-width="0.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-secondary/80 via-transparent to-transparent"></div>
+        <div class="absolute top-4 left-4">
+          <span class="bg-secondary text-white text-[0.6rem] font-black uppercase tracking-[0.1em] px-3 py-1.5 rounded-full shadow-lg">
+            Ачит багш
+          </span>
+        </div>
+        <div class="absolute bottom-0 left-0 right-0 px-6 pb-5">
+          <p class="text-white/70 text-[0.65rem] font-bold uppercase tracking-[0.12em] mb-0.5">АЧИТ БАГШ</p>
+          <h3 class="text-white text-xl font-black" style="font-family:'Playfair Display',Georgia,serif;">Ачит багш</h3>
+        </div>
+      </div>
+      <div class="px-6 py-5">
+        <p class="text-gray-500 text-[0.83rem] leading-relaxed">
+          Бясалгалын замын ачит удирдагч. Суралцагчдын дотоод хөгжлийг дэмжиж, гүн мэдлэгийг хуваалцаж ирсэн туршлагатай багш.
+        </p>
+        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full bg-secondary"></div>
+          <span class="text-[0.72rem] text-secondary font-semibold">Ахлах удирдагч</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Гэрэлт багш -->
+    <div class="group relative bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-500 border border-gray-100">
+      <div class="relative overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200" style="aspect-ratio:3/4;">
+        <img src="{% static 'images/gerelt_bagsh.jpg' %}" alt="Гэрэлт багш"
+             class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="absolute inset-0 bg-gradient-to-br from-amber-100/30 to-gray-200/30 hidden items-center justify-center" style="display:flex;">
+          <svg class="w-24 h-24 text-white/40" fill="none" stroke="currentColor" stroke-width="0.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-secondary/80 via-transparent to-transparent"></div>
+        <div class="absolute top-4 left-4">
+          <span class="bg-amber-500 text-white text-[0.6rem] font-black uppercase tracking-[0.1em] px-3 py-1.5 rounded-full shadow-lg">
+            Гэрэлт багш
+          </span>
+        </div>
+        <div class="absolute bottom-0 left-0 right-0 px-6 pb-5">
+          <p class="text-white/70 text-[0.65rem] font-bold uppercase tracking-[0.12em] mb-0.5">ГЭРЭЛТ БАГШ</p>
+          <h3 class="text-white text-xl font-black" style="font-family:'Playfair Display',Georgia,serif;">Гэрэлт багш</h3>
+        </div>
+      </div>
+      <div class="px-6 py-5">
+        <p class="text-gray-500 text-[0.83rem] leading-relaxed">
+          Гэрэлтүүлгийн замын удирдагч. Бясалгал, эрчим хүчний ухаанаар дамжуулан хүн бүрийн дотоод гэрлийг асааж ирсэн туршлагатай удирдагч.
+        </p>
+        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+          <span class="text-[0.72rem] text-amber-600 font-semibold">Гэрэлтүүлэгч</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Тайлбар хэсэг -->
+  <div class="mt-16 bg-gray-50 rounded-2xl px-8 py-10 border border-gray-100 text-center">
+    <p class="text-[0.68rem] text-primary font-black uppercase tracking-[0.18em] mb-3">МАНАЙ УДИРДЛАГЫН ЗАРЧИМ</p>
+    <h2 class="text-2xl font-black text-secondary mb-4" style="font-family:'Playfair Display',Georgia,serif;">
+      Гэрэлтүүлгийн замыг хамтдаа туулж байна
+    </h2>
+    <p class="text-gray-500 text-[0.9rem] leading-relaxed max-w-2xl mx-auto">
+      Готопа Академийн удирдлагын баг нь хүн бүрийн дотоод өсөлт, гэрэлтүүлгийн замд хөтлөх зорилготой. Бид суралцагч бүрийн ахиц дэвшлийг нэн тэргүүнд тавьж, хамтдаа хөгжинө.
+    </p>
+    <div class="mt-8 flex flex-wrap justify-center gap-4">
+      <a href="{% url 'main:about' %}" class="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded-lg no-underline hover:opacity-90 transition-opacity">
+        Бидний тухай
+      </a>
+      <a href="{% url 'main:teacher_list' %}" class="inline-flex items-center gap-2 px-6 py-2.5 border-2 border-secondary text-secondary text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded-lg no-underline hover:bg-secondary hover:text-white transition-colors">
+        Багш нар
+      </a>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

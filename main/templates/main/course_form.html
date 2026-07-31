@@ -46,9 +46,10 @@
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
                         <option value="">Сонгох</option>
-                        <option value="BEGINNER" {% if course and course.level == 'BEGINNER' %}selected{% endif %}>Анхан</option>
+                        <option value="BEGINNER_1" {% if course and course.level == 'BEGINNER_1' %}selected{% endif %}>Анхан 1</option>
+                        <option value="BEGINNER_2" {% if course and course.level == 'BEGINNER_2' %}selected{% endif %}>Анхан 2</option>
                         <option value="INTERMEDIATE" {% if course and course.level == 'INTERMEDIATE' %}selected{% endif %}>Дунд</option>
-                        <option value="ADVANCED" {% if course and course.level == 'ADVANCED' %}selected{% endif %}>Дээд</option>
+                        <option value="ADVANCED" {% if course and course.level == 'ADVANCED' %}selected{% endif %}>Ахисан</option>
                     </select>
                 </div>
 
@@ -65,7 +66,7 @@
                         <option value="">Сонгох</option>
                         {% for teacher in teachers %}
                         <option value="{{ teacher.id }}" {% if course and course.teacher and course.teacher.id == teacher.id %}selected{% endif %}>
-                            {{ teacher.mongolian_name|default:teacher.user.username }} - {{ teacher.get_role_display }}
+                            {{ teacher.full_name|default:teacher.user.username }} - {{ teacher.get_role_display }}
                         </option>
                         {% endfor %}
                     </select>

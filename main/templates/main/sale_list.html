@@ -6,6 +6,7 @@
 {% block content %}
 <div class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4">
+
         <!-- Буцах товч -->
         <div class="mb-4">
             <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
@@ -15,100 +16,276 @@
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-3xl font-bold text-secondary">Борлуулалтын жагсаалт</h2>
-                <a href="/admin/main/sale/add/" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
-                    + Шинэ борлуулалт
-                </a>
+                <div class="flex gap-2">
+                    <a href="{% url 'main:sale_create' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm">
+                        <i class="fas fa-plus"></i> Нэг бараа
+                    </a>
+                    <a href="{% url 'main:sale_create_multi' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
+                        <i class="fas fa-list"></i> Олон бараа
+                    </a>
+                </div>
             </div>
 
-            <!-- Статистик -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- Нийт статистик -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <div class="text-sm text-blue-600 mb-1">Нийт дүн</div>
-                    <div class="text-2xl font-bold text-blue-700">{{ total_amount|floatformat:0 }}₮</div>
+                    <div class="text-xs text-blue-500 uppercase mb-1 font-medium">Нийт борлуулалт</div>
+                    <div class="text-2xl font-bold text-blue-700">{{ total_count }}</div>
+                    <div class="text-xs text-blue-400 mt-1">Шүүлтүүрийн дүн</div>
                 </div>
                 <div class="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <div class="text-sm text-green-600 mb-1">Төлсөн</div>
-                    <div class="text-2xl font-bold text-green-700">{{ total_paid|floatformat:0 }}₮</div>
+                    <div class="text-xs text-green-500 uppercase mb-1 font-medium">Нийт дүн</div>
+                    <div class="text-2xl font-bold text-green-700">{{ total_amount|floatformat:0 }}₮</div>
+                    <div class="text-xs text-green-400 mt-1">Хуудас: {{ page_amount|floatformat:0 }}₮</div>
                 </div>
-                <div class="bg-red-50 p-4 rounded-lg border border-red-200">
-                    <div class="text-sm text-red-600 mb-1">Авлага</div>
-                    <div class="text-2xl font-bold text-red-700">{{ total_remaining|floatformat:0 }}₮</div>
+                <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                    <div class="text-xs text-emerald-500 uppercase mb-1 font-medium">Банктай холбогдсон</div>
+                    <div class="text-2xl font-bold text-emerald-700">{{ linked_count }}</div>
+                    <div class="text-xs text-emerald-400 mt-1">{{ total_count }} дотроос</div>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <div class="text-xs text-yellow-500 uppercase mb-1 font-medium">Холбоогүй</div>
+                    <div class="text-2xl font-bold text-yellow-700">{{ unlinked_count }}</div>
+                    <div class="text-xs text-yellow-400 mt-1">холбох шаардлагатай</div>
                 </div>
             </div>
 
             <!-- Шүүлтүүр -->
-            <form method="get" class="flex gap-4 mb-6">
-                <select name="status" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
+            <form method="get" class="grid grid-cols-2 md:grid-cols-9 gap-3 items-end">
+                <input type="text" name="customer" value="{{ request.GET.customer }}"
+                       placeholder="Харилцагч хайх"
+                       class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+
+                <input type="text" name="salesperson" value="{{ selected_salesperson }}"
+                       placeholder="Хүлээн авсан хүн"
+                       class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+
+                <input type="date" name="date_from" value="{{ request.GET.date_from }}"
+                       class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+
+                <input type="date" name="date_to" value="{{ request.GET.date_to }}"
+                       class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+
+                <select name="status" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
                     <option value="">Бүх төлөв</option>
-                    {% for value, label in status_choices %}
-                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
-                    Шүүх
-                </button>
+
+                <select name="payment_method" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+                    <option value="">Бүх төлбөрийн хэлбэр</option>
+                    <option value="CASH" {% if selected_payment_method == 'CASH' %}selected{% endif %}>Касс</option>
+                    <option value="BANK" {% if selected_payment_method == 'BANK' %}selected{% endif %}>Харилцах</option>
+                    <option value="CREDIT" {% if selected_payment_method == 'CREDIT' %}selected{% endif %}>Зээлээр</option>
+                    <option value="BOTH" {% if selected_payment_method == 'BOTH' %}selected{% endif %}>Касс + Харилцах</option>
+                </select>
+
+                <select name="bank_link" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+                    <option value="">Банкны холбоо: Бүгд</option>
+                    <option value="LINKED" {% if selected_bank_link == 'LINKED' %}selected{% endif %}>Холбогдсон</option>
+                    <option value="UNLINKED" {% if selected_bank_link == 'UNLINKED' %}selected{% endif %}>Холбоогүй</option>
+                </select>
+
+                <select name="per_page" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm">
+                    <option value="25"  {% if per_page == 25  %}selected{% endif %}>25 / хуудас</option>
+                    <option value="50"  {% if per_page == 50  %}selected{% endif %}>50 / хуудас</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100 / хуудас</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200 / хуудас</option>
+                </select>
+
+                <div class="flex gap-2">
+                    <button type="submit"
+                            class="flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 text-sm">
+                        <i class="fas fa-filter mr-1"></i> Шүүх
+                    </button>
+                    <a href="{% url 'main:sale_list' %}"
+                       class="bg-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-400 text-sm flex items-center"
+                       title="Шүүлтүүр цэвэрлэх">
+                        <i class="fas fa-redo"></i>
+                    </a>
+                </div>
             </form>
+
+            <!-- Хурдан шүүлтүүр товчнууд -->
+            <div class="flex flex-wrap gap-2 mt-3">
+                <span class="text-xs text-gray-500 self-center">Хурдан шүүлт:</span>
+                <a href="{% url 'main:sale_list' %}?payment_method=BANK&bank_link=UNLINKED"
+                   class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+                          {% if selected_payment_method == 'BANK' and selected_bank_link == 'UNLINKED' %}bg-orange-500 text-white border-orange-500{% else %}bg-white text-orange-600 border-orange-400 hover:bg-orange-50{% endif %}">
+                    <i class="fas fa-unlink mr-1"></i>Харилцах · Холбоогүй
+                </a>
+                <a href="{% url 'main:sale_list' %}?payment_method=BANK&bank_link=LINKED"
+                   class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+                          {% if selected_payment_method == 'BANK' and selected_bank_link == 'LINKED' %}bg-green-500 text-white border-green-500{% else %}bg-white text-green-600 border-green-400 hover:bg-green-50{% endif %}">
+                    <i class="fas fa-link mr-1"></i>Харилцах · Холбогдсон
+                </a>
+                <a href="{% url 'main:sale_list' %}?bank_link=UNLINKED"
+                   class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+                          {% if not selected_payment_method and selected_bank_link == 'UNLINKED' %}bg-yellow-500 text-white border-yellow-500{% else %}bg-white text-yellow-600 border-yellow-400 hover:bg-yellow-50{% endif %}">
+                    <i class="fas fa-exclamation-circle mr-1"></i>Бүх холбоогүй
+                </a>
+            </div>
         </div>
 
-        <!-- Борлуулалтын жагсаалт -->
+        <!-- Хуудасны мэдээлэл -->
+        <div class="flex justify-between items-center mb-3 px-1">
+            <div class="text-sm text-gray-600">
+                <span class="font-semibold text-secondary">{{ paginator.count }}</span> борлуулалтын
+                <span class="font-semibold text-secondary">{{ page_obj.number }}</span> / {{ paginator.num_pages }} хуудас
+                &nbsp;·&nbsp;
+                Хуудасны дүн: <span class="font-semibold text-green-600">{{ page_amount|floatformat:0 }}₮</span>
+            </div>
+            <div class="text-xs text-gray-400">
+                {{ page_obj.start_index }}–{{ page_obj.end_index }} / {{ paginator.count }}
+            </div>
+        </div>
+
+        <!-- Жагсаалт -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="bg-gray-50 border-b">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дугаар</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Огноо</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Үйлчлүүлэгч</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Төлөв</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Харилцагч</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Хүлээн авсан хүн</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Барааны тоо</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Нийт дүн</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Төлсөн</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Авлага</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Төлбөрийн хэлбэр</th>
+
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Банкны холбоо</th>
                             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        {% for sale in sales %}
+                        {% for sale in page_obj %}
                         <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium">{{ sale.id }}</td>
-                            <td class="px-4 py-3 text-sm">{{ sale.sale_date|date:"Y-m-d" }}</td>
+                            <td class="px-4 py-3 text-sm font-mono font-medium text-primary">{{ sale.sale_number }}</td>
+                            <td class="px-4 py-3 text-sm">{{ sale.sale_date }}</td>
+                            <td class="px-4 py-3 text-sm font-medium">{{ sale.customer.name|default:"Бэлэн" }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ sale.salesperson_name|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm text-center">
+                                <span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                                    {{ sale.items.count }} бараа
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-right font-bold text-green-600">{{ sale.total_amount|floatformat:0 }}₮</td>
+                            <td class="px-4 py-3 text-sm text-right">
+                                {% if sale.paid_amount > 0 %}
+                                <span class="text-green-600 font-semibold">{{ sale.paid_amount|floatformat:0 }}₮</span>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
                             <td class="px-4 py-3 text-sm">
-                                {% if sale.customer %}
-                                {{ sale.customer.name }}
+                                {% if sale.expected_payment_method %}
+                                    {% if "Касс" in sale.expected_payment_method and "Харилцах" in sale.expected_payment_method %}
+                                    <span class="inline-block bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs">Хоёулаа</span>
+                                    {% elif "Харилцах" in sale.expected_payment_method %}
+                                    <span class="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Харилцах</span>
+                                    {% elif "Касс" in sale.expected_payment_method %}
+                                    <span class="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">Касс</span>
+                                    {% else %}
+                                    <span class="text-gray-400 text-xs">{{ sale.expected_payment_method }}</span>
+                                    {% endif %}
                                 {% else %}
-                                <span class="text-gray-400">Бэлэн үйлчлүүлэгч</span>
+                                <span class="text-gray-300">-</span>
                                 {% endif %}
                             </td>
-                            <td class="px-4 py-3">
-                                {% if sale.status == 'PENDING' %}
-                                <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                                    {{ sale.get_status_display }}
-                                </span>
-                                {% elif sale.status == 'PARTIAL' %}
-                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                                    {{ sale.get_status_display }}
-                                </span>
-                                {% else %}
-                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">
-                                    {{ sale.get_status_display }}
-                                </span>
-                                {% endif %}
-                            </td>
-                            <td class="px-4 py-3 text-sm text-right font-bold">{{ sale.total_amount|floatformat:0 }}₮</td>
-                            <td class="px-4 py-3 text-sm text-right text-green-600">{{ sale.paid_amount|floatformat:0 }}₮</td>
-                            <td class="px-4 py-3 text-sm text-right text-red-600">{{ sale.remaining_amount|floatformat:0 }}₮</td>
+
                             <td class="px-4 py-3 text-center">
-                                <a href="/admin/main/sale/{{ sale.id }}/change/" 
-                                   class="text-primary hover:underline text-sm">
-                                    Засах
-                                </a>
+                                {% with sale.banktransaction_set.all as txs %}
+                                {% with sale.payment_allocations.all as allocs %}
+                                {% if txs or allocs %}
+                                <details class="text-left">
+                                    <summary class="inline-block cursor-pointer bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-semibold hover:bg-emerald-200">
+                                        {{ txs.count|add:allocs.count }} гүйлгээ
+                                    </summary>
+                                    <div class="mt-2 space-y-2 min-w-[230px]">
+                                        {% for alloc in allocs %}
+                                        <form method="post" action="{% url 'main:sale_link_bank' sale.id %}" class="flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="transaction_id" value="{{ alloc.transaction.id|stringformat:'d' }}">
+                                            <input type="hidden" name="action" value="unlink">
+                                            <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                                            <input type="hidden" name="redirect_to_return" value="1">
+                                            <span class="text-xs text-indigo-700 truncate" title="{{ alloc.transaction.description }}">
+                                                #{{ alloc.transaction.id }} · {{ alloc.amount|floatformat:0 }}₮
+                                            </span>
+                                            <button type="submit"
+                                                    class="text-red-600 hover:text-red-700 text-xs border border-red-200 rounded px-2 py-0.5 hover:bg-red-50"
+                                                    onclick="return confirm('Энэ гүйлгээний холбоосыг цуцлах уу?')">
+                                                Таслах
+                                            </button>
+                                        </form>
+                                        {% endfor %}
+
+                                        {% for tx in txs %}
+                                        <form method="post" action="{% url 'main:sale_link_bank' sale.id %}" class="flex items-center justify-between gap-2 bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="transaction_id" value="{{ tx.id|stringformat:'d' }}">
+                                            <input type="hidden" name="action" value="unlink">
+                                            <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                                            <input type="hidden" name="redirect_to_return" value="1">
+                                            <span class="text-xs text-gray-600 truncate" title="{{ tx.description }}">
+                                                #{{ tx.id }}
+                                                {% if tx.income_amount > 0 %}
+                                                · {{ tx.income_amount|floatformat:0 }}₮
+                                                {% endif %}
+                                            </span>
+                                            <button type="submit"
+                                                    class="text-red-600 hover:text-red-700 text-xs border border-red-200 rounded px-2 py-0.5 hover:bg-red-50"
+                                                    onclick="return confirm('Энэ гүйлгээний холбоосыг цуцлах уу?')">
+                                                Таслах
+                                            </button>
+                                        </form>
+                                        {% endfor %}
+                                    </div>
+                                </details>
+                                {% else %}
+                                <span class="inline-block bg-yellow-50 text-yellow-600 border border-yellow-200 px-2 py-1 rounded text-xs">
+                                    Холбоогүй
+                                </span>
+                                {% endif %}
+                                {% endwith %}
+                                {% endwith %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    <a href="{% url 'main:sale_detail' sale.id %}?return_to={{ request.get_full_path|urlencode }}"
+                                       class="text-primary hover:text-opacity-70 font-semibold text-sm"
+                                       title="Дэлгэрэнгүй / банктай холбох">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{% url 'main:sale_finance_edit' sale.id %}"
+                                       class="text-blue-500 hover:text-blue-700 font-semibold text-sm"
+                                       title="Засах">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'main:sale_finance_delete' sale.id %}" class="inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                                        <button type="submit"
+                                                class="text-red-600 hover:text-red-800 font-semibold text-sm"
+                                                title="Устгах"
+                                                onclick="return confirm('"{{ sale.sale_number }}" борлуулалтыг устгах уу? Энэ үйлдлийг буцаах боломжгүй.')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                            <td colspan="11" class="px-4 py-12 text-center text-gray-500">
+                                <i class="fas fa-box-open text-4xl text-gray-300 mb-3 block"></i>
                                 <p class="mb-4">Борлуулалт олдсонгүй</p>
-                                <a href="/admin/main/sale/add/" class="inline-block bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
-                                    Шинэ борлуулалт үүсгэх
+                                <a href="{% url 'main:sale_create' %}"
+                                   class="inline-block bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">
+                                    <i class="fas fa-plus mr-2"></i>Шинэ борлуулалт үүсгэх
                                 </a>
                             </td>
                         </tr>
@@ -118,15 +295,59 @@
             </div>
         </div>
 
-        <!-- Тайлбар -->
-        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 class="font-bold text-blue-800 mb-2">💡 Санамж</h3>
-            <ul class="text-sm text-blue-700 space-y-1">
-                <li>• Борлуулалт үүсгэхдээ барааны тоо ширхэг автоматаар хорогдоно</li>
-                <li>• Төлбөр авахдаа дансны үлдэгдэл шинэчлэгдэнэ</li>
-                <li>• Авлага хэмжээ автоматаар тооцоологдоно</li>
-            </ul>
+        <!-- Хуудаслалт -->
+        {% if paginator.num_pages > 1 %}
+        <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="text-sm text-gray-500">
+                Нийт <span class="font-semibold text-secondary">{{ paginator.count }}</span> борлуулалтаас
+                <span class="font-semibold text-secondary">{{ page_obj.start_index }}–{{ page_obj.end_index }}</span> харагдаж байна
+            </div>
+            <nav class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?{{ filter_params }}&page=1"
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                   title="Эхний хуудас"><i class="fas fa-angle-double-left"></i></a>
+                <a href="?{{ filter_params }}&page={{ page_obj.previous_page_number }}"
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-angle-left"></i></a>
+                {% endif %}
+
+                {% for num in paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <span class="px-3 py-2 bg-primary text-white rounded-lg text-sm font-semibold">{{ num }}</span>
+                    {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                    <a href="?{{ filter_params }}&page={{ num }}"
+                       class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">{{ num }}</a>
+                    {% elif num == 1 or num == paginator.num_pages %}
+                    <a href="?{{ filter_params }}&page={{ num }}"
+                       class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">{{ num }}</a>
+                    {% elif num == page_obj.number|add:"-4" or num == page_obj.number|add:"4" %}
+                    <span class="px-2 py-2 text-gray-400 text-sm">…</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                <a href="?{{ filter_params }}&page={{ page_obj.next_page_number }}"
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-angle-right"></i></a>
+                <a href="?{{ filter_params }}&page={{ paginator.num_pages }}"
+                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                   title="Сүүлийн хуудас"><i class="fas fa-angle-double-right"></i></a>
+                {% endif %}
+            </nav>
         </div>
+        {% endif %}
+
+        <!-- Санамж -->
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+            <strong>Банктай холбох аргачлал:</strong>
+            Борлуулалтын мөр дээр
+            <i class="fas fa-eye"></i>
+            товчийг дарж дэлгэрэнгүй хуудас руу очоод,
+            "Холбох боломжтой гүйлгээнүүд" хэсгээс холбогдох банкны баримтыг сонгоно.
+            Нэг борлуулалт олон гүйлгээтэй холбогдож болно (касс + харилцах).
+        </div>
+
     </div>
 </div>
 {% endblock %}

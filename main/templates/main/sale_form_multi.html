@@ -1,0 +1,780 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Борлуулалт бүртгэх - Готопа{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-secondary">Борлуулалт бүртгэх (Олон бараа)</h1>
+            <a href="{% url 'main:stock_movement_list' %}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                ← Буцах
+            </a>
+        </div>
+
+        <form method="POST" id="saleForm" class="bg-white shadow-md rounded-lg p-6" onsubmit="return validateSaleForm()">
+            {% csrf_token %}
+            
+            <!-- Ерөнхий мэдээлэл -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 pb-6 border-b">
+                <!-- Огноо -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Огноо <span class="text-red-500">*</span>
+                    </label>
+                    <input type="date" name="transaction_date" required value="{% now 'Y-m-d' %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Төлбөрийн хэлбэр -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Төлбөрийн хэлбэр <span class="text-red-500">*</span>
+                    </label>
+                    <select name="payment_method" id="paymentMethod" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for code, label in payment_methods %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Касс -->
+                <div id="cashAccountField" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Касс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="bank_account" id="cashAccountSelect"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in cash_accounts %}
+                            <option value="{{ account.id|stringformat:'d' }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Банк -->
+                <div id="bankAccountField" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Банкны данс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="bank_account" id="bankAccountSelect"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id|stringformat:'d' }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Банкны гүйлгээ холбох хэсэг -->
+            <div id="bankTransactionField" style="display: none;" class="mb-6 pb-6 border-b">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-link"></i> Банкны орлогын гүйлгээтэй холбох
+                    <span class="text-gray-500 text-xs">(заавал биш)</span>
+                </label>
+                <select name="bank_transaction" id="bankTransactionSelect"
+                        onchange="checkTxnMatch()"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">-- Гүйлгээ сонгоно уу --</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">
+                    <i class="fas fa-info-circle"></i> Банк сонгосон тохиолдолд тухайн банкны холбогдоогүй орлогын гүйлгээнүүд харагдана
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pb-6 border-b">
+                <!-- Үйлчлүүлэгч -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Үйлчлүүлэгч <span id="customerRequired" class="text-red-500" style="display:none;">*</span>
+                    </label>
+                    <!-- Оруулах горим сонгох -->
+                    <div class="flex gap-2 mb-2">
+                        <button type="button" id="customerDropdownBtn" onclick="switchCustomerMode('dropdown')"
+                                class="px-3 py-1 text-xs rounded border bg-primary text-white border-primary">
+                            Жагсаалтаас сонгох
+                        </button>
+                        <button type="button" id="customerManualBtn" onclick="switchCustomerMode('manual')"
+                                class="px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:border-primary hover:text-primary">
+                            Гараас бичих
+                        </button>
+                    </div>
+                    <!-- Dropdown горим -->
+                    <div id="customerDropdownWrapper">
+                        <select name="counterparty" id="customerSelect"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">-- Сонгоно уу --</option>
+                            {% for customer in customers %}
+                                <option value="{{ customer.id|stringformat:'d' }}">{{ customer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Гараас бичих горим -->
+                    <div id="customerManualWrapper" style="display:none;">
+                        <input type="text" name="customer_name_manual" id="customerManualInput"
+                               placeholder="Үйлчлүүлэгчийн нэр бичнэ үү"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+                </div>
+
+                <!-- Борлуулагч -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Борлуулагч
+                    </label>
+                    <select name="salesperson"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for manager in manager_users %}
+                            <option value="{{ manager.user.id|stringformat:'d' }}">{{ manager.full_name }} ({{ manager.get_role_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Бараа нэмэх хэсэг -->
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Борлуулах бараанууд</h3>
+                    <button type="button" onclick="addProductRow()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                        + Бараа нэмэх
+                    </button>
+                </div>
+
+                <!-- Барааны хүснэгт -->
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse border">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="border px-4 py-2 text-left">№</th>
+                                <th class="border px-4 py-2 text-left">Бараа</th>
+                                <th class="border px-4 py-2 text-center">Тоо ширхэг</th>
+                                <th class="border px-4 py-2 text-right">Нэгж үнэ</th>
+                                <th class="border px-4 py-2 text-right">Дүн</th>
+                                <th class="border px-4 py-2 text-center">Үйлдэл</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody">
+                            <!-- Барааны мөрүүд энд нэмэгдэнэ -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="text-sm text-gray-500 mt-2">
+                    <i class="fas fa-info-circle"></i> "Бараа нэмэх" товч дарж олон бараа нэмнэ үү
+                </p>
+            </div>
+
+            <!-- Нийт дүн -->
+            <div class="mb-6 p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                <div class="flex justify-between items-center text-lg font-bold">
+                    <span>НИЙТ ДҮН:</span>
+                    <span id="grandTotal" class="text-primary text-2xl">0₮</span>
+                </div>
+            </div>
+
+            <!-- Нэмэлт хуваарилалт -->
+            <div id="saleSplitSection" class="mb-6">
+                <div class="border border-dashed border-indigo-300 rounded-lg p-4 bg-indigo-50">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="font-semibold text-sm text-indigo-800">
+                            ➕ Нэмэлт хуваарилалт
+                            <span class="text-xs font-normal text-indigo-600 ml-1">(заавал биш)</span>
+                        </h4>
+                        <button type="button" onclick="addSaleSplitRow()"
+                                class="px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                            + Мөр нэмэх
+                        </button>
+                    </div>
+                    <p class="text-xs text-indigo-700 mb-3">
+                        Банкны гүйлгээний дүн борлуулалтаас их байвал илүү дүнг аль данс руу хуваарилахыг энд зааж өгнө.<br>
+                        <strong>Жишээ:</strong> 49,000₮ орж ирэхэд 25,000₮ борлуулалт, 24,000₮ хандивын данс гэж урьдчилан тохируулна.
+                    </p>
+                    <div id="saleSplitRows"></div>
+                    <div class="mt-2 flex justify-between text-xs text-indigo-700">
+                        <span>Нэмэлт нийт дүн:</span>
+                        <span id="saleSplitTotal" class="font-bold">0₮</span>
+                    </div>
+                    <!-- Банкны гүйлгээний дүнтэй харьцуулах -->  
+                    <div id="txnMatchBox" class="mt-3 hidden text-xs rounded px-3 py-2"></div>
+                </div>
+            </div>
+
+            <!-- Баримтын дугаар ба тэмдэглэл -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Баримтын дугаар</label>
+                    <input type="text" name="reference_number"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                           placeholder="Автоматаар үүснэ">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Тэмдэглэл</label>
+                    <textarea name="notes" rows="2"
+                              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                </div>
+            </div>
+
+            <!-- Товчнууд -->
+            <div class="flex gap-4">
+                <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-semibold">
+                    ✓ Хадгалах
+                </button>
+                <a href="{% url 'main:stock_movement_list' %}" class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
+                    Цуцлах
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+console.log('=== Script starting ===');
+
+// Барааны өгөгдөл (JSON-аар дамжуулсан)
+var products = {{ products_json|safe }};
+
+// Банкны гүйлгээний өгөгдөл
+var bankTransactions = {{ transactions_json|safe }};
+
+console.log('Products loaded:', products.length);
+console.log('Bank transactions loaded:', bankTransactions.length);
+
+var rowCounter = 0;
+var saleSplitIndex = 0;
+
+// Нэмэлт хуваарилалтын all_accounts JSON
+var allAccounts = [{% for acct in all_accounts %}{"id":"{{ acct.id }}","text":"{{ acct.code }} - {{ acct.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+function buildAccountOptions(selectedId) {
+    return allAccounts.map(a =>
+        `<option value="${a.id}" ${a.id == selectedId ? 'selected' : ''}>${a.text}</option>`
+    ).join('');
+}
+
+function addSaleSplitRow(selectedId, amount, desc) {
+    var container = document.getElementById('saleSplitRows');
+    var div = document.createElement('div');
+    var idx = saleSplitIndex;
+    var selectedText = '';
+    if (selectedId) {
+        var found = allAccounts.find(a => a.id == selectedId);
+        if (found) selectedText = found.text;
+    }
+    div.className = 'sale-split-row grid grid-cols-12 gap-2 mb-2 items-start';
+    div.innerHTML = `
+        <div class="col-span-5 relative">
+            <input type="hidden" name="sale_splits[${idx}][account]" id="splitAccVal_${idx}" value="${selectedId || ''}">
+            <input type="text" id="splitAccSearch_${idx}" placeholder="Данс хайх..." autocomplete="off"
+                   value="${selectedText}"
+                   oninput="filterSplitAccounts(${idx})"
+                   onfocus="showSplitDropdown(${idx})"
+                   onblur="hideSplitDropdown(${idx})"
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+            <div id="splitAccDrop_${idx}"
+                 class="absolute z-50 left-0 right-0 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto hidden text-xs">
+            </div>
+        </div>
+        <div class="col-span-3">
+            <input type="number" name="sale_splits[${idx}][amount]"
+                   value="${amount || ''}" min="0" step="1" placeholder="Дүн ₮"
+                   oninput="recalcSaleSplitTotal()"
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div class="col-span-3">
+            <input type="text" name="sale_splits[${idx}][description]"
+                   value="${desc || ''}" placeholder="Тайлбар"
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div class="col-span-1 flex items-center">
+            <button type="button" onclick="this.closest('.sale-split-row').remove(); recalcSaleSplitTotal()"
+                    class="text-red-500 hover:text-red-700 text-lg leading-none">×</button>
+        </div>`;
+    container.appendChild(div);
+    saleSplitIndex++;
+}
+
+function showSplitDropdown(idx) {
+    renderSplitDropdown(idx, document.getElementById('splitAccSearch_' + idx).value);
+}
+
+function filterSplitAccounts(idx) {
+    var q = document.getElementById('splitAccSearch_' + idx).value;
+    // Хайлт хоосон болох үед утгыг арилгана
+    if (!q) document.getElementById('splitAccVal_' + idx).value = '';
+    renderSplitDropdown(idx, q);
+}
+
+function renderSplitDropdown(idx, q) {
+    var drop = document.getElementById('splitAccDrop_' + idx);
+    if (!drop) return;
+    var lower = q.toLowerCase();
+    var filtered = allAccounts.filter(a => a.text.toLowerCase().includes(lower));
+    if (!filtered.length) {
+        drop.classList.add('hidden');
+        return;
+    }
+    drop.innerHTML = '';
+    filtered.slice(0, 50).forEach(function(a) {
+        var item = document.createElement('div');
+        item.className = 'px-2 py-1.5 hover:bg-indigo-50 cursor-pointer';
+        item.textContent = a.text;
+        item.dataset.id = a.id;
+        item.dataset.text = a.text;
+        item.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            selectSplitAccount(idx, a.id, a.text);
+        });
+        drop.appendChild(item);
+    });
+    drop.classList.remove('hidden');
+}
+
+function selectSplitAccount(idx, id, text) {
+    document.getElementById('splitAccVal_' + idx).value = id;
+    document.getElementById('splitAccSearch_' + idx).value = text;
+    document.getElementById('splitAccDrop_' + idx).classList.add('hidden');
+}
+
+function hideSplitDropdown(idx) {
+    setTimeout(function() {
+        var drop = document.getElementById('splitAccDrop_' + idx);
+        if (drop) drop.classList.add('hidden');
+    }, 150);
+}
+
+function recalcSaleSplitTotal() {
+    var total = 0;
+    document.querySelectorAll('.sale-split-row input[type="number"]').forEach(function(inp) {
+        total += parseFloat(inp.value) || 0;
+    });
+    var el = document.getElementById('saleSplitTotal');
+    if (el) el.textContent = total.toLocaleString() + '₮';
+    checkTxnMatch();
+}
+
+function getSaleTotal() {
+    var total = 0;
+    for (var i = 0; i < productRows.length; i++) {
+        var rowId = productRows[i];
+        var q = parseFloat((document.getElementById('quantity_' + rowId) || {}).value) || 0;
+        var p = parseFloat((document.getElementById('price_' + rowId) || {}).value) || 0;
+        total += q * p;
+    }
+    return total;
+}
+
+function getSplitTotal() {
+    var total = 0;
+    document.querySelectorAll('.sale-split-row input[type="number"]').forEach(function(inp) {
+        total += parseFloat(inp.value) || 0;
+    });
+    return total;
+}
+
+function checkTxnMatch() {
+    var box = document.getElementById('txnMatchBox');
+    if (!box) return;
+    var sel = document.getElementById('bankTransactionSelect');
+    if (!sel || !sel.value) { box.classList.add('hidden'); return; }
+    var txnId = parseInt(sel.value);
+    var txn = bankTransactions.find(function(t) { return t.id === txnId; });
+    if (!txn) { box.classList.add('hidden'); return; }
+    var txnAmt = txn.income_amount;
+    var saleTotal = getSaleTotal();
+    var splitTotal = getSplitTotal();
+    var combined = saleTotal + splitTotal;
+    var diff = txnAmt - combined;
+    box.classList.remove('hidden');
+    if (Math.abs(diff) < 1) {
+        box.className = 'mt-3 text-xs rounded px-3 py-2 bg-green-100 text-green-800 border border-green-300';
+        box.innerHTML = '✅ Нийт дүн гүйлгээний дүнтэй тэнцэж байна — <strong>' + txnAmt.toLocaleString() + '₮</strong>';
+    } else if (diff > 0) {
+        box.className = 'mt-3 text-xs rounded px-3 py-2 bg-yellow-100 text-yellow-800 border border-yellow-300';
+        box.innerHTML = '⚠️ Гүйлгээний дүн: <strong>' + txnAmt.toLocaleString() + '₮</strong> — Борлуулалт+нэмэлт: <strong>' + combined.toLocaleString() + '₮</strong> — Дутуу: <strong>' + diff.toLocaleString() + '₮</strong>';
+    } else {
+        box.className = 'mt-3 text-xs rounded px-3 py-2 bg-red-100 text-red-800 border border-red-300';
+        box.innerHTML = '❌ Гүйлгээний дүн: <strong>' + txnAmt.toLocaleString() + '₮</strong> — Борлуулалт+нэмэлт: <strong>' + combined.toLocaleString() + '₮</strong> — Илүү: <strong>' + Math.abs(diff).toLocaleString() + '₮</strong>';
+    }
+}
+
+function validateSaleForm() {
+    var sel = document.getElementById('bankTransactionSelect');
+    if (!sel || !sel.value) return true;  // гүйлгээ сонгоогүй бол шалгахгүй
+    var txnId = parseInt(sel.value);
+    var txn = bankTransactions.find(function(t) { return t.id === txnId; });
+    if (!txn) return true;
+    var combined = getSaleTotal() + getSplitTotal();
+    var diff = txn.income_amount - combined;
+    if (Math.abs(diff) >= 1) {
+        return confirm(
+            'Анхааруулга: Дүн тэнцэхгүй байна!\n\n' +
+            'Гүйлгээний дүн: ' + txn.income_amount.toLocaleString() + '₮\n' +
+            'Борлуулалт + нэмэлт: ' + combined.toLocaleString() + '₮\n' +
+            'Зөрүү: ' + Math.abs(diff).toLocaleString() + '₮\n\n' +
+            'Гэсэн хэдий ч үргэлжлүүлэх үү?'
+        );
+    }
+    return true;
+}
+var productRows = [];
+var customerMode = 'dropdown';
+
+// Үйлчлүүлэгч оруулах горим солих
+function switchCustomerMode(mode) {
+    customerMode = mode;
+    var dropdownWrapper = document.getElementById('customerDropdownWrapper');
+    var manualWrapper = document.getElementById('customerManualWrapper');
+    var dropdownBtn = document.getElementById('customerDropdownBtn');
+    var manualBtn = document.getElementById('customerManualBtn');
+    var customerSelect = document.getElementById('customerSelect');
+    var manualInput = document.getElementById('customerManualInput');
+    var paymentMethod = document.getElementById('paymentMethod');
+    var isCreditMode = paymentMethod && paymentMethod.value === 'CREDIT';
+
+    if (mode === 'dropdown') {
+        dropdownWrapper.style.display = 'block';
+        manualWrapper.style.display = 'none';
+        dropdownBtn.className = 'px-3 py-1 text-xs rounded border bg-primary text-white border-primary';
+        manualBtn.className = 'px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:border-primary hover:text-primary';
+        if (manualInput) { manualInput.value = ''; manualInput.required = false; }
+        if (customerSelect) customerSelect.required = isCreditMode;
+    } else {
+        dropdownWrapper.style.display = 'none';
+        manualWrapper.style.display = 'block';
+        dropdownBtn.className = 'px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:border-primary hover:text-primary';
+        manualBtn.className = 'px-3 py-1 text-xs rounded border bg-primary text-white border-primary';
+        if (customerSelect) { customerSelect.value = ''; customerSelect.required = false; }
+        if (manualInput) manualInput.required = isCreditMode;
+    }
+}
+
+// Бараа нэмэх
+function addProductRow() {
+    console.log('>>> addProductRow called');
+    rowCounter++;
+    
+    var tbody = document.getElementById('productTableBody');
+    if (!tbody) {
+        console.error('ERROR: productTableBody not found!');
+        return;
+    }
+    
+    var row = document.createElement('tr');
+    row.id = 'row_' + rowCounter;
+    row.className = 'hover:bg-gray-50';
+    
+    // Барааны сонголт
+    var selectHtml = '<option value="">-- Сонгоно уу --</option>';
+    for (var i = 0; i < products.length; i++) {
+        var p = products[i];
+        selectHtml += '<option value="' + p.id + '" data-price="' + p.selling_price + '" data-stock="' + p.current_stock + '">';
+        selectHtml += p.name + ' (Үлдэгдэл: ' + p.current_stock + ')';
+        selectHtml += '</option>';
+    }
+    
+    row.innerHTML = 
+        '<td class="border px-4 py-2 text-center">' + rowCounter + '</td>' +
+        '<td class="border px-4 py-2">' +
+            '<select name="product_' + rowCounter + '" id="product_' + rowCounter + '" required class="w-full px-2 py-1 border rounded focus:ring-2 focus:ring-primary">' +
+                selectHtml +
+            '</select>' +
+        '</td>' +
+        '<td class="border px-4 py-2">' +
+            '<input type="number" name="quantity_' + rowCounter + '" id="quantity_' + rowCounter + '" required min="1" value="1" class="w-full px-2 py-1 border rounded text-center focus:ring-2 focus:ring-primary">' +
+            '<p id="stock_warning_' + rowCounter + '" class="text-xs text-red-500 mt-1" style="display:none;"></p>' +
+        '</td>' +
+        '<td class="border px-4 py-2">' +
+            '<input type="number" name="price_' + rowCounter + '" id="price_' + rowCounter + '" required min="0" step="0.01" class="w-full px-2 py-1 border rounded text-right focus:ring-2 focus:ring-primary">' +
+        '</td>' +
+        '<td class="border px-4 py-2 text-right font-bold" id="subtotal_' + rowCounter + '">0₮</td>' +
+        '<td class="border px-4 py-2 text-center">' +
+            '<button type="button" class="removeBtn text-red-600 hover:text-red-800" data-row="' + rowCounter + '">' +
+                '<i class="fas fa-trash"></i>' +
+            '</button>' +
+        '</td>';
+    
+    tbody.appendChild(row);
+    productRows.push(rowCounter);
+    
+    // Event listeners - closure алдаагаас сэргийлж rowId-г тусгай хувьсагчаар авна
+    var productSelect = document.getElementById('product_' + rowCounter);
+    var quantityInput = document.getElementById('quantity_' + rowCounter);
+    var priceInput = document.getElementById('price_' + rowCounter);
+    
+    (function(rowId) {
+        if (productSelect) {
+            productSelect.addEventListener('change', function() { updateRow(rowId, true); });
+        }
+        if (quantityInput) {
+            quantityInput.addEventListener('input', function() { updateRow(rowId, false); });
+        }
+        if (priceInput) {
+            priceInput.addEventListener('input', function() { updateRow(rowId, false); });
+        }
+    })(rowCounter);
+    
+    console.log('Row ' + rowCounter + ' added successfully');
+}
+
+// Мөр устгах
+function removeRow(rowId) {
+    console.log('>>> removeRow called for:', rowId);
+    var row = document.getElementById('row_' + rowId);
+    if (row) {
+        row.remove();
+        productRows = productRows.filter(function(id) { return id !== rowId; });
+        updateGrandTotal();
+        console.log('Row ' + rowId + ' removed');
+    }
+}
+
+// Мөр шинэчлэх
+// updatePrice=true: бараа сонгосон үед үнийг заавал шинэчлэх
+// updatePrice=false: тоо/үнэ өөрчлөгдсөн үед харьцангуй тооцоолол хийх
+function updateRow(rowId, updatePrice) {
+    var productSelect = document.getElementById('product_' + rowId);
+    var quantityInput = document.getElementById('quantity_' + rowId);
+    var priceInput = document.getElementById('price_' + rowId);
+    var subtotalCell = document.getElementById('subtotal_' + rowId);
+    var stockWarning = document.getElementById('stock_warning_' + rowId);
+    
+    if (!productSelect || !quantityInput || !priceInput || !subtotalCell) return;
+    
+    var selectedOption = productSelect.options[productSelect.selectedIndex];
+    
+    if (selectedOption && selectedOption.value) {
+        var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+        var stock = parseInt(selectedOption.getAttribute('data-stock')) || 0;
+        var quantity = parseInt(quantityInput.value) || 0;
+        
+        // Бараа сонгосон үед үнийг үргэлж шинэчлэх, тоо/үнэ өөрчлөгдсөн үед хэвээр үлдээнэ
+        if (updatePrice) {
+            priceInput.value = price.toFixed(2);
+        }
+        
+        // Дүн тооцоолох
+        var currentPrice = parseFloat(priceInput.value) || 0;
+        var subtotal = quantity * currentPrice;
+        subtotalCell.textContent = subtotal.toLocaleString('en-US') + '₮';
+        
+        // Үлдэгдэл шалгах
+        if (stockWarning) {
+            if (quantity > stock) {
+                stockWarning.textContent = '⚠ Үлдэгдэл хүрэлцэхгүй! Одоо: ' + stock;
+                stockWarning.style.display = 'block';
+            } else {
+                stockWarning.style.display = 'none';
+            }
+        }
+    }
+    
+    updateGrandTotal();
+}
+
+// Нийт дүн тооцоолох
+function updateGrandTotal() {
+    var total = 0;
+    
+    for (var i = 0; i < productRows.length; i++) {
+        var rowId = productRows[i];
+        var quantityInput = document.getElementById('quantity_' + rowId);
+        var priceInput = document.getElementById('price_' + rowId);
+        
+        if (quantityInput && priceInput) {
+            var quantity = parseFloat(quantityInput.value) || 0;
+            var price = parseFloat(priceInput.value) || 0;
+            total += quantity * price;
+        }
+    }
+    
+    var grandTotalElem = document.getElementById('grandTotal');
+    if (grandTotalElem) {
+        grandTotalElem.textContent = total.toLocaleString('en-US') + '₮';
+    }
+    checkTxnMatch();
+}
+
+// Төлбөрийн хэлбэр
+function initPaymentMethod() {
+    console.log('>>> initPaymentMethod starting...');
+    var paymentMethod = document.getElementById('paymentMethod');
+    var cashAccountField = document.getElementById('cashAccountField');
+    var cashAccountSelect = document.getElementById('cashAccountSelect');
+    var bankAccountField = document.getElementById('bankAccountField');
+    var bankAccountSelect = document.getElementById('bankAccountSelect');
+    var bankTransactionField = document.getElementById('bankTransactionField');
+    var bankTransactionSelect = document.getElementById('bankTransactionSelect');
+    var customerSelect = document.getElementById('customerSelect');
+    var customerRequired = document.getElementById('customerRequired');
+    
+    console.log('Elements found:', {
+        paymentMethod: !!paymentMethod,
+        cashAccountField: !!cashAccountField,
+        cashAccountSelect: !!cashAccountSelect,
+        bankAccountField: !!bankAccountField,
+        bankAccountSelect: !!bankAccountSelect,
+        bankTransactionField: !!bankTransactionField,
+        customerSelect: !!customerSelect,
+        customerRequired: !!customerRequired
+    });
+    
+    if (!paymentMethod) {
+        console.error('ERROR: paymentMethod not found!');
+        return;
+    }
+    
+    if (!cashAccountField || !bankAccountField) {
+        console.error('ERROR: Account fields not found!');
+        return;
+    }
+    
+    paymentMethod.addEventListener('change', function() {
+        var value = this.value;
+        console.log('Payment method changed to:', value);
+        
+        if (value === 'CASH') {
+            console.log('Showing cash account field...');
+            cashAccountField.style.display = 'block';
+            bankAccountField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (cashAccountSelect) cashAccountSelect.required = true;
+            if (bankAccountSelect) bankAccountSelect.required = false;
+            if (customerSelect) customerSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
+        } else if (value === 'BANK') {
+            console.log('Showing bank account field...');
+            cashAccountField.style.display = 'none';
+            bankAccountField.style.display = 'block';
+            if (bankTransactionField) bankTransactionField.style.display = 'block';
+            if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = true;
+            if (customerSelect) customerSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
+        } else if (value === 'BANK_PENDING') {
+            // Харилцахаар хожим - данс болон банкны гүйлгээ сонгохгүй
+            cashAccountField.style.display = 'none';
+            bankAccountField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = false;
+            if (customerSelect) customerSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
+            var splitSection = document.getElementById('saleSplitSection');
+        } else if (value === 'CREDIT') {
+            console.log('Hiding account fields, showing customer...');
+            cashAccountField.style.display = 'none';
+            bankAccountField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'inline';
+            var manualInput = document.getElementById('customerManualInput');
+            if (customerMode === 'manual') {
+                if (customerSelect) customerSelect.required = false;
+                if (manualInput) manualInput.required = true;
+            } else {
+                if (customerSelect) customerSelect.required = true;
+                if (manualInput) manualInput.required = false;
+            }
+        } else {
+            console.log('Hiding all optional fields...');
+            cashAccountField.style.display = 'none';
+            bankAccountField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = false;
+            if (customerSelect) customerSelect.required = false;
+            var manualInput = document.getElementById('customerManualInput');
+            if (manualInput) manualInput.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
+        }
+    });
+    
+    // Банкны данс сонгоход гүйлгээнүүдийг харуулах
+    if (bankAccountSelect && bankTransactionSelect) {
+        bankAccountSelect.addEventListener('change', function() {
+            var accountId = parseInt(this.value);
+            console.log('Bank account selected:', accountId);
+            
+            // Гүйлгээний сонголтыг цэвэрлэх
+            bankTransactionSelect.innerHTML = '<option value="">-- Гүйлгээ сонгоно уу --</option>';
+            
+            if (accountId) {
+                // Тухайн банкны гүйлгээнүүдийг filter хийж нэмэх
+                var filtered = bankTransactions.filter(function(t) {
+                    return t.bank_account_id === accountId;
+                });
+                
+                console.log('Filtered transactions:', filtered.length);
+                
+                filtered.forEach(function(t) {
+                    var option = document.createElement('option');
+                    option.value = t.id;
+                    option.textContent = t.transaction_date + ' - ' + t.description.substring(0, 50) + ' - ' + t.income_amount.toLocaleString('en-US') + '₮';
+                    if (t.counterparty_name) {
+                        option.textContent += ' (' + t.counterparty_name + ')';
+                    }
+                    bankTransactionSelect.appendChild(option);
+                });
+                
+                if (filtered.length === 0) {
+                    var option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '-- Холбогдоогүй гүйлгээ байхгүй --';
+                    option.disabled = true;
+                    bankTransactionSelect.appendChild(option);
+                }
+            }
+        });
+    }
+    
+    console.log('Payment method listener attached successfully');
+}
+
+// Event delegation for remove buttons
+function initRemoveButtons() {
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('removeBtn') || e.target.closest('.removeBtn')) {
+            var btn = e.target.classList.contains('removeBtn') ? e.target : e.target.closest('.removeBtn');
+            var rowId = parseInt(btn.getAttribute('data-row'));
+            if (rowId) {
+                removeRow(rowId);
+            }
+        }
+    });
+    console.log('Remove button delegation initialized');
+}
+
+// Бүх зүйлийг эхлүүлэх
+function initAll() {
+    console.log('=== Initializing all ===');
+    initPaymentMethod();
+    initRemoveButtons();
+    addProductRow(); // Анхны мөр нэмэх
+    console.log('=== Initialization complete ===');
+}
+
+// DOM ачаалагдсаны дараа ажиллуулах
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded via event');
+        initAll();
+    });
+} else {
+    console.log('DOM already loaded');
+    initAll();
+}
+</script>
+
+<style>
+@media print {
+    .no-print { display: none; }
+}
+</style>
+
+{% endblock %}
+

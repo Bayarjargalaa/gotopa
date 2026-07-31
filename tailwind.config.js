@@ -1,4 +1,4 @@
-/** @type {import('tailwindcss').Config} */
+﻿/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './main/templates/**/*.html',
@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: '#b5245b',  // Ягаан өнгө
+        primary: '#AB334C',  // Ягаан өнгө
         secondary: '#222631',
         light: '#f8f9fa',
       },

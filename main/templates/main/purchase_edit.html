@@ -1,0 +1,70 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Худалдан авалт засах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-2xl">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:purchase_list' %}" class="text-primary hover:underline">← Жагсаалт руу буцах</a>
+        </div>
+
+        <!-- Гарчиг -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-3xl font-bold text-secondary mb-6">Худалдан авалт засах</h2>
+
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Бараа (унших горимд) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Бараа</label>
+                    <div class="px-4 py-3 bg-gray-50 rounded-lg border border-gray-300">
+                        <strong>{{ movement.product.name }}</strong>
+                    </div>
+                </div>
+
+                <!-- Тоо ширхэг -->
+                <div>
+                    <label for="quantity" class="block text-sm font-medium text-gray-700 mb-2">Тоо ширхэг *</label>
+                    <input type="number" name="quantity" id="quantity" value="{{ movement.quantity }}" required min="1" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Нэгж үнэ -->
+                <div>
+                    <label for="price" class="block text-sm font-medium text-gray-700 mb-2">Нэгж үнэ *</label>
+                    <input type="number" name="price" id="price" value="{{ movement.price }}" required min="0" step="0.01" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Тэмдэглэл -->
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">Тэмдэглэл</label>
+                    <textarea name="notes" id="notes" rows="3" 
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">{{ movement.notes }}</textarea>
+                </div>
+
+                <!-- Анхааруулга -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p class="text-sm text-yellow-800">
+                        <strong>⚠️ Анхаар:</strong> Тоо ширхэг өөрчлөгдвөл бараа материалын үлдэгдэл автоматаар шинэчлэгдэнэ.
+                    </p>
+                </div>
+
+                <!-- Товчнууд -->
+                <div class="flex gap-4">
+                    <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-medium">
+                        💾 Хадгалах
+                    </button>
+                    <a href="{% url 'main:purchase_list' %}" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-medium">
+                        Цуцлах
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

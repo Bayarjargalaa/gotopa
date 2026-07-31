@@ -21,6 +21,29 @@ wheels/
 *.egg
 MANIFEST
 
+# Static файлууд болон хавтас
+static/
+/static/
+staticfiles/
+
+# Бүх төрлийн зургийн файлууд
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.webp
+*.ico
+*.bmp
+*.tiff
+*.raw
+*.heic
+
+*.xlsx
+check*
+fix*
+test*
+
 # Django
 *.log
 *.pot

@@ -1,5 +1,6 @@
 {% extends 'main/base.html' %}
 {% load static %}
+{% load l10n %}
 {% load content_tags %}
 
 {% block title %}{{ course.name }} - Ирцийн хуудас - Готопа{% endblock %}
@@ -11,8 +12,16 @@
         <div class="mb-6">
             <h1 class="text-3xl font-bold text-secondary mb-2">{{ course.name }} - Ирцийн хуудас</h1>
             <div class="flex items-center text-gray-600 space-x-4">
-                <span><i class="fas fa-chalkboard-teacher mr-2"></i>{{ course.teacher.mongolian_name }}</span>
+                <span>
+                    <i class="fas fa-chalkboard-teacher mr-2"></i>
+                    {% for teacher in selected_teachers %}
+                        {{ teacher.full_name }}{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        Багш сонгоогүй
+                    {% endfor %}
+                </span>
                 <span><i class="fas fa-users mr-2"></i>{{ enrollments|length }} сурагч</span>
+                <span><i class="fas fa-user-check mr-2"></i>{{ selected_teachers|length }} багшийн мөр</span>
             </div>
         </div>
 
@@ -27,7 +36,58 @@
         {% if enrollments %}
             <form method="POST">
                 {% csrf_token %}
-                
+                <div id="visibleDatesContainer">
+                    {% for month_key, dates in dates_by_month.items %}
+                        {% for date in dates %}
+                        <input type="hidden" name="visible_dates" value="{{ date|date:'Y-m-d' }}" data-visible-date="{{ date|date:'Y-m-d' }}">
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+
+                <!-- 7 хоногийн гаригийн загвар -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-secondary">7 хоногийн ирцийн гаригийн загвар</h2>
+                            <p class="text-sm text-gray-500 mt-1">Сонгосон гаригуудын өдөр бүр л ирцийн багана автоматаар харагдана.</p>
+                        </div>
+                        {% if has_weekday_template %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            Загвар хадгалагдсан
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mt-4">
+                        {% for day_value, day_label in weekday_options %}
+                        <label class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:border-primary cursor-pointer">
+                            <input type="checkbox"
+                                   name="weekday_pattern"
+                                   value="{{ day_value }}"
+                                   {% if day_value in selected_weekdays %}checked{% endif %}
+                                   class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">{{ day_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="flex flex-wrap gap-3 mt-4">
+                        <button type="submit"
+                                name="action"
+                                value="save_template"
+                                class="px-5 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition">
+                            <i class="fas fa-save mr-2"></i>Загвар хадгалах
+                        </button>
+                        <button type="submit"
+                                name="action"
+                                value="delete_template"
+                                onclick="return confirm('Ирцийн гаригийн загварыг устгах уу?');"
+                                class="px-5 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition">
+                            <i class="fas fa-trash-alt mr-2"></i>Загвар устгах
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Он/сар шүүлт -->
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
                     <div class="flex items-end gap-4 mb-4">
@@ -40,7 +100,7 @@
                                     class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                                 <option value="">-- Он сонгох --</option>
                                 {% for year in year_range %}
-                                <option value="{{ year }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>{{ year }}</option>
+                                <option value="{{ year|unlocalize }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>{{ year|unlocalize }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -101,8 +161,8 @@
                 </div>
 
                 <!-- Ирцийн хүснэгт -->
-                <div class="bg-white rounded-lg shadow overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200" id="attendanceTable">
+                <div class="bg-white rounded-lg shadow overflow-auto attendance-table-wrapper">
+                    <table class="min-w-full divide-y divide-gray-200 attendance-table" id="attendanceTable">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th rowspan="2" class="sticky left-0 bg-gray-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-300">
@@ -131,13 +191,40 @@
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
+                            {% for teacher in selected_teachers %}
+                            <tr class="teacher-row bg-amber-50 hover:bg-amber-100" data-row-type="teacher" data-person-id="{{ teacher.id }}">
+                                <td class="sticky left-0 bg-amber-50 px-6 py-4 whitespace-nowrap border-r border-amber-200 teacher-name-cell">
+                                    <div class="flex items-center">
+                                        <div class="text-sm font-medium text-amber-700 mr-2">Багш</div>
+                                        <div>
+                                            <div class="text-sm font-semibold text-gray-900">{{ teacher.full_name }}</div>
+                                            <div class="text-xs text-amber-700">Хичээл заасан эсэх</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                {% for month_key, dates in dates_by_month.items %}
+                                    {% for date in dates %}
+                                    <td class="px-4 py-4 text-center date-cell teacher-date-cell {% if forloop.first %}border-l-2 border-primary{% endif %}"
+                                        data-date="{{ date|date:'Y-m-d' }}"
+                                        data-teacher="{{ teacher.id }}">
+                                        {% with teacher_day_data=teacher_attendance_data|get_item:teacher.id %}
+                                        <input type="checkbox"
+                                               name="teacher_attendance_{{ teacher.id }}_{{ date|date:'Y-m-d' }}"
+                                               {% if teacher_day_data and teacher_day_data|get_item:date %}checked{% endif %}
+                                               class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+                                        {% endwith %}
+                                    </td>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
                             {% for enrollment in enrollments %}
-                            <tr class="hover:bg-gray-50">
+                            <tr class="hover:bg-gray-50" data-row-type="student" data-person-id="{{ enrollment.id }}">
                                 <td class="sticky left-0 bg-white px-6 py-4 whitespace-nowrap border-r border-gray-300">
                                     <div class="flex items-center">
                                         <div class="text-sm font-medium text-gray-900 mr-2">{{ forloop.counter }}.</div>
                                         <div>
-                                            <div class="text-sm font-medium text-gray-900">{{ enrollment.student.mongolian_name }}</div>
+                                            <div class="text-sm font-medium text-gray-900">{{ enrollment.student.display_name_short|default:enrollment.student.full_name }}</div>
                                             <div class="text-xs text-gray-500">{{ enrollment.student.phone }}</div>
                                         </div>
                                     </div>
@@ -145,10 +232,12 @@
                                 {% for month_key, dates in dates_by_month.items %}
                                     {% for date in dates %}
                                     <td class="px-4 py-4 text-center date-cell {% if forloop.first %}border-l-2 border-primary{% endif %}" data-date="{{ date|date:'Y-m-d' }}" data-enrollment="{{ enrollment.id }}">
+                                        {% with student_day_data=attendance_data|get_item:enrollment.id %}
                                         <input type="checkbox" 
                                                name="attendance_{{ enrollment.id }}_{{ date|date:'Y-m-d' }}"
-                                               {% if enrollment.id in attendance_data and date in attendance_data|get_item:enrollment.id %}checked{% endif %}
+                                               {% if student_day_data and student_day_data|get_item:date %}checked{% endif %}
                                                class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+                                        {% endwith %}
                                     </td>
                                     {% endfor %}
                                 {% endfor %}
@@ -196,7 +285,9 @@
                                 class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
                             <i class="fas fa-square mr-2"></i>Бүгдийг арилгах
                         </button>
-                        <button type="submit" 
+                        <button type="submit"
+                            name="action"
+                            value="save_attendance"
                                 class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 focus:outline-none transition">
                             <i class="fas fa-save mr-2"></i>
                             Хадгалах
@@ -288,6 +379,7 @@ function addDateColumn() {
     // Header нэмэх
     const table = document.getElementById('attendanceTable');
     const headerRow = table.querySelector('thead tr:last-child');
+    const visibleDatesContainer = document.getElementById('visibleDatesContainer');
     const newHeader = document.createElement('th');
     newHeader.className = 'px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] date-header';
     newHeader.dataset.date = dateValue;
@@ -301,25 +393,44 @@ function addDateColumn() {
         </button>
     `;
     headerRow.appendChild(newHeader);
+
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.name = 'visible_dates';
+    hiddenInput.value = dateValue;
+    hiddenInput.dataset.visibleDate = dateValue;
+    visibleDatesContainer.appendChild(hiddenInput);
     
-    // Сурагч бүрт checkbox нэмэх
+    // Харагдаж буй мөр бүрт checkbox нэмэх
     const bodyRows = table.querySelectorAll('tbody tr');
     bodyRows.forEach(row => {
-        const firstCell = row.querySelector('.date-cell');
-        const enrollmentId = firstCell.dataset.enrollment;
+        const rowType = row.dataset.rowType;
+        const personId = row.dataset.personId;
         const newCell = document.createElement('td');
-        newCell.className = 'px-4 py-4 text-center date-cell';
+        newCell.className = `px-4 py-4 text-center date-cell ${rowType === 'teacher' ? 'teacher-date-cell' : ''}`;
         newCell.dataset.date = dateValue;
-        newCell.dataset.enrollment = enrollmentId;
-        newCell.innerHTML = `
-            <input type="checkbox" 
-                   name="attendance_${enrollmentId}_${dateValue}"
-                   class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
-        `;
+        if (rowType === 'teacher') {
+            newCell.dataset.teacher = personId;
+            newCell.innerHTML = `
+                <input type="checkbox"
+                       name="teacher_attendance_${personId}_${dateValue}"
+                       class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+            `;
+        } else {
+            newCell.dataset.enrollment = personId;
+            newCell.innerHTML = `
+                <input type="checkbox"
+                       name="attendance_${personId}_${dateValue}"
+                       class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-primary cursor-pointer">
+            `;
+        }
         row.appendChild(newCell);
         
         // Listener нэмэх
-        newCell.querySelector('input').addEventListener('change', updateStats);
+        const checkbox = newCell.querySelector('input');
+        if (checkbox && rowType !== 'teacher') {
+            checkbox.addEventListener('change', updateStats);
+        }
     });
     
     // Input-г цэвэрлэх
@@ -342,7 +453,7 @@ function removeDateColumn(dateValue) {
     });
     
     if (hasAttendance) {
-        alert('⚠️ Энэ огноонд ирц бүртгэгдсэн тул устгах боломжгүй!\n\nЭхлээд бүх сурагчдын чагтыг арилгаад дахин оролдоно уу.');
+        alert('⚠️ Энэ огноонд ирц бүртгэгдсэн тул устгах боломжгүй!\n\nЭхлээд тухайн өдрийн бүх чагтыг арилгаад дахин оролдоно уу.');
         return;
     }
     
@@ -360,6 +471,11 @@ function removeDateColumn(dateValue) {
     
     // Баганы нүд устгах
     dateCells.forEach(cell => cell.remove());
+
+    const hiddenDate = document.querySelector(`[data-visible-date="${dateValue}"]`);
+    if (hiddenDate) {
+        hiddenDate.remove();
+    }
     
     updateStats();
 }
@@ -380,6 +496,41 @@ function uncheckAllVisible() {
 </script>
 
 <style>
+.attendance-table {
+    --attendance-header-top: 0px;
+    --attendance-header-row-height: 44px;
+}
+
+.attendance-table-wrapper {
+    max-height: calc(100vh - 190px);
+}
+
+.attendance-table thead tr:first-child th {
+    position: sticky;
+    top: var(--attendance-header-top);
+    z-index: 35;
+}
+
+.attendance-table thead tr:nth-child(2) th {
+    position: sticky;
+    top: calc(var(--attendance-header-top) + var(--attendance-header-row-height));
+    z-index: 34;
+    background: #f9fafb;
+}
+
+.attendance-table thead tr:first-child th.sticky.left-0 {
+    top: var(--attendance-header-top);
+    z-index: 36;
+}
+
+.teacher-row .sticky.left-0 {
+    z-index: 12;
+}
+
+.teacher-name-cell {
+    box-shadow: 2px 0 5px rgba(180, 120, 0, 0.08);
+}
+
 /* Sticky column for student names */
 .sticky {
     position: sticky;

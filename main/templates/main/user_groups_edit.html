@@ -1,0 +1,95 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Эрхийн бүлэг - {{ edit_user.profile.full_name|default:edit_user.username }} - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <div class="mb-6">
+        <a href="{% url 'main:student_list' %}" class="text-primary hover:text-opacity-80">
+            ← Буцах
+        </a>
+        <h1 class="text-3xl font-bold text-secondary mt-2">
+            👤 {{ edit_user.profile.full_name|default:edit_user.username }}
+        </h1>
+        <p class="text-gray-600 mt-1">Эрхийн бүлэг тохируулах</p>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="mb-4 p-4 rounded-lg {% if message.tags == 'success' %}bg-green-100 text-green-800{% elif message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="bg-white rounded-lg shadow-md p-6">
+        {% csrf_token %}
+
+        <!-- Үндсэн мэдээлэл -->
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm text-gray-600">Нэвтрэх нэр</p>
+                    <p class="font-medium">{{ edit_user.username }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Роль</p>
+                    <p class="font-medium">{{ edit_user.profile.get_role_display }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">И-мэйл</p>
+                    <p class="font-medium">{{ edit_user.email|default:"—" }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Утас</p>
+                    <p class="font-medium">{{ edit_user.profile.phone|default:"—" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Эрхийн бүлгүүд -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-3">Эрхийн бүлгүүд сонгох</label>
+            <div class="space-y-2">
+                {% for group in all_groups %}
+                <label class="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" 
+                           name="groups" 
+                           value="{{ group.id }}"
+                           {% if group in edit_user.groups.all %}checked{% endif %}
+                           class="mt-1 rounded border-gray-300 text-primary focus:ring-primary">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-900">{{ group.name }}</div>
+                        <div class="text-sm text-gray-500">{{ group.permissions.count }} эрх</div>
+                    </div>
+                </label>
+                {% empty %}
+                <p class="text-gray-500 text-sm">Эрхийн бүлэг байхгүй байна.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Одоо ямар цэс харагдах вэ -->
+        <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+            <h3 class="font-medium text-gray-900 mb-2">💡 Анхаар:</h3>
+            <ul class="text-sm text-gray-700 space-y-1">
+                <li>• Эрхийн бүлэг нь цэсний харагдах байдлыг удирдана</li>
+                <li>• Олон бүлэг сонгож болно (эрхүүд нийлнэ)</li>
+                <li>• Хадгалсны дараа F5 дарж шинэчилнэ үү</li>
+            </ul>
+        </div>
+
+        <div class="flex justify-end space-x-3">
+            <a href="{% url 'main:student_list' %}" 
+               class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                Цуцлах
+            </a>
+            <button type="submit" 
+                    class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">
+                💾 Хадгалах
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -236,6 +236,9 @@ def regenerate_accounting_entries(bank_transactions, user):
     Returns:
         int: Шинэчлэгдсэн гүйлгээний тоо
     """
+    from .models import BankTransactionSplit
+    from decimal import Decimal
+
     count = 0
     for bt in bank_transactions:
         if not bt.offset_account:
@@ -243,46 +246,95 @@ def regenerate_accounting_entries(bank_transactions, user):
         
         # Хуучин accounting entry устгах (байвал)
         if bt.accounting_entry:
-            bt.accounting_entry.delete()
+            old_entry = bt.accounting_entry
+            bt.accounting_entry = None
+            bt.save(update_fields=['accounting_entry'])
+            old_entry.delete()
+
+        # Нэмэлт хуваарилалтуудын хуучин журнал устгах
+        for split in bt.extra_splits.all():
+            if split.accounting_entry:
+                old_split_entry = split.accounting_entry
+                split.accounting_entry = None
+                split.save(update_fields=['accounting_entry'])
+                old_split_entry.delete()
         
         # Шинэ entry үүсгэх
         income = bt.income_amount
         expense = bt.expense_amount
-        
-        # Өдрийн дугаарлалт (банк/касс ялгах)
+
+        # Нэмэлт хуваарилалтын нийт дүн тооцоолох
+        extra_splits = list(bt.extra_splits.all())
+        extra_total = sum(s.amount for s in extra_splits) if extra_splits else Decimal('0')
+
+        # Үндсэн эсрэг данс руу очих дүн = нийт - нэмэлт хуваарилалт
+        if income > 0:
+            main_amount = income - extra_total
+        else:
+            main_amount = expense - extra_total
+
+        def next_entry_number(date_key, prefix):
+            existing = AccountingEntry.objects.filter(
+                entry_number__startswith=f'{prefix}{date_key}'
+            ).count()
+            return f"{prefix}{date_key}{existing + 1:04d}"
+
         date_key = bt.transaction_date.strftime('%Y%m%d')
         prefix = 'CSH' if bt.account_type == 'CASH' else 'BNK'
-        existing = AccountingEntry.objects.filter(
-            entry_number__startswith=f'{prefix}{date_key}'
-        ).count()
-        entry_number = f"{prefix}{date_key}{existing + 1:04d}"
+
+        if main_amount > 0:
+            if income > 0:
+                entry = AccountingEntry.objects.create(
+                    entry_date=bt.transaction_date,
+                    entry_number=next_entry_number(date_key, prefix),
+                    description=bt.description,
+                    debit_account=bt.bank_account,
+                    debit_amount=main_amount,
+                    credit_account=bt.offset_account,
+                    credit_amount=main_amount,
+                    created_by=user
+                )
+            else:
+                entry = AccountingEntry.objects.create(
+                    entry_date=bt.transaction_date,
+                    entry_number=next_entry_number(date_key, prefix),
+                    description=bt.description,
+                    debit_account=bt.offset_account,
+                    debit_amount=main_amount,
+                    credit_account=bt.bank_account,
+                    credit_amount=main_amount,
+                    created_by=user
+                )
+            bt.accounting_entry = entry
+
+        # Нэмэлт хуваарилалт бүрт тусдаа журналын бичилт үүсгэх
+        for split in extra_splits:
+            split_desc = split.description or bt.description
+            if income > 0:
+                split_entry = AccountingEntry.objects.create(
+                    entry_date=bt.transaction_date,
+                    entry_number=next_entry_number(date_key, prefix),
+                    description=split_desc,
+                    debit_account=bt.bank_account,
+                    debit_amount=split.amount,
+                    credit_account=split.account,
+                    credit_amount=split.amount,
+                    created_by=user
+                )
+            else:
+                split_entry = AccountingEntry.objects.create(
+                    entry_date=bt.transaction_date,
+                    entry_number=next_entry_number(date_key, prefix),
+                    description=split_desc,
+                    debit_account=split.account,
+                    debit_amount=split.amount,
+                    credit_account=bt.bank_account,
+                    credit_amount=split.amount,
+                    created_by=user
+                )
+            split.accounting_entry = split_entry
+            split.save(update_fields=['accounting_entry'])
         
-        if income > 0:
-            # Орлого: Дебит банк/касс, Кредит эсрэг данс
-            entry = AccountingEntry.objects.create(
-                entry_date=bt.transaction_date,
-                entry_number=entry_number,
-                description=bt.description,
-                debit_account=bt.bank_account,
-                debit_amount=income,
-                credit_account=bt.offset_account,  # Ажилтан сонгосон данс
-                credit_amount=income,
-                created_by=user
-            )
-        else:
-            # Зарлага: Дебит эсрэг данс, Кредит банк/касс
-            entry = AccountingEntry.objects.create(
-                entry_date=bt.transaction_date,
-                entry_number=entry_number,
-                description=bt.description,
-                debit_account=bt.offset_account,  # Ажилтан сонгосон данс
-                debit_amount=expense,
-                credit_account=bt.bank_account,
-                credit_amount=expense,
-                created_by=user
-            )
-        
-        bt.accounting_entry = entry
         bt.is_processed = True
         bt.save(update_fields=['accounting_entry', 'is_processed'])
         count += 1

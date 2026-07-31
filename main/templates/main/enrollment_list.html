@@ -1,0 +1,145 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Бүртгэлүүд - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="mb-4">
+            <a href="{% url 'main:dashboard' %}" class="text-primary hover:underline">← Dashboard руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-bold text-secondary">Сургалтын бүртгэлүүд</h2>
+                {% if pending_count > 0 %}
+                <span class="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
+                    {{ pending_count }} хүлээгдэж буй
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Filter Tabs -->
+            <div class="mb-6 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <a href="?status=PENDING" class="{% if status_filter == 'PENDING' %}border-primary text-primary{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Хүлээгдэж буй
+                        {% if pending_count > 0 %}
+                        <span class="ml-2 bg-yellow-100 text-yellow-800 py-0.5 px-2.5 rounded-full text-xs font-medium">{{ pending_count }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="?status=APPROVED" class="{% if status_filter == 'APPROVED' %}border-primary text-primary{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Баталсан
+                    </a>
+                    <a href="?status=COMPLETED" class="{% if status_filter == 'COMPLETED' %}border-primary text-primary{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Төгссөн
+                    </a>
+                    <a href="?status=CANCELLED" class="{% if status_filter == 'CANCELLED' %}border-primary text-primary{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Цуцалсан
+                    </a>
+                    <a href="?status=ALL" class="{% if status_filter == 'ALL' %}border-primary text-primary{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Бүгд
+                    </a>
+                </nav>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сурагч</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Утас</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Анги</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Бүртгүүлсэн огноо</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Төлөв</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for enrollment in enrollments %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ forloop.counter }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">{{ enrollment.student.full_name }}</div>
+                                <div class="text-sm text-gray-500">{{ enrollment.student.user.username }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ enrollment.student.phone|default:"-" }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                <div class="font-medium">{{ enrollment.course.name }}</div>
+                                <div class="text-xs text-gray-500">{{ enrollment.course.get_level_display }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ enrollment.enrolled_date|date:"Y-m-d" }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if enrollment.status == 'PENDING' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                    Хүлээгдэж буй
+                                </span>
+                                {% elif enrollment.status == 'APPROVED' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    Баталсан
+                                </span>
+                                {% elif enrollment.status == 'CANCELLED' %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                    Цуцалсан
+                                </span>
+                                {% else %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    {{ enrollment.get_status_display }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                {% if enrollment.status == 'PENDING' %}
+                                <a href="{% url 'main:enrollment_approve' enrollment.id %}" class="text-green-600 hover:text-green-900 mr-3" title="Баталгаажуулах">
+                                    <i class="fas fa-check-circle"></i> Батлах
+                                </a>
+                                <a href="{% url 'main:enrollment_reject' enrollment.id %}" class="text-red-600 hover:text-red-900" title="Татгалзах"
+                                   onclick="return confirm('{{ enrollment.student.full_name }}-ын бүртгэлийг цуцлахдаа итгэлтэй байна уу?')">
+                                    <i class="fas fa-times-circle"></i> Цуцлах
+                                </a>
+                                {% else %}
+                                <span class="text-gray-400">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                                {% if status_filter == 'PENDING' %}
+                                Хүлээгдэж буй бүртгэл байхгүй байна.
+                                {% else %}
+                                Бүртгэл олдсонгүй.
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-6">
+                <p class="text-sm text-gray-600">Нийт: <strong>{{ enrollments.count }}</strong> бүртгэл</p>
+            </div>
+
+            <!-- Info Box -->
+            <div class="mt-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            <strong>Анхаарах зүйл:</strong> Нийтээс бүртгүүлсэн сурагчдын бүртгэл "Хүлээгдэж буй" төлөвтэй үүсдэг. 
+                            Админ эсвэл менежер "Батлах" үед тухайн бүртгэл "Төгссөн" төлөвт шилжиж, ирцийн жагсаалтад харагдахгүй.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

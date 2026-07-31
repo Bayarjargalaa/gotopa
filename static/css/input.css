@@ -1,8 +1,8 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 /* Custom theme variables - Tailwind v4 syntax */
 @theme {
-  --color-primary: #b5245b;
+  --color-primary: #AB334C;
   --color-secondary: #222631;
   --color-light: #f8f9fa;
 }

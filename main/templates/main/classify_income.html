@@ -110,17 +110,67 @@
                 <div id="saleFields" class="hidden mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         Борлуулалтын бүртгэл
+                        <span class="text-gray-400 font-normal text-xs ml-1">({{ sales|length }} гүйлгээ)</span>
                     </label>
-                    <select name="sale" id="saleSelect"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
-                        <option value="">-- Борлуулалт сонгох (заавал биш) --</option>
-                        {% for sale in sales %}
-                            <option value="{{ sale.id }}" {% if transaction.income_sale_id == sale.id %}selected{% endif %}>
-                                {{ sale.sale_date|date:"Y-m-d" }} - {{ sale.customer }} - {{ sale.total_amount|floatformat:0 }}₮
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-1">Сүүлийн 50 борлуулалт харагдаж байна</p>
+
+                    <!-- Далд input — форм submit хийхэд утга авна -->
+                    <input type="hidden" name="sale" id="saleHiddenInput" value="{% if transaction.income_sale_id %}{{ transaction.income_sale_id }}{% endif %}">
+
+                    <!-- Хайлт + сонголт хэсэг -->
+                    <div class="border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary">
+                        <!-- Хайлтын талбар -->
+                        <div class="flex items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
+                            <i class="fas fa-search text-gray-400 mr-2 text-sm"></i>
+                            <input type="text" id="saleSearch" placeholder="Борлуулалт хайх... (дугаар, харилцагч, дүн)"
+                                   class="flex-1 bg-transparent text-sm outline-none placeholder-gray-400"
+                                   oninput="filterSales(this.value)">
+                            <button type="button" onclick="clearSaleSearch()" class="text-gray-400 hover:text-gray-600 ml-2 text-sm hidden" id="saleClearBtn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <!-- Сонгогдсон утга -->
+                        <div id="saleSelectedDisplay" class="px-3 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 hidden">
+                            <i class="fas fa-check-circle mr-1 text-blue-500"></i>
+                            <span id="saleSelectedText"></span>
+                            <button type="button" onclick="clearSaleSelection()" class="ml-2 text-blue-400 hover:text-blue-600 text-xs">(цэвэрлэх)</button>
+                        </div>
+
+                        <!-- Жагсаалт -->
+                        <ul id="saleList" class="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                            <li class="px-3 py-2 text-sm text-gray-500 cursor-pointer hover:bg-gray-50 sale-option"
+                                data-value="" data-text="-- Сонгохгүй --"
+                                onclick="selectSale('', '-- Сонгохгүй --')">
+                                <span class="text-gray-400 italic">-- Сонгохгүй --</span>
+                            </li>
+                            {% for sale in sales %}
+                            <li class="px-3 py-2 text-sm cursor-pointer hover:bg-primary hover:text-white sale-option transition-colors {% if transaction.income_sale_id == sale.id %}bg-primary text-white{% endif %}"
+                                data-value="{{ sale.id }}"
+                                data-text="{{ sale.sale_date|date:'Y-m-d' }} | {{ sale.customer|default:'-' }} | {{ sale.sale_number }} | {{ sale.total_amount|floatformat:0 }}₮"
+                                onclick="selectSale('{{ sale.id }}', '{{ sale.sale_date }} - {{ sale.customer|default:"-"|escapejs }} - {{ sale.sale_number }} - {{ sale.total_amount|floatformat:0 }}₮')">
+                                <div class="flex justify-between items-center gap-2">
+                                    <span>
+                                        <span class="font-medium">{{ sale.sale_number }}</span>
+                                        — {{ sale.customer|default:"Харилцагчгүй" }}
+                                    </span>
+                                    <span class="text-xs whitespace-nowrap {% if transaction.income_sale_id == sale.id %}text-white opacity-80{% else %}text-gray-500{% endif %}">
+                                        {{ sale.sale_date|date:"Y-m-d" }} · {{ sale.total_amount|floatformat:0 }}₮
+                                    </span>
+                                </div>
+                                <div class="text-xs mt-0.5 {% if transaction.income_sale_id == sale.id %}text-white opacity-70{% else %}text-gray-400{% endif %}">
+                                    {{ sale.get_status_display }}
+                                </div>
+                            </li>
+                            {% empty %}
+                            <li class="px-3 py-4 text-sm text-gray-500 text-center">
+                                <i class="fas fa-info-circle mr-1"></i>Холбогдоогүй борлуулалт байхгүй байна
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-filter mr-1"></i>Банкны гүйлгээнд холбогдоогүй борлуулалтууд
+                    </p>
                 </div>
 
                 <!-- Товчнууд -->
@@ -159,7 +209,7 @@ const studentsData = [
     {% for student in students %}
         {
             id: {{ student.id }},
-            name: '{{ student.mongolian_name|default:student.user.username|escapejs }}'
+            name: '{{ student.display_name_short|default:student.user.username|escapejs }}'
         },
     {% endfor %}
 ];
@@ -178,7 +228,6 @@ const coursesData = [
 document.getElementById('incomeType').addEventListener('change', function() {
     const studentFields = document.getElementById('studentFields');
     const saleFields = document.getElementById('saleFields');
-    const saleSelect = document.getElementById('saleSelect');
     
     // Бүгдийг далдлах
     studentFields.classList.add('hidden');
@@ -193,6 +242,8 @@ document.getElementById('incomeType').addEventListener('change', function() {
         }
     } else if (this.value === 'PRODUCT_SALE') {
         saleFields.classList.remove('hidden');
+        // Хайлтын талбарт focus өгөх
+        setTimeout(() => document.getElementById('saleSearch').focus(), 100);
     }
 });
 
@@ -368,6 +419,62 @@ function loadStudentCourses(index) {
         })
         .catch(error => console.error('Анги ачаалах алдаа:', error));
 }
+
+    // Борлуулалт хайх функц
+    function filterSales(query) {
+        const items = document.querySelectorAll('#saleList .sale-option');
+        const clearBtn = document.getElementById('saleClearBtn');
+        const q = query.trim().toLowerCase();
+        
+        clearBtn.classList.toggle('hidden', !q);
+        let visibleCount = 0;
+        
+        items.forEach(item => {
+            const text = (item.dataset.text || item.textContent).toLowerCase();
+            const matches = !q || text.includes(q);
+            item.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+    }
+
+    function clearSaleSearch() {
+        document.getElementById('saleSearch').value = '';
+        filterSales('');
+    }
+
+    function selectSale(id, label) {
+        document.getElementById('saleHiddenInput').value = id;
+        
+        const display = document.getElementById('saleSelectedDisplay');
+        const text = document.getElementById('saleSelectedText');
+        
+        if (id) {
+            text.textContent = label;
+            display.classList.remove('hidden');
+        } else {
+            display.classList.add('hidden');
+        }
+        
+        // Сонгогдсон мөрийн стилийг шинэчлэх
+        document.querySelectorAll('#saleList .sale-option').forEach(item => {
+            const isSelected = item.dataset.value == id && id !== '';
+            item.classList.toggle('bg-primary', isSelected);
+            item.classList.toggle('text-white', isSelected);
+        });
+    }
+
+    // Хуудас ачаалагдахад одоогийн сонголтыг тохируулах
+    (function initSaleSelection() {
+        const hiddenVal = document.getElementById('saleHiddenInput').value;
+        if (hiddenVal) {
+            const item = document.querySelector(`#saleList .sale-option[data-value="${hiddenVal}"]`);
+            if (item) {
+                const label = item.dataset.text || item.textContent.trim();
+                document.getElementById('saleSelectedText').textContent = label;
+                document.getElementById('saleSelectedDisplay').classList.remove('hidden');
+            }
+        }
+    })();
 
 // Хуваарилалт нэмэх товч
 document.getElementById('addAllocationBtn').addEventListener('click', addAllocation);

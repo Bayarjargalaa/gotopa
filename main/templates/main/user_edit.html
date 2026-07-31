@@ -1,0 +1,231 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}{{ user_to_edit.profile.full_name }} - Эрх тохируулах{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-secondary">✏️ Хэрэглэгчийн эрх тохируулах</h1>
+            <a href="{% url 'main:user_management' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400">
+                ← Буцах
+            </a>
+        </div>
+
+        <!-- User Info Card -->
+        <div class="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg mb-6 border border-purple-200">
+            <div class="flex items-center gap-4">
+                {% if user_to_edit.profile.photo %}
+                <img src="{{ user_to_edit.profile.photo.url }}" alt="{{ user_to_edit.username }}" 
+                     class="w-20 h-20 rounded-full object-cover border-4 border-white shadow">
+                {% else %}
+                <div class="w-20 h-20 rounded-full bg-primary text-white flex items-center justify-center text-3xl font-bold shadow">
+                    {{ user_to_edit.profile.full_name.0|default:user_to_edit.username.0|upper }}
+                </div>
+                {% endif %}
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">{{ user_to_edit.profile.full_name|default:user_to_edit.username }}</h2>
+                    <p class="text-gray-600">📧 {{ user_to_edit.email|default:"Имэйл байхгүй" }}</p>
+                    <p class="text-gray-600">📱 {{ user_to_edit.profile.phone|default:"Утас байхгүй" }}</p>
+                    <p class="text-sm text-gray-500 font-mono mt-1">Username: {{ user_to_edit.username }}</p>
+                </div>
+            </div>
+        </div>
+
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+
+            <!-- Django Permissions -->
+            <div class="bg-red-50 p-6 rounded-lg border-2 border-red-200">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span class="text-2xl">🔐</span>
+                    Django эрхүүд
+                </h3>
+                
+                <div class="space-y-3">
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-red-50 transition">
+                        <input type="checkbox" name="is_superuser" {% if user_to_edit.is_superuser %}checked{% endif %}
+                               class="w-5 h-5 text-red-600 rounded focus:ring-red-500">
+                        <div>
+                            <div class="font-semibold text-red-800">Superuser</div>
+                            <div class="text-sm text-red-600">⚠️ БҮХ ЦЭС ХАРАГДАНА - Анхааралтай ашиглах!</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-yellow-50 transition">
+                        <input type="checkbox" name="is_staff" {% if user_to_edit.is_staff %}checked{% endif %}
+                               class="w-5 h-5 text-yellow-600 rounded focus:ring-yellow-500">
+                        <div>
+                            <div class="font-semibold text-yellow-800">Staff status</div>
+                            <div class="text-sm text-yellow-600">Админ панел руу нэвтрэх эрх</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-green-50 transition">
+                        <input type="checkbox" name="is_active" {% if user_to_edit.is_active %}checked{% endif %}
+                               class="w-5 h-5 text-green-600 rounded focus:ring-green-500">
+                        <div>
+                            <div class="font-semibold text-green-800">Идэвхтэй</div>
+                            <div class="text-sm text-green-600">Систем рүү нэвтрэх боломжтой</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Role Selection -->
+            <div class="bg-blue-50 p-6 rounded-lg border-2 border-blue-200">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span class="text-2xl">🎭</span>
+                    Готопагийн роль
+                </h3>
+                
+                <div class="grid md:grid-cols-2 gap-3">
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'PRESIDENT' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="PRESIDENT" {% if user_to_edit.profile.role == 'PRESIDENT' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">👑 Тэргүүн</div>
+                            <div class="text-xs text-gray-600">Бүх эрх</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'DIRECTOR' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="DIRECTOR" {% if user_to_edit.profile.role == 'DIRECTOR' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">🏢 Захирал</div>
+                            <div class="text-xs text-gray-600">Бүх эрх</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'MANAGER' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="MANAGER" {% if user_to_edit.profile.role == 'MANAGER' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">💼 Менежер</div>
+                            <div class="text-xs text-gray-600">Бараа материал + санхүү</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'ACCOUNTANT' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="ACCOUNTANT" {% if user_to_edit.profile.role == 'ACCOUNTANT' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">💰 Нягтлан</div>
+                            <div class="text-xs text-gray-600">Зөвхөн санхүү</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'TEACHER_BEGINNER' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="TEACHER_BEGINNER" {% if user_to_edit.profile.role == 'TEACHER_BEGINNER' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">👨‍🏫 Багш (анхан)</div>
+                            <div class="text-xs text-gray-600">Сургалт</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'TEACHER_INTERMEDIATE' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="TEACHER_INTERMEDIATE" {% if user_to_edit.profile.role == 'TEACHER_INTERMEDIATE' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">👨‍🏫 Багш (дунд)</div>
+                            <div class="text-xs text-gray-600">Сургалт</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'TEACHER_ADVANCED' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="TEACHER_ADVANCED" {% if user_to_edit.profile.role == 'TEACHER_ADVANCED' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">👨‍🏫 Багш (ахисан)</div>
+                            <div class="text-xs text-gray-600">Сургалт</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition border-2 {% if user_to_edit.profile.role == 'STUDENT' %}border-blue-500 bg-blue-100{% else %}border-transparent{% endif %}">
+                        <input type="radio" name="role" value="STUDENT" {% if user_to_edit.profile.role == 'STUDENT' %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600">
+                        <div>
+                            <div class="font-semibold">🎓 Сурагч</div>
+                            <div class="text-xs text-gray-600">Үндсэн хэрэглэгч</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Groups -->
+            <div class="bg-purple-50 p-6 rounded-lg border-2 border-purple-200">
+                <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span class="text-2xl">👥</span>
+                    Бүлгүүд (Groups) - ⭐ Санал болгож байна
+                </h3>
+                
+                <div class="space-y-2">
+                    {% for group in available_groups %}
+                    <label class="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-purple-50 transition">
+                        <input type="checkbox" name="groups" value="{{ group.id }}" 
+                               {% if group in user_to_edit.groups.all %}checked{% endif %}
+                               class="w-5 h-5 text-purple-600 rounded focus:ring-purple-500">
+                        <div class="flex-1">
+                            <div class="font-semibold text-purple-900">{{ group.name }}</div>
+                            <div class="text-sm text-purple-600">{{ group.permissions.count }} эрх</div>
+                        </div>
+                    </label>
+                    {% empty %}
+                    <p class="text-gray-500">Бүлэг олдсонгүй. <code>python manage.py create_permission_groups</code> ажиллуулна уу.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4">
+                <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold text-lg">
+                    ✓ Хадгалах
+                </button>
+                <a href="{% url 'main:user_management' %}" 
+                   class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-bold text-lg">
+                    ✗ Болих
+                </a>
+            </div>
+
+            <!-- Warning -->
+            <div class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-500">
+                <p class="text-sm text-yellow-800">
+                    <strong>⚠️ Анхааруулга:</strong> Эрхийн өөрчлөлт шууд идэвхжинэ. Хэрэглэгч дахин нэвтрэх шаардлагагүй.
+                </p>
+            </div>
+        </form>
+
+        <!-- Current Permissions Preview -->
+        <div class="mt-8 p-6 bg-gray-50 rounded-lg border">
+            <h3 class="text-lg font-bold mb-4">📊 Одоогийн эрхүүд:</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <h4 class="font-semibold mb-2">Django:</h4>
+                    <ul class="text-sm space-y-1">
+                        <li class="{% if user_to_edit.is_superuser %}text-red-600 font-bold{% endif %}">
+                            Superuser: {{ user_to_edit.is_superuser|yesno:"✓ Тийм,✗ Үгүй" }}
+                        </li>
+                        <li>Staff: {{ user_to_edit.is_staff|yesno:"✓ Тийм,✗ Үгүй" }}</li>
+                        <li>Идэвхтэй: {{ user_to_edit.is_active|yesno:"✓ Тийм,✗ Үгүй" }}</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-2">Готопа:</h4>
+                    <ul class="text-sm space-y-1">
+                        <li>Роль: {{ user_to_edit.profile.get_role_display }}</li>
+                        <li class="{% if user_to_edit.profile.is_admin %}text-red-600 font-bold{% endif %}">
+                            is_admin: {{ user_to_edit.profile.is_admin|yesno:"✓ Тийм,✗ Үгүй" }}
+                        </li>
+                        <li>is_accountant: {{ user_to_edit.profile.is_accountant|yesno:"✓ Тийм,✗ Үгүй" }}</li>
+                        <li>is_teacher: {{ user_to_edit.profile.is_teacher|yesno:"✓ Тийм,✗ Үгүй" }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

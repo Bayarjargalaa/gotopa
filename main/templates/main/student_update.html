@@ -16,18 +16,34 @@
             <form method="post" enctype="multipart/form-data" class="space-y-6">
                 {% csrf_token %}
 
-                <!-- Нэр -->
+                <!-- Овог -->
                 <div>
-                    <label for="mongolian_name" class="block text-sm font-medium text-gray-700 mb-2">
-                        Монгол нэр <span class="text-red-500">*</span>
+                    <label for="last_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Овог <span class="text-red-500">*</span>
                     </label>
                     <input 
                         type="text" 
-                        id="mongolian_name" 
-                        name="mongolian_name" 
+                        id="last_name" 
+                        name="last_name" 
                         required
-                        value="{{ student.mongolian_name }}"
-                        placeholder="Жишээ нь: Болд Баатар"
+                        value="{{ student.last_name }}"
+                        placeholder="Жишээ нь: Болд"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Нэр -->
+                <div>
+                    <label for="first_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Нэр <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="first_name" 
+                        name="first_name" 
+                        required
+                        value="{{ student.first_name }}"
+                        placeholder="Жишээ нь: Баатар"
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
                 </div>
@@ -156,6 +172,66 @@
                     >{{ student.address }}</textarea>
                 </div>
 
+                <!-- Мэргэжил -->
+                <div>
+                    <label for="profession" class="block text-sm font-medium text-gray-700 mb-2">
+                        Мэргэжил
+                    </label>
+                    <input 
+                        type="text" 
+                        id="profession" 
+                        name="profession" 
+                        value="{{ student.profession }}"
+                        placeholder="Инженер, эмч, багш г.м"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Боловсрол -->
+                <div>
+                    <label for="education" class="block text-sm font-medium text-gray-700 mb-2">
+                        Боловсрол
+                    </label>
+                    <input 
+                        type="text" 
+                        id="education" 
+                        name="education" 
+                        value="{{ student.education }}"
+                        placeholder="Бакалавр, Магистр г.м"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Одоо эрхэлж буй ажил -->
+                <div>
+                    <label for="current_job" class="block text-sm font-medium text-gray-700 mb-2">
+                        Одоо эрхэлж буй ажил
+                    </label>
+                    <input 
+                        type="text" 
+                        id="current_job" 
+                        name="current_job" 
+                        value="{{ student.current_job }}"
+                        placeholder="Байгууллага, албан тушаал"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Facebook нэр -->
+                <div>
+                    <label for="facebook_name" class="block text-sm font-medium text-gray-700 mb-2">
+                        Facebook нэр
+                    </label>
+                    <input 
+                        type="text" 
+                        id="facebook_name" 
+                        name="facebook_name" 
+                        value="{{ student.facebook_name }}"
+                        placeholder="Facebook хаяг эсвэл нэр"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                </div>
+
                 <!-- Зураг -->
                 <div>
                     <label for="photo" class="block text-sm font-medium text-gray-700 mb-2">
@@ -218,12 +294,12 @@
                             <div class="flex-1">
                                 <div class="flex items-center">
                                     <span class="font-medium text-gray-900">{{ enrollment.course.name }}</span>
-                                    {% if enrollment.course.level == 'BEGINNER' %}
-                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Анхан</span>
+                                    {% if enrollment.course.level == 'BEGINNER_1' or enrollment.course.level == 'BEGINNER_2' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">{{ enrollment.course.get_level_display }}</span>
                                     {% elif enrollment.course.level == 'INTERMEDIATE' %}
-                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Дунд</span>
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ enrollment.course.get_level_display }}</span>
                                     {% else %}
-                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Ахисан</span>
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">{{ enrollment.course.get_level_display }}</span>
                                     {% endif %}
                                     {% if enrollment.status == 'APPROVED' %}
                                         <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
@@ -237,17 +313,36 @@
                                         <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                                             <i class="fas fa-graduation-cap"></i> Төгссөн
                                         </span>
+                                    {% elif enrollment.status == 'CANCELLED' %}
+                                        <span class="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                            <i class="fas fa-times-circle"></i> Цуцалсан
+                                        </span>
                                     {% endif %}
                                 </div>
                                 <div class="text-sm text-gray-600 mt-1">
-                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ enrollment.course.teacher.mongolian_name }}
+                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ enrollment.course.teacher.full_name }}
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-calendar mr-1"></i>{{ enrollment.enrolled_date|date:"Y-m-d" }}
                                 </div>
                             </div>
+                            <div class="ml-4 w-44">
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Төлөв өөрчлөх</label>
+                                <select
+                                    name="enrollment_status_{{ enrollment.id }}"
+                                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                                >
+                                    <option value="PENDING" {% if enrollment.status == 'PENDING' %}selected{% endif %}>Хүлээгдэж буй</option>
+                                    <option value="APPROVED" {% if enrollment.status == 'APPROVED' %}selected{% endif %}>Баталсан</option>
+                                    <option value="COMPLETED" {% if enrollment.status == 'COMPLETED' %}selected{% endif %}>Төгссөн</option>
+                                    <option value="CANCELLED" {% if enrollment.status == 'CANCELLED' %}selected{% endif %}>Цуцалсан</option>
+                                </select>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
+                    <p class="mt-2 text-xs text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>"Хүлээгдэж буй"-г "Баталсан" болгож өөрчлөх бол дээрх төлөвөөс сонгоод <strong>Хадгалах</strong> дарна.
+                    </p>
                 </div>
                 {% endif %}
 
@@ -270,16 +365,16 @@
                             <div class="flex-1">
                                 <div class="flex items-center justify-between">
                                     <span class="font-medium text-gray-900">{{ course.name }}</span>
-                                    {% if course.level == 'BEGINNER' %}
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Анхан</span>
+                                    {% if course.level == 'BEGINNER_1' or course.level == 'BEGINNER_2' %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">{{ course.get_level_display }}</span>
                                     {% elif course.level == 'INTERMEDIATE' %}
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Дунд</span>
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{{ course.get_level_display }}</span>
                                     {% else %}
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Ахисан</span>
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">{{ course.get_level_display }}</span>
                                     {% endif %}
                                 </div>
                                 <div class="text-sm text-gray-600 mt-1">
-                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ course.teacher.mongolian_name }}
+                                    <i class="fas fa-chalkboard-teacher mr-1"></i>{{ course.teacher.full_name }}
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-users mr-1"></i>{{ course.enrolled_count }}/{{ course.max_students }}
                                     {% if course.available_slots <= 0 %}

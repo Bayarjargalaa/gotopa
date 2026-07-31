@@ -1,0 +1,265 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Роль-ын мэдээлэл - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-secondary">🎭 Роль (Албан тушаал)-ын мэдээлэл</h1>
+                <p class="text-gray-600 mt-1">Системд байгаа роль бүрийн эрх, харагдах цэс</p>
+            </div>
+            <a href="{% url 'main:user_management' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400">
+                ← Хэрэглэгчид
+            </a>
+        </div>
+
+        <!-- Info Box -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">Роль гэж юу вэ?</h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <p><strong>Роль</strong> = Албан тушаал (Тэргүүн, Менежер, Нягтлан, Багш, Сурагч гэх мэт)</p>
+                        <p class="mt-1">Роль бүр автоматаар тодорхой эрх, харагдах цэстэй байна. Code-д хатуу бичигдсэн, админ өөрчлөх боломжгүй.</p>
+                        <p class="mt-1"><strong>Бүлэг</strong> = Эрхийн багц (уян хатан, шинэ үүсгэж болно)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Roles Grid -->
+        <div class="space-y-6">
+            <!-- PRESIDENT -->
+            <div class="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-red-900 flex items-center gap-2">
+                            <span class="text-3xl">👑</span>
+                            PRESIDENT - Тэргүүн
+                        </h2>
+                        <p class="text-sm text-red-700 mt-1">Хамгийн өндөр эрх - бүх модуль удирдах</p>
+                    </div>
+                    <span class="bg-red-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.PRESIDENT }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ is_admin = True</li>
+                            <li>✓ is_superuser боломжтой</li>
+                            <li>✓ Бүх модуль харах/засах/устгах</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Санхүү, Бараа материал, Харилцагч</li>
+                            <li>• Тайлан, Сургалт</li>
+                            <li>• Удирдлага (Хэрэглэгчийн эрх, Бүлгүүд)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DIRECTOR -->
+            <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-purple-900 flex items-center gap-2">
+                            <span class="text-3xl">🏢</span>
+                            DIRECTOR - Захирал
+                        </h2>
+                        <p class="text-sm text-purple-700 mt-1">Удирдлагын эрх - бүх модуль удирдах</p>
+                    </div>
+                    <span class="bg-purple-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.DIRECTOR }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ is_admin = True</li>
+                            <li>✓ PRESIDENT-тэй ижил эрх</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Бүх цэс (PRESIDENT-тэй адилхан)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MANAGER -->
+            <div class="bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-blue-900 flex items-center gap-2">
+                            <span class="text-3xl">👔</span>
+                            MANAGER - Менежер
+                        </h2>
+                        <p class="text-sm text-blue-700 mt-1">Сургалтын менежер - зөвхөн ирц бүртгэх, сурагч удирдах</p>
+                    </div>
+                    <span class="bg-blue-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.MANAGER }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ is_training_manager = True</li>
+                            <li>✗ is_admin = False (шинэчлэгдсэн!)</li>
+                            <li>✓ Зөвхөн сургалтын модуль</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Сургалт (Хичээл, Ирц ⭐, Төлбөр)</li>
+                            <li>• Сурагчид харах/бүртгэх</li>
+                            <li>✗ Санхүү, Бараа, Тайлан харагдахгүй</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ACCOUNTANT -->
+            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-green-900 flex items-center gap-2">
+                            <span class="text-3xl">💰</span>
+                            ACCOUNTANT - Нягтлан бодогч
+                        </h2>
+                        <p class="text-sm text-green-700 mt-1">Зөвхөн санхүүгийн модуль</p>
+                    </div>
+                    <span class="bg-green-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.ACCOUNTANT }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ is_accountant = True</li>
+                            <li>✓ Санхүү, Тайлан модуль</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Санхүү (Журнал, Данс, Банк)</li>
+                            <li>• Тайлан харах</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TEACHERS -->
+            <div class="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-yellow-900 flex items-center gap-2">
+                            <span class="text-3xl">👨‍🏫</span>
+                            TEACHER - Багш
+                        </h2>
+                        <p class="text-sm text-yellow-700 mt-1">3 түвшин: Анхан, Дунд, Дээд</p>
+                    </div>
+                    <span class="bg-yellow-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.TEACHER_BEGINNER|add:role_stats.TEACHER_INTERMEDIATE|add:role_stats.TEACHER_ADVANCED }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ is_teacher = True</li>
+                            <li>✓ Зөвхөн өөрийн хичээл</li>
+                            <li>• TEACHER_BEGINNER ({{ role_stats.TEACHER_BEGINNER }})</li>
+                            <li>• TEACHER_INTERMEDIATE ({{ role_stats.TEACHER_INTERMEDIATE }})</li>
+                            <li>• TEACHER_ADVANCED ({{ role_stats.TEACHER_ADVANCED }})</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Сургалт (Хичээлүүд, Ирц)</li>
+                            <li>• Төлбөр харах</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STUDENT -->
+            <div class="bg-gradient-to-r from-gray-50 to-slate-50 border-2 border-gray-300 rounded-lg p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                            <span class="text-3xl">👤</span>
+                            STUDENT - Сурагч
+                        </h2>
+                        <p class="text-sm text-gray-700 mt-1">Энгийн хэрэглэгч - өөрийн мэдээлэл харах</p>
+                    </div>
+                    <span class="bg-gray-600 text-white px-4 py-2 rounded-full font-bold">
+                        {{ role_stats.STUDENT }} хүн
+                    </span>
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">🔑 Эрх:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>✓ Үндсэн хэрэглэгч</li>
+                            <li>✓ Бүлэгт хамруулж нэмэлт эрх өгч болно</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded p-4">
+                        <h3 class="font-bold text-gray-800 mb-2">📋 Харагдах цэс:</h3>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li>• Dashboard</li>
+                            <li>• Өөрийн мэдээлэл</li>
+                            <li>• Элссэн хичээлүүд</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Info -->
+        <div class="mt-8 bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
+            <h3 class="font-bold text-purple-900 mb-2">💡 Хэрхэн роль өгөх вэ?</h3>
+            <ol class="text-sm text-purple-800 space-y-2 list-decimal list-inside">
+                <li><strong>Удирдлага</strong> > <strong>Хэрэглэгчийн эрх</strong> руу очих</li>
+                <li>Хэрэглэгч сонгоод <strong>Засах</strong> дарах</li>
+                <li><strong>Готопа роль</strong> хэсэгт дээрх роль-уудаас сонгох</li>
+                <li>Хэрэв нэмэлт эрх хэрэгтэй бол <strong>Бүлгүүд</strong> хэсэгт бүлэг сонгох</li>
+                <li><strong>Хадгалах</strong> - шууд идэвхжинэ!</li>
+            </ol>
+        </div>
+
+        <!-- Example -->
+        <div class="mt-6 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+            <h3 class="font-bold text-yellow-900 mb-2">📝 Жишээ:</h3>
+            <div class="text-sm text-yellow-800 space-y-2">
+                <p>• <strong>Ирц бүртгэгч:</strong> MANAGER роль + "Менежер" бүлэг</p>
+                <p>• <strong>Агуулахын ажилтан:</strong> STUDENT роль + "Агуулахын менежер" бүлэг</p>
+                <p>• <strong>Санхүүчин:</strong> ACCOUNTANT роль + "Санхүүчин" бүлэг</p>
+                <p>• <strong>Контент засварлагч:</strong> STUDENT роль + "Content Editor" бүлэг</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

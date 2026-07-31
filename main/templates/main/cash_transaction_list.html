@@ -93,7 +93,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for transaction in transactions %}
-                    <tr class="hover:bg-gray-50">
+                    <tr id="tx-{{ transaction.id }}" class="hover:bg-gray-50 {% if highlight_tx == transaction.id|stringformat:'s' %}bg-yellow-50 ring-2 ring-yellow-300{% endif %}">
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             {{ transaction.transaction_date|date:"Y-m-d" }}
                         </td>
@@ -108,7 +108,7 @@
                                 <div class="mt-2 space-y-1">
                                     {% for allocation in transaction.allocations.all %}
                                         <div class="text-xs bg-blue-50 px-2 py-1 rounded">
-                                            {{ allocation.student.mongolian_name }} - {{ allocation.course.name }}
+                                            {{ allocation.student.full_name }} - {{ allocation.course.name }}
                                             ({{ allocation.year }}-{{ allocation.month|stringformat:"02d" }}: {{ allocation.amount|floatformat:0 }}₮)
                                         </div>
                                     {% endfor %}
@@ -206,4 +206,17 @@
         {% endif %}
     </div>
 </div>
+{% if highlight_tx %}
+<script>
+    (function () {
+        var row = document.getElementById('tx-{{ highlight_tx }}');
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('bg-yellow-50', 'ring-2', 'ring-yellow-300');
+        setTimeout(function () {
+            row.classList.remove('ring-2', 'ring-yellow-300');
+        }, 4000);
+    }());
+</script>
+{% endif %}
 {% endblock %}

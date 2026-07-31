@@ -1,0 +1,89 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Эрхийн бүлгүүд - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-secondary">🔐 Эрхийн бүлгүүд</h1>
+        <a href="{% url 'main:permission_group_create' %}" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition">
+            ➕ Шинэ бүлэг үүсгэх
+        </a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="mb-4 p-4 rounded-lg {% if message.tags == 'success' %}bg-green-100 text-green-800{% elif message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Бүлгийн нэр</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Эрхүүд</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Хэрэглэгчид</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Үйлдэл</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for group in groups %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">{{ group.name }}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-500">
+                            {{ group.permissions.count }} эрх
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-500">
+                            {{ group.user_set.count }} хэрэглэгч
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <a href="{% url 'main:permission_group_edit' group.id %}" class="text-primary hover:text-opacity-80 mr-3">
+                            ✏️ Засах
+                        </a>
+                        {% if group.user_set.count == 0 %}
+                        <a href="{% url 'main:permission_group_delete' group.id %}" 
+                           onclick="return confirm('{{ group.name }} бүлгийг устгахдаа итгэлтэй байна уу?')"
+                           class="text-red-600 hover:text-red-900">
+                            🗑️ Устгах
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                        Эрхийн бүлэг байхгүй байна. Шинэ бүлэг үүсгэнэ үү.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-8 bg-blue-50 border-l-4 border-blue-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    <strong>Зөвлөмж:</strong> Эрхийн бүлэг нь олон хэрэглэгчдэд нэгэн зэрэг эрх олгох боломж олгоно. 
+                    Жишээ нь: "Менежер", "Харагч", "Нягтлан" гэх мэт.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

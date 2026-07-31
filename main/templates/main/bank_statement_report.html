@@ -1,0 +1,235 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Банкны хуулгын тайлан - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-6">
+    <div class="container mx-auto px-4">
+
+        <!-- Гарчиг -->
+        <div class="mb-6 flex justify-between items-center no-print">
+            <div>
+                <h2 class="text-3xl font-bold text-secondary">🏦 Банкны хуулгын тайлан</h2>
+                <p class="text-gray-600 mt-1">Огноо, банк, холбоосоор шүүнэ</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="window.print()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 font-semibold">
+                    <i class="fas fa-print mr-2"></i>Хэвлэх
+                </button>
+            </div>
+        </div>
+
+        <!-- Шүүлтүүр -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6 no-print">
+            <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <!-- Банкны данс -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Банкны данс</label>
+                    <select name="bank_account" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">-- Бүгд --</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id }}" {% if selected_bank == account.id|stringformat:"s" %}selected{% endif %}>
+                                {{ account.code }} - {{ account.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Холбоосын төлөв -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Журнал холбоос</label>
+                    <select name="is_linked" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="" {% if not selected_linked %}selected{% endif %}>-- Бүгд --</option>
+                        <option value="linked" {% if selected_linked == 'linked' %}selected{% endif %}>Журналд холбогдсон</option>
+                        <option value="unlinked" {% if selected_linked == 'unlinked' %}selected{% endif %}>Холбоогүй</option>
+                    </select>
+                </div>
+
+                <!-- Эхлэх огноо -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Эхлэх огноо</label>
+                    <input type="date" name="date_from" value="{{ date_from }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+
+                <!-- Дуусах огноо -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Дуусах огноо</label>
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+
+                <!-- Товчнууд -->
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 font-semibold">
+                        <i class="fas fa-search mr-1"></i>Шүүх
+                    </button>
+                    <a href="{% url 'main:bank_statement_report' %}" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">
+                        <i class="fas fa-redo"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Статистик -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 no-print">
+            <div class="bg-white rounded-lg shadow-md p-5 border-l-4 border-blue-400">
+                <div class="text-2xl font-bold text-blue-700">{{ total_count }}</div>
+                <div class="text-sm text-gray-500 mt-1">Нийт гүйлгээ</div>
+                <div class="text-xs text-gray-400 mt-1">
+                    Орлого: <span class="text-green-600 font-semibold">{{ total_income|floatformat:0 }}₮</span>
+                    &nbsp;|&nbsp;
+                    Зарлага: <span class="text-red-600 font-semibold">{{ total_expense|floatformat:0 }}₮</span>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-5 border-l-4 border-green-400">
+                <div class="text-2xl font-bold text-green-700">{{ linked_count }}</div>
+                <div class="text-sm text-gray-500 mt-1">Журналд холбогдсон</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-5 border-l-4 border-yellow-400">
+                <div class="text-2xl font-bold text-yellow-700">{{ unlinked_count }}</div>
+                <div class="text-sm text-gray-500 mt-1">Журналд холбоогүй</div>
+            </div>
+        </div>
+
+        <!-- Тайлан хүснэгт -->
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+
+            <!-- Хэвлэх гарчиг -->
+            <div class="hidden print-only p-6 border-b">
+                <h1 class="text-xl font-bold text-center">Банкны хуулгын тайлан</h1>
+                {% if date_from or date_to %}
+                <p class="text-center text-sm text-gray-600">
+                    Хугацаа: {% if date_from %}{{ date_from }}{% else %}эхлэлээс{% endif %} — {% if date_to %}{{ date_to }}{% else %}өнөөдөр{% endif %}
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">№</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Огноо</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Данс</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Гүйлгээний утга</th>
+                            <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Эхний үлдэгдэл</th>
+                            <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase text-green-700">Орлого</th>
+                            <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase text-red-700">Зарлага</th>
+                            <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Эцсийн үлдэгдэл</th>
+                            <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase no-print">Журнал</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for row in report_rows %}
+                        <tr class="hover:bg-gray-50 {% if not row.tx.accounting_entry_id %}bg-yellow-50{% endif %}">
+                            <td class="px-3 py-3 text-gray-400">{{ forloop.counter }}</td>
+                            <td class="px-3 py-3 whitespace-nowrap">{{ row.tx.transaction_date|date:"Y-m-d" }}</td>
+                            <td class="px-3 py-3">
+                                <div class="font-medium text-secondary">{{ row.tx.bank_account.code }}</div>
+                                <div class="text-xs text-gray-500">{{ row.tx.bank_account.name }}</div>
+                            </td>
+                            <td class="px-3 py-3 max-w-xs">
+                                <div class="text-secondary">{{ row.tx.description|truncatechars:80 }}</div>
+                                {% if row.tx.counterparty_name %}
+                                    <div class="text-xs text-gray-400">{{ row.tx.counterparty_name }}</div>
+                                {% endif %}
+                                {% if row.tx.offset_account %}
+                                    <div class="text-xs text-blue-600 mt-0.5">
+                                        Эсрэг данс: {{ row.tx.offset_account.code }} {{ row.tx.offset_account.name }}
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-right">
+                                {% if row.opening is not None %}
+                                    <span class="text-gray-700">{{ row.opening|floatformat:0 }}₮</span>
+                                {% else %}
+                                    <span class="text-gray-400">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-right">
+                                {% if row.income > 0 %}
+                                    <span class="text-green-700 font-semibold">+{{ row.income|floatformat:0 }}₮</span>
+                                {% else %}
+                                    <span class="text-gray-300">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-right">
+                                {% if row.expense > 0 %}
+                                    <span class="text-red-700 font-semibold">-{{ row.expense|floatformat:0 }}₮</span>
+                                {% else %}
+                                    <span class="text-gray-300">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-right">
+                                {% if row.closing is not None %}
+                                    <span class="font-semibold {% if row.closing >= 0 %}text-secondary{% else %}text-red-700{% endif %}">
+                                        {{ row.closing|floatformat:0 }}₮
+                                    </span>
+                                {% else %}
+                                    <span class="text-gray-400">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-center no-print">
+                                {% if row.tx.accounting_entry_id %}
+                                    <span class="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
+                                        ✓ {{ row.tx.accounting_entry.entry_number }}
+                                    </span>
+                                {% else %}
+                                    <span class="inline-block bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-xs">
+                                        Холбоогүй
+                                    </span>
+                                    <div class="mt-1">
+                                        <a href="{% url 'main:link_bank_transaction_to_journal' row.tx.id %}"
+                                           class="text-xs text-primary hover:underline">Холбох</a>
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="px-4 py-10 text-center text-gray-400">
+                                <i class="fas fa-inbox text-4xl mb-3 block"></i>
+                                Гүйлгээ олдсонгүй. Шүүлтүүрийг өөрчилж үзнэ үү.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if report_rows %}
+                    <tfoot class="bg-gray-100 border-t-2 border-gray-300">
+                        <tr>
+                            <td colspan="4" class="px-3 py-3 text-sm font-bold text-gray-700 text-right">Нийт дүн:</td>
+                            <td class="px-3 py-3 text-right text-gray-500">—</td>
+                            <td class="px-3 py-3 text-right text-green-700 font-bold">+{{ total_income|floatformat:0 }}₮</td>
+                            <td class="px-3 py-3 text-right text-red-700 font-bold">-{{ total_expense|floatformat:0 }}₮</td>
+                            <td class="px-3 py-3 text-right font-bold text-secondary">
+                                {% if report_rows %}
+                                    {% with last=report_rows|last %}
+                                        {% if last.closing is not None %}{{ last.closing|floatformat:0 }}₮{% else %}—{% endif %}
+                                    {% endwith %}
+                                {% endif %}
+                            </td>
+                            <td class="no-print"></td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    @media print {
+        .no-print { display: none !important; }
+        .print-only { display: block !important; }
+        body { background: white; }
+        table { font-size: 11px; }
+        th, td { padding: 4px 6px !important; }
+    }
+    .print-only { display: none; }
+</style>
+{% endblock %}

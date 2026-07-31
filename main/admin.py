@@ -1,8 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from .models import (
-    UserProfile, Course, Enrollment, Attendance, UserRole, PageContent,
+    UserProfile, Course, Enrollment, Attendance, AttendanceWeekdayTemplate,
+    AttendanceTeacherSelection, TeacherAttendance, CourseTeacherAssignment,
+    UserRole, PageContent,
     ProductCategory, Product, StockMovement,
     Account, Counterparty, Transaction, Purchase, PurchaseItem, Sale, SaleItem,
     ChartOfAccounts, AccountingEntry, BankTransaction, CashFlowIndicator, PaymentAllocation
@@ -15,14 +18,39 @@ class UserProfileInline(admin.StackedInline):
     fields = (
         'role', 'mongolian_name', 'phone', 'birth_date', 'gender',
         'address', 'city', 'district',
+        'profession', 'education', 'current_job', 'facebook_name',
         'enrollment_date', 'is_active_student', 'photo', 'notes'
     )
 
 class UserAdmin(BaseUserAdmin):
     inlines = (UserProfileInline,)
-    list_display = ('username', 'get_mongolian_name', 'get_phone', 'email', 'get_role', 'is_staff', 'is_active')
-    list_filter = ('is_staff', 'is_superuser', 'is_active', 'profile__role')
+    list_display = ('username', 'get_mongolian_name', 'get_phone', 'email', 'get_role', 'is_staff', 'is_active', 'get_groups')
+    list_filter = ('is_staff', 'is_superuser', 'is_active', 'profile__role', 'groups')
     search_fields = ('username', 'email', 'first_name', 'last_name', 'profile__mongolian_name', 'profile__phone')
+    filter_horizontal = ('groups', 'user_permissions')
+    
+    # Fieldsets овервайт хийж тайлбар нэмэх
+    fieldsets = (
+        ('🔐 Нэвтрэх мэдээлэл', {
+            'fields': ('username', 'password'),
+            'description': 'Систем рүү нэвтрэх нэр ба нууц үг'
+        }),
+        ('👤 Хувийн мэдээлэл', {
+            'fields': ('first_name', 'last_name', 'email'),
+            'description': 'Англи нэр, имэйл (Монгол нэр нь доорх "Хэрэглэгчийн мэдээлэл" дээр)'
+        }),
+        ('🔑 Эрхүүд', {
+            'fields': ('is_active', 'is_staff', 'is_superuser'),
+            'description': '⚠️ is_staff=True гэсэн хэрэглэгч л админ панел руу нэвтрэх эрхтэй'
+        }),
+        ('👥 Бүлэг ба тусгай эрхүүд', {
+            'fields': ('groups', 'user_permissions'),
+            'description': '⭐ Sidebar цэс тохируулах: Groups дээр шаардлагатай бүлгүүдийг сонгоно уу (жишээ: Агуулахын менежер, Санхүүчин)'
+        }),
+        ('📅 Чухал огноонууд', {
+            'fields': ('last_login', 'date_joined'),
+        }),
+    )
     
     def get_mongolian_name(self, obj):
         if hasattr(obj, 'profile') and obj.profile.mongolian_name:
@@ -41,6 +69,10 @@ class UserAdmin(BaseUserAdmin):
             return obj.profile.get_role_display()
         return '-'
     get_role.short_description = 'Эрх'
+    
+    def get_groups(self, obj):
+        return ', '.join([group.name for group in obj.groups.all()]) or '-'
+    get_groups.short_description = 'Бүлгүүд'
 
 # Unregister the original User admin
 admin.site.unregister(User)
@@ -53,21 +85,31 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_filter = ('role', 'is_active_student', 'gender', 'city')
     search_fields = ('mongolian_name', 'user__username', 'user__email', 'phone')
     date_hierarchy = 'created_at'
+    readonly_fields = ('created_at', 'updated_at')
     
     fieldsets = (
-        ('Хэрэглэгч', {
-            'fields': ('user', 'role')
+        ('👤 Холбоос', {
+            'fields': ('user',),
+            'description': 'Энэ UserProfile нь Django User-тэй холбогдсон байна. User дээр эрх, бүлэг тохируулна уу.',
         }),
-        ('Хувийн мэдээлэл', {
+        ('🎭 Роль ба эрх', {
+            'fields': ('role',),
+            'description': 'Готопагийн роль (PRESIDENT, MANAGER, TEACHER, STUDENT). Энэ нь sidebar цэсийг удирдана.',
+        }),
+        ('📝 Хувийн мэдээлэл', {
             'fields': ('mongolian_name', 'phone', 'birth_date', 'gender', 'photo')
         }),
-        ('Хаяг', {
+        ('📍 Хаяг', {
             'fields': ('address', 'city', 'district')
         }),
-        ('Сургалт', {
+        ('🎓 Сургалт', {
             'fields': ('enrollment_date', 'is_active_student')
         }),
-        ('Нэмэлт', {
+        ('📅 Огноо', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+        ('📝 Нэмэлт', {
             'fields': ('notes',),
             'classes': ('collapse',)
         }),
@@ -160,6 +202,51 @@ class AttendanceAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('enrollment', 'enrollment__student', 'enrollment__course')
+
+
+@admin.register(AttendanceWeekdayTemplate)
+class AttendanceWeekdayTemplateAdmin(admin.ModelAdmin):
+    list_display = ('course', 'weekdays_display', 'updated_at')
+    search_fields = ('course__name',)
+    readonly_fields = ('created_at', 'updated_at')
+
+    def weekdays_display(self, obj):
+        return obj.weekdays_display
+    weekdays_display.short_description = 'Гаригийн загвар'
+
+
+@admin.register(AttendanceTeacherSelection)
+class AttendanceTeacherSelectionAdmin(admin.ModelAdmin):
+    list_display = ('course', 'teacher_count', 'updated_at')
+    search_fields = ('course__name',)
+    readonly_fields = ('created_at', 'updated_at')
+
+    def teacher_count(self, obj):
+        return len(obj.get_teacher_ids())
+    teacher_count.short_description = 'Багшийн тоо'
+
+
+@admin.register(CourseTeacherAssignment)
+class CourseTeacherAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('course', 'teacher', 'created_at')
+    list_filter = ('course', 'teacher')
+    search_fields = ('course__name', 'teacher__mongolian_name', 'teacher__first_name', 'teacher__last_name')
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('course', 'teacher', 'teacher__user')
+
+
+@admin.register(TeacherAttendance)
+class TeacherAttendanceAdmin(admin.ModelAdmin):
+    list_display = ('course', 'teacher', 'date', 'present')
+    list_filter = ('present', 'date', 'course')
+    search_fields = ('course__name', 'teacher__mongolian_name', 'teacher__first_name', 'teacher__last_name')
+    date_hierarchy = 'date'
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('course', 'teacher', 'teacher__user')
 
 @admin.register(PageContent)
 class PageContentAdmin(admin.ModelAdmin):
@@ -309,10 +396,10 @@ class StockMovementInline(admin.TabularInline):
 class StockMovementAdmin(admin.ModelAdmin):
     list_display = (
         'created_at', 'product', 'movement_type', 'quantity',
-        'price', 'total_amount', 'customer_name', 'created_by'
+        'price', 'total_amount', 'customer_name', 'salesperson', 'created_by'
     )
-    list_filter = ('movement_type', 'created_at', 'product__category')
-    search_fields = ('product__name', 'product__code', 'reference_number', 'customer_name')
+    list_filter = ('movement_type', 'created_at', 'product__category', 'salesperson')
+    search_fields = ('product__name', 'product__code', 'reference_number', 'customer_name', 'salesperson__first_name', 'salesperson__last_name')
     readonly_fields = ('total_amount', 'created_at', 'created_by')
     date_hierarchy = 'created_at'
     
@@ -324,7 +411,7 @@ class StockMovementAdmin(admin.ModelAdmin):
             'fields': ('quantity', 'price', 'total_amount')
         }),
         ('Холбогдох мэдээлэл', {
-            'fields': ('reference_number', 'customer_name', 'notes')
+            'fields': ('reference_number', 'customer_name', 'salesperson', 'notes')
         }),
         ('Системийн мэдээлэл', {
             'fields': ('created_at', 'created_by'),
@@ -757,3 +844,35 @@ class PaymentAllocationAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('transaction', 'student', 'student__user', 'course')
+
+# Custom Group Admin with better display
+class CustomGroupAdmin(admin.ModelAdmin):
+    """Бүлгийн удирдлага - эрхүүдийг тохируулах"""
+    list_display = ('name', 'get_users_count', 'get_permissions_count')
+    search_fields = ('name',)
+    filter_horizontal = ('permissions',)
+    
+    fieldsets = (
+        ('Бүлгийн мэдээлэл', {
+            'fields': ('name',),
+            'description': 'Ижил төстэй эрхтэй хэрэглэгчдийг нэг бүлэгт нэгтгэж удирдана.'
+        }),
+        ('Эрхүүд', {
+            'fields': ('permissions',),
+            'description': 'Энэ бүлэгт харьяалагдах хэрэглэгчид эдгээр эрхийг автоматаар авна.'
+        }),
+    )
+    
+    def get_users_count(self, obj):
+        count = obj.user_set.count()
+        return f'{count} хэрэглэгч'
+    get_users_count.short_description = 'Хэрэглэгчид'
+    
+    def get_permissions_count(self, obj):
+        count = obj.permissions.count()
+        return f'{count} эрх'
+    get_permissions_count.short_description = 'Эрхүүд'
+
+# Unregister default Group admin and register custom one
+admin.site.unregister(Group)
+admin.site.register(Group, CustomGroupAdmin)

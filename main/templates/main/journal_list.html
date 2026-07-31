@@ -37,7 +37,7 @@
 
         <!-- Хайлт ба Шүүлт -->
         <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <form method="GET" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Хайлт</label>
                     <input type="text" name="search" value="{{ search }}" 
@@ -54,10 +54,62 @@
                     <input type="date" name="date_to" value="{{ date_to }}" 
                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Дебит данс</label>
+                    <select name="debit_account" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Бүгд</option>
+                        {% for account in debit_accounts %}
+                            <option value="{{ account.id }}" {% if debit_account_id == account.id|stringformat:'s' %}selected{% endif %}>
+                                {{ account.code }} - {{ account.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Кредит данс</label>
+                    <select name="credit_account" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Бүгд</option>
+                        {% for account in credit_accounts %}
+                            <option value="{{ account.id }}" {% if credit_account_id == account.id|stringformat:'s' %}selected{% endif %}>
+                                {{ account.code }} - {{ account.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Үүсгэсэн хэрэглэгч</label>
+                    <select name="created_by" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Бүгд</option>
+                        {% for creator in creators %}
+                            <option value="{{ creator.id }}" {% if created_by_id == creator.id|stringformat:'s' %}selected{% endif %}>
+                                {{ creator.get_full_name|default:creator.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Банкны гүйлгээний ID</label>
+                    <input type="text" name="bank_transaction_id" value="{{ bank_transaction_id }}" 
+                           placeholder="Жишээ: 6444"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Холболтын төлөв</label>
+                    <select name="linked_status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="" {% if not linked_status %}selected{% endif %}>Бүгд</option>
+                        <option value="linked" {% if linked_status == 'linked' %}selected{% endif %}>Холбогдсон</option>
+                        <option value="unlinked" {% if linked_status == 'unlinked' %}selected{% endif %}>Холбогдоогүй</option>
+                    </select>
+                </div>
                 <div class="flex items-end">
                     <button type="submit" class="w-full bg-secondary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition">
                         <i class="fas fa-search mr-2"></i>Хайх
                     </button>
+                </div>
+                <div class="flex items-end">
+                    <a href="{% url 'main:journal_list' %}" class="w-full text-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-gray-700">
+                        Цэвэрлэх
+                    </a>
                 </div>
             </form>
         </div>
@@ -65,54 +117,149 @@
         <!-- Журналын жагсаалт -->
         <div class="bg-white rounded-lg shadow-sm overflow-hidden">
             {% if entries %}
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
+            <div>
+                <table class="w-full table-fixed divide-y divide-gray-200 text-xs">
+                    <colgroup>
+                        <col style="width:7%">   <!-- Огноо -->
+                        <col style="width:8%">   <!-- Гүйлгээний № -->
+                        <col style="width:12%">  <!-- Дебит данс -->
+                        <col style="width:9%">   <!-- Дебит дүн -->
+                        <col style="width:12%">  <!-- Кредит данс -->
+                        <col style="width:9%">   <!-- Кредит дүн -->
+                        <col style="width:15%">  <!-- Тайлбар -->
+                        <col style="width:22%">  <!-- Холбогдсон баримт -->
+                        <col style="width:6%">   <!-- Үйлдэл -->
+                    </colgroup>
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Огноо</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Гүйлгээний №</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дебит данс</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Дебит дүн</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кредит данс</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Кредит дүн</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Тайлбар</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Үйлдэл</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Огноо</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Гүйлгээний №</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дебит данс</th>
+                            <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Дебит дүн</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кредит данс</th>
+                            <th class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Кредит дүн</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Тайлбар</th>
+                            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Холбогдсон баримт</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Үйлдэл</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for entry in entries %}
                         <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td class="px-2 py-2 text-xs text-gray-900 whitespace-nowrap">
                                 {{ entry.entry_date|date:"Y-m-d" }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">
-                                {{ entry.entry_number }}
+                            <td class="px-2 py-2 text-xs font-medium text-primary max-w-0">
+                                <div class="truncate" title="{{ entry.entry_number }}">{{ entry.entry_number }}</div>
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-2 py-2 text-xs text-gray-900">
                                 <div class="font-medium">{{ entry.debit_account.code }}</div>
-                                <div class="text-gray-500 text-xs">{{ entry.debit_account.name }}</div>
+                                <div class="text-gray-500 truncate" title="{{ entry.debit_account.name }}">{{ entry.debit_account.name }}</div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600">
-                                {{ entry.debit_amount|floatformat:2 }}₮
+                            <td class="px-2 py-2 text-xs text-right font-medium text-green-600 whitespace-nowrap">
+                                {{ entry.debit_amount|floatformat:0 }}₮
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-2 py-2 text-xs text-gray-900">
                                 <div class="font-medium">{{ entry.credit_account.code }}</div>
-                                <div class="text-gray-500 text-xs">{{ entry.credit_account.name }}</div>
+                                <div class="text-gray-500 truncate" title="{{ entry.credit_account.name }}">{{ entry.credit_account.name }}</div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-red-600">
-                                {{ entry.credit_amount|floatformat:2 }}₮
+                            <td class="px-2 py-2 text-xs text-right font-medium text-red-600 whitespace-nowrap">
+                                {{ entry.credit_amount|floatformat:0 }}₮
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
-                                {{ entry.description|truncatewords:10 }}
+                            <td class="px-2 py-2 text-xs text-gray-900">
+                                <div class="truncate" title="{{ entry.description }}">{{ entry.description|truncatewords:8 }}</div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm">
-                                <form method="POST" action="{% url 'main:journal_delete' entry.id %}" 
-                                      onsubmit="return confirm('Устгахдаа итгэлтэй байна уу?')" class="inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="text-red-600 hover:text-red-900">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
+                            <td class="px-2 py-2 text-xs text-gray-900">
+                                {% with entry.banktransaction_set.all as txs %}
+                                    {% if txs %}
+                                        <div class="space-y-1">
+                                            {% for tx in txs %}
+                                                <div class="rounded border border-gray-200 p-1.5 bg-gray-50">
+                                                    <div class="text-xs text-gray-700 truncate" title="{{ tx.description }}">
+                                                        <a href="{% url 'main:link_bank_transaction_to_journal' tx.id %}" class="text-primary hover:underline font-medium">
+                                                            #{{ tx.id }}
+                                                        </a>
+                                                        · {{ tx.description|truncatewords:4 }}
+                                                    </div>
+                                                    <div class="text-xs text-gray-500">
+                                                        {{ tx.transaction_date|date:"Y-m-d" }} · {{ tx.income_amount|floatformat:0 }}₮
+                                                    </div>
+
+                                                    {% if tx.extra_splits.exists %}
+                                                        <div class="text-xs mt-1 space-y-0.5">
+                                                            <div class="text-gray-500 font-medium">Хуваарилалт:</div>
+                                                            {% for split in tx.extra_splits.all %}
+                                                                <div class="flex justify-between bg-purple-50 border border-purple-200 rounded px-1 py-0.5">
+                                                                    <span class="text-purple-700 truncate" title="{{ split.account.name }}">{{ split.account.code }} · {{ split.account.name|truncatechars:18 }}</span>
+                                                                    <span class="text-purple-900 font-semibold ml-1 whitespace-nowrap">{{ split.amount|floatformat:0 }}₮</span>
+                                                                </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+
+                                                    {% if tx.allocations.exists or tx.sale_allocations.exists or tx.income_student or tx.income_sale %}
+                                                        {% if tx.allocations.exists %}
+                                                            <div class="text-xs mt-0.5 space-y-0.5">
+                                                                {% for alloc in tx.allocations.all %}
+                                                                    <div class="text-gray-600 truncate" title="{{ alloc.student.full_name }} - {{ alloc.course.name }}">
+                                                                        {{ alloc.student.full_name }} · {{ alloc.year }}/{{ alloc.month }}-р сар ({{ alloc.amount|floatformat:0 }}₮)
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        {% elif tx.income_student %}
+                                                            <div class="text-xs text-gray-600 truncate">
+                                                                {{ tx.income_student.full_name }} - {{ tx.income_month }}-р сар
+                                                            </div>
+                                                        {% endif %}
+
+                                                        {% if tx.sale_allocations.exists %}
+                                                            <div class="text-xs mt-0.5 space-y-0.5">
+                                                                {% for sale_alloc in tx.sale_allocations.all %}
+                                                                    <div class="bg-indigo-50 border border-indigo-200 rounded px-1 py-0.5">
+                                                                        <span class="font-medium text-indigo-800">{{ sale_alloc.amount|floatformat:0 }}₮</span>
+                                                                        ·
+                                                                        <a href="{% url 'main:sale_detail' sale_alloc.sale.id %}" class="text-primary hover:underline">
+                                                                            {{ sale_alloc.sale.sale_number|default:sale_alloc.sale.id }}
+                                                                        </a>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        {% elif tx.income_sale %}
+                                                            <div class="text-xs mt-0.5">
+                                                                <a href="{% url 'main:sale_detail' tx.income_sale.id %}" class="text-primary hover:underline">{{ tx.income_sale.sale_number|default:tx.income_sale.id }}</a>
+                                                            </div>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <div class="text-xs mt-0.5 text-amber-700">
+                                                            Хуваарилагдаагүй
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-gray-400">—</span>
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td class="px-2 py-2 whitespace-nowrap text-center text-xs">
+                                <div class="flex items-center justify-center gap-2">
+                                    <a href="{% url 'main:journal_list' %}?search={{ entry.entry_number }}"
+                                       class="text-primary hover:text-opacity-80"
+                                       title="Энэ бичилтийг шүүж харах">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                                                        <form method="POST" action="{% url 'main:journal_delete' entry.id %}" 
+                                          onsubmit="return confirm('Устгахдаа итгэлтэй байна уу?')" class="inline">
+                                        {% csrf_token %}
+                                                                                <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                                        <button type="submit"
+                                                class="text-red-600 hover:text-red-900"
+                                                title="Устгах">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -129,6 +276,25 @@
             </div>
             {% endif %}
         </div>
+
+        {% if is_paginated %}
+        <div class="mt-6 bg-white rounded-lg shadow-sm px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="text-sm text-gray-600">
+                Нийт {{ page_obj.paginator.count }} бичилт · {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} хуудас
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="px-3 py-2 border rounded hover:bg-gray-50 text-sm">Эхлэл</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="px-3 py-2 border rounded hover:bg-gray-50 text-sm">Өмнөх</a>
+                {% endif %}
+                <span class="px-3 py-2 bg-primary text-white rounded text-sm">{{ page_obj.number }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="px-3 py-2 border rounded hover:bg-gray-50 text-sm">Дараах</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="px-3 py-2 border rounded hover:bg-gray-50 text-sm">Төгсгөл</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Буцах -->
         <div class="mt-6">

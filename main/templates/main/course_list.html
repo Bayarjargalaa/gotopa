@@ -44,7 +44,7 @@
                             <span class="text-gray-600">Багш:</span>
                             <span class="font-bold">
                                 {% if course.teacher %}
-                                    {{ course.teacher.mongolian_name|default:course.teacher.user.username }}
+                                    {{ course.teacher.full_name|default:course.teacher.user.username }}
                                 {% else %}
                                     <span class="text-gray-400">Багш томилогдоогүй</span>
                                 {% endif %}

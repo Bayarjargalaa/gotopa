@@ -1,0 +1,202 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Үнэгүй зарлагадах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+<div class="container mx-auto px-4 max-w-4xl">
+
+    <!-- Буцах -->
+    <div class="mb-4">
+        <a href="{% url 'main:inventory_list' %}" class="text-primary hover:underline text-sm">← Агуулах руу буцах</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold text-secondary mb-1">Үнэгүй зарлагадах</h2>
+        <p class="text-sm text-gray-500 mb-6">
+            Борлуулалтгүй — хаягдал, гэмтэл, дотоод хэрэглээ, шилжүүлэг зэрэгт зориулсан зарлага.
+            Бараа нь <strong>0₮ үнээр</strong> агуулахаас гарна.
+        </p>
+
+        <form method="post" id="outgoing-form">
+            {% csrf_token %}
+
+            <!-- Шалтгаан + тэмдэглэл -->
+            <div class="grid md:grid-cols-2 gap-4 mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Шалтгаан <span class="text-red-500">*</span></label>
+                    <select name="reason" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary">
+                        {% for val, label in reason_choices %}
+                        <option value="{{ val }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Тэмдэглэл</label>
+                    <input type="text" name="notes" placeholder="Нэмэлт тайлбар..."
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary">
+                </div>
+            </div>
+
+            <!-- Барааны хүснэгт -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-semibold text-secondary">Зарлагадах барааны жагсаалт</h3>
+                    <button type="button" id="add-row"
+                            class="bg-primary text-white text-sm px-3 py-1.5 rounded-lg hover:bg-opacity-90">
+                        + Мөр нэмэх
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full border border-gray-200 rounded-lg overflow-hidden" id="rows-table">
+                        <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                            <tr>
+                                <th class="px-4 py-3 text-left w-2/3">Бараа</th>
+                                <th class="px-4 py-3 text-center w-28">Тоо ширхэг</th>
+                                <th class="px-4 py-3 text-center w-24">Одоогийн үлдэгдэл</th>
+                                <th class="px-4 py-3 text-center w-16">Устгах</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows-body">
+                            <!-- JS-ээр мөрүүд нэмэгдэнэ -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Нийт -->
+            <div class="bg-orange-50 border border-orange-200 rounded-lg px-5 py-3 mb-6 flex justify-between items-center">
+                <span class="text-sm text-orange-700 font-medium">Нийт зарлагадах тоо ширхэг:</span>
+                <span class="text-xl font-bold text-orange-700" id="total-qty">0</span>
+            </div>
+
+            <!-- Товчнууд -->
+            <div class="flex gap-3">
+                <button type="submit"
+                        class="flex-1 bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700 text-sm">
+                    ✓ Зарлагадах
+                </button>
+                <a href="{% url 'main:inventory_list' %}"
+                   class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-300 text-center text-sm">
+                    Болих
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+</div>
+
+<!-- Бараануудын JSON өгөгдөл -->
+<script>
+const PRODUCTS = [
+    {% for p in products %}
+    {
+        id: {{ p.id|stringformat:'d' }},
+        name: "{{ p.name|escapejs }}",
+        code: "{{ p.code|escapejs }}",
+        stock: {{ p.current_stock|stringformat:'d' }},
+    },
+    {% endfor %}
+];
+
+let rowCount = 0;
+
+function buildSelectOptions() {
+    return PRODUCTS.map(p =>
+        `<option value="${p.id}" data-stock="${p.stock}">${p.code} — ${p.name} (үлдэгдэл: ${p.stock})</option>`
+    ).join('');
+}
+
+function addRow() {
+    rowCount++;
+    const tbody = document.getElementById('rows-body');
+    const tr = document.createElement('tr');
+    tr.className = 'border-t border-gray-100 hover:bg-gray-50';
+    tr.id = `row-${rowCount}`;
+    tr.innerHTML = `
+        <td class="px-3 py-2">
+            <select name="product_id[]" required
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary product-select"
+                    data-row="${rowCount}">
+                <option value="">— Бараа сонгох —</option>
+                ${buildSelectOptions()}
+            </select>
+        </td>
+        <td class="px-3 py-2">
+            <input type="number" name="quantity[]" value="1" min="1" required
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-primary qty-input"
+                   onchange="updateTotal()">
+        </td>
+        <td class="px-3 py-2 text-center">
+            <span class="text-sm text-gray-500 stock-display" id="stock-${rowCount}">—</span>
+        </td>
+        <td class="px-3 py-2 text-center">
+            <button type="button" onclick="removeRow('row-${rowCount}')"
+                    class="text-red-400 hover:text-red-600 font-bold text-lg leading-none">×</button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+
+    tr.querySelector('.product-select').addEventListener('change', function() {
+        const opt = this.options[this.selectedIndex];
+        const stock = opt.dataset.stock;
+        const el = document.getElementById(`stock-${this.dataset.row}`);
+        el.textContent = stock !== undefined ? stock + ' ш' : '—';
+        // Улаанаар тэмдэглэх хэрвээ үлдэгдэл 0 бол
+        if (stock !== undefined && parseInt(stock) <= 0) {
+            el.classList.add('text-red-600', 'font-bold');
+            el.classList.remove('text-gray-500');
+        } else {
+            el.classList.remove('text-red-600', 'font-bold');
+            el.classList.add('text-gray-500');
+        }
+        updateTotal();
+    });
+
+    updateTotal();
+}
+
+function removeRow(rowId) {
+    const el = document.getElementById(rowId);
+    if (el) el.remove();
+    updateTotal();
+}
+
+function updateTotal() {
+    const inputs = document.querySelectorAll('.qty-input');
+    let total = 0;
+    inputs.forEach(inp => {
+        const v = parseInt(inp.value) || 0;
+        if (v > 0) total += v;
+    });
+    document.getElementById('total-qty').textContent = total;
+}
+
+document.getElementById('add-row').addEventListener('click', addRow);
+
+addRow();
+
+document.getElementById('outgoing-form').addEventListener('submit', function(e) {
+    const rows = document.querySelectorAll('#rows-body tr');
+    if (rows.length === 0) {
+        e.preventDefault();
+        alert('Дор хаяж нэг бараа оруулна уу.');
+        return;
+    }
+    let hasEmpty = false;
+    rows.forEach(tr => {
+        const sel = tr.querySelector('select[name="product_id[]"]');
+        const qty = tr.querySelector('input[name="quantity[]"]');
+        if (!sel.value || !qty.value || parseInt(qty.value) <= 0) hasEmpty = true;
+    });
+    if (hasEmpty) {
+        e.preventDefault();
+        alert('Бүх мөрийн бараа болон тоо ширхэгийг зөв оруулна уу.');
+    }
+});
+</script>
+{% endblock %}

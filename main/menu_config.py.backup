@@ -1,0 +1,340 @@
+﻿"""
+Ð¦ÑÑÐ½Ð¸Ð¹ Ñ‚Ð¾Ñ…Ð¸Ñ€Ð³Ð¾Ð¾ - ÑÑ€Ñ…ÑÑÑ€ ÑˆÒ¯Ò¯Ð¶ Ñ…Ð°Ñ€ÑƒÑƒÐ»Ð°Ñ…
+"""
+
+# Sidebar Ñ†ÑÑ (Dashboard sidebar)
+SIDEBAR_MENU = [
+    {
+        'section': 'Ð¥ÑƒÐ²Ð¸Ð¹Ð½',
+        'icon': 'fas fa-user-circle',
+        'permissions': ['authenticated'],  # ÐÑÐ²Ñ‚ÑÑ€ÑÑÐ½ Ð±Ò¯Ñ… Ñ…ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡
+        'items': [
+            {
+                'label': 'Dashboard',
+                'url_name': 'main:dashboard',
+                'icon': 'fas fa-th-large',
+                'permissions': ['authenticated'],
+            },
+            {
+                'label': 'ÐœÐ¸Ð½Ð¸Ð¹ Ð¼ÑÐ´ÑÑÐ»ÑÐ»',
+                'url_name': 'main:profile',
+                'icon': 'fas fa-user',
+                'permissions': ['authenticated'],
+            },
+        ]
+    },
+    {
+        'section': 'Ð¡Ð°Ð½Ñ…Ò¯Ò¯',
+        'icon': 'fas fa-coins',
+        'permissions': [],  # Ð¥Ð¾Ð¾ÑÐ¾Ð½ = item-Ò¯Ò¯Ð´Ð¸Ð¹Ð½ ÑÑ€Ñ…ÑÑÑ€ ÑˆÒ¯Ò¯Ð³Ð´ÑÐ½Ñ
+        'items': [
+            {
+                'label': 'Ð¡Ð°Ð½Ñ…Ò¯Ò¯Ð³Ð¸Ð¹Ð½ Ñ…ÑÐ½Ð°Ð»Ñ‚',
+                'url_name': 'main:finance_dashboard',
+                'icon': 'fas fa-chart-line',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_accountingentry'],
+            },
+            {
+                'label': 'Ð–ÑƒÑ€Ð½Ð°Ð»',
+                'url_name': 'main:journal_list',
+                'icon': 'fas fa-book',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_accountingentry'],
+            },
+            {
+                'label': 'Ð”Ð°Ð½ÑÐ½Ñ‹ Ñ‚Ó©Ð»Ó©Ð²Ð»Ó©Ð³Ó©Ó©',
+                'url_name': 'main:chart_of_accounts_list',
+                'icon': 'fas fa-list-alt',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_chartofaccounts'],
+            },
+            {
+                'label': 'Ð‘Ð°Ð½ÐºÐ½Ñ‹ Ñ…ÑƒÑƒÐ»Ð³Ð° Ð¾Ñ€ÑƒÑƒÐ»Ð°Ñ…',
+                'url_name': 'main:import_bank_transactions',
+                'icon': 'fas fa-file-import',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.add_banktransaction'],
+            },
+            {
+                'label': 'Ð‘Ð°Ð½ÐºÐ½Ñ‹ Ð³Ò¯Ð¹Ð»Ð³ÑÑ',
+                'url_name': 'main:bank_transaction_list',
+                'icon': 'fas fa-list',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_banktransaction'],
+            },
+            {
+                'label': 'ÐšÐ°ÑÑÑ‹Ð½ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»',
+                'url_name': 'main:cash_transaction_list',
+                'icon': 'fas fa-money-bill-wave',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_banktransaction'],
+            },
+        ]
+    },
+    {
+        'section': 'ðŸ“¦ Ð‘Ð°Ñ€Ð°Ð° Ð¼Ð°Ñ‚ÐµÑ€Ð¸Ð°Ð»',
+        'icon': 'fas fa-boxes',
+        'permissions': [],  # Item-Ò¯Ò¯Ð´Ð¸Ð¹Ð½ ÑÑ€Ñ…ÑÑÑ€ ÑˆÒ¯Ò¯Ð³Ð´ÑÐ½Ñ
+        'items': [
+            {
+                'label': 'Ð‘Ð°Ñ€Ð°Ð° Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ»',
+                'url_name': 'main:inventory_list',
+                'icon': 'fas fa-boxes',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_view_inventory', 'perm:main.view_product'],
+            },
+            {
+                'label': 'Ð¥ÑƒÐ´Ð°Ð»Ð´Ð°Ð½ Ð°Ð²Ð°Ð»Ñ‚',
+                'url_name': 'main:purchase_create',
+                'icon': 'fas fa-arrow-down',
+                'color': 'text-blue-600 hover:bg-blue-600',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_manage_inventory', 'perm:main.add_purchase'],
+            },
+            {
+                'label': 'Ð‘Ð¾Ñ€Ð»ÑƒÑƒÐ»Ð°Ð»Ñ‚',
+                'url_name': 'main:sale_create',
+                'icon': 'fas fa-arrow-up',
+                'color': 'text-green-600 hover:bg-green-600',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_manage_inventory', 'perm:main.add_sale'],
+            },
+            {
+                'label': 'Ð¥Ó©Ð´Ó©Ð»Ð³Ó©Ó©Ð½',
+                'url_name': 'main:stock_movement_list',
+                'icon': 'fas fa-exchange-alt',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_view_inventory', 'perm:main.view_stockmovement'],
+            },
+            {
+                'label': 'Ð¥ÑƒÐ´Ð°Ð»Ð´Ð°Ð½ Ð°Ð²Ð°Ð»Ñ‚Ñ‹Ð½ Ð¶Ð°Ð³ÑÐ°Ð°Ð»Ñ‚',
+                'url_name': 'main:purchase_list',
+                'icon': 'fas fa-shopping-cart',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_view_inventory', 'perm:main.view_purchase'],
+            },
+            {
+                'label': 'Ð‘Ð¾Ñ€Ð»ÑƒÑƒÐ»Ð°Ð»Ñ‚Ñ‹Ð½ Ð¶Ð°Ð³ÑÐ°Ð°Ð»Ñ‚',
+                'url_name': 'main:sale_list',
+                'icon': 'fas fa-cash-register',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'perm:main.can_view_inventory', 'perm:main.view_sale'],
+            },
+        ]
+    },
+    {
+        'section': 'ðŸ‘¥ Ð¥Ð°Ñ€Ð¸Ð»Ñ†Ð°Ð³Ñ‡',
+        'icon': 'fas fa-users',
+        'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€'],
+        'items': [
+            {
+                'label': 'Ð¥Ð°Ñ€Ð¸Ð»Ñ†Ð°Ð³Ñ‡Ð¸Ð¹Ð½ Ð¶Ð°Ð³ÑÐ°Ð°Ð»Ñ‚',
+                'url_name': 'main:counterparty_list',
+                'icon': 'fas fa-users',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€'],
+            },
+            {
+                'label': 'Ð¥Ð°Ñ€Ð¸Ð»Ñ†Ð°Ð³Ñ‡ Ð±Ò¯Ñ€Ñ‚Ð³ÑÑ…',
+                'url_name': 'main:counterparty_create',
+                'icon': 'fas fa-user-plus',
+                'color': 'text-purple-600 hover:bg-purple-600',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€'],
+            },
+        ]
+    },
+    {
+        'section': 'ðŸ“Š Ð¢Ð°Ð¹Ð»Ð°Ð½',
+        'icon': 'fas fa-chart-bar',
+        'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'group:Ð¥Ð°Ñ€Ð°Ð³Ñ‡'],
+        'items': [
+            {
+                'label': 'Ð¢Ð¾Ð²Ñ‡Ð¾Ð¾ Ñ‚Ð°Ð¹Ð»Ð°Ð½ /Ñ‚Ð¾Ð¾ ÑˆÐ¸Ñ€Ñ…ÑÐ³/',
+                'url_name': 'main:inventory_summary_quantity',
+                'icon': 'fas fa-chart-bar',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'group:Ð¥Ð°Ñ€Ð°Ð³Ñ‡'],
+            },
+            {
+                'label': 'Ð¢Ð¾Ð²Ñ‡Ð¾Ð¾ Ñ‚Ð°Ð¹Ð»Ð°Ð½ /Ð±Ð¾Ñ€Ð»ÑƒÑƒÐ»Ð°Ð»Ñ‚/',
+                'url_name': 'main:inventory_summary_sales',
+                'icon': 'fas fa-chart-line',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'group:Ð¥Ð°Ñ€Ð°Ð³Ñ‡'],
+            },
+            {
+                'label': 'Ð¢Ð¾Ð²Ñ‡Ð¾Ð¾ Ñ‚Ð°Ð¹Ð»Ð°Ð½ /Ñ…ÑƒÐ´Ð°Ð»Ð´Ð°Ð½ Ð°Ð²Ð°Ð»Ñ‚/',
+                'url_name': 'main:inventory_summary_purchases',
+                'icon': 'fas fa-chart-area',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'group:Ð¥Ð°Ñ€Ð°Ð³Ñ‡'],
+            },
+            {
+                'label': 'Ò®Ð»Ð´ÑÐ³Ð´Ð»Ð¸Ð¹Ð½ Ñ‚Ð°Ð¹Ð»Ð°Ð½',
+                'url_name': 'main:inventory_balance_report',
+                'icon': 'fas fa-balance-scale',
+                'permissions': ['is_admin', 'role:ACCOUNTANT', 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€', 'group:Ð¥Ð°Ñ€Ð°Ð³Ñ‡'],
+            },
+        ]
+    },
+    {
+        'section': 'Ð¡ÑƒÑ€Ð³Ð°Ð»Ñ‚',
+        'icon': 'fas fa-graduation-cap',
+        'permissions': ['is_admin', 'is_teacher', 'role:MANAGER'],  # MANAGER Ñ€Ð¾Ð»ÑŒ Ð½ÑÐ¼ÑÐ³Ð´Ð»ÑÑ
+        'items': [
+            {
+                'label': 'Ð¥Ð¸Ñ‡ÑÑÐ»Ò¯Ò¯Ð´',
+                'url_name': 'main:course_list',
+                'icon': 'fas fa-graduation-cap',
+                'permissions': ['is_admin', 'is_teacher', 'role:MANAGER'],
+            },
+            {
+                'label': 'Ð˜Ñ€Ñ† Ð±Ò¯Ñ€Ñ‚Ð³ÑÑ…',
+                'url_name': 'main:attendance_list',
+                'icon': 'fas fa-clipboard-check',
+                'permissions': ['is_admin', 'is_teacher', 'role:MANAGER'],  # ÐœÐµÐ½ÐµÐ¶ÐµÑ€ Ð¸Ñ€Ñ† Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ½Ñ
+            },
+            {
+                'label': 'Ð¢Ó©Ð»Ð±Ó©Ñ€',
+                'url_name': 'main:student_payments',
+                'icon': 'fas fa-money-bill-wave',
+                'permissions': ['is_admin', 'is_teacher', 'role:MANAGER'],  # ÐœÐµÐ½ÐµÐ¶ÐµÑ€ Ñ‚Ó©Ð»Ð±Ó©Ñ€ Ñ…Ð°Ñ€Ð½Ð°
+            },
+            {
+                'label': 'Ð¡ÑƒÑ€Ð°Ð³Ñ‡Ð¸Ð´',
+                'url_name': 'main:student_list',
+                'icon': 'fas fa-users',
+                'permissions': ['is_admin', 'role:MANAGER'],  # ÐœÐµÐ½ÐµÐ¶ÐµÑ€ ÑÑƒÑ€Ð°Ð³Ñ‡Ð¸Ð´ Ñ…Ð°Ñ€Ð½Ð°
+            },
+            {
+                'label': 'Ð¡ÑƒÑ€Ð°Ð³Ñ‡ Ð±Ò¯Ñ€Ñ‚Ð³ÑÑ…',
+                'url_name': 'main:student_create',
+                'icon': 'fas fa-user-plus',
+                'permissions': ['is_admin', 'role:MANAGER'],  # ÐœÐµÐ½ÐµÐ¶ÐµÑ€ ÑÑƒÑ€Ð°Ð³Ñ‡ Ð±Ò¯Ñ€Ñ‚Ð³ÑÐ½Ñ
+            },
+            {
+                'label': 'Ð‘Ð°Ð³Ñˆ Ð½Ð°Ñ€',
+                'url_name': 'main:teacher_list',
+                'icon': 'fas fa-chalkboard-teacher',
+                'permissions': ['is_admin'],
+            },
+            {
+                'label': 'Ð‘Ð°Ð³Ñˆ Ð±Ò¯Ñ€Ñ‚Ð³ÑÑ…',
+                'url_name': 'main:teacher_create',
+                'icon': 'fas fa-user-tie',
+                'permissions': ['is_admin'],
+            },
+        ]
+    },
+    {
+        'section': 'Ð£Ð´Ð¸Ñ€Ð´Ð»Ð°Ð³Ð°',
+        'icon': 'fas fa-cog',
+        'permissions': ['is_admin', 'is_superuser'],
+        'items': [
+            {
+                'label': 'Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð¹Ð½ ÑÑ€Ñ…',
+                'url_name': 'main:user_management',
+                'icon': 'fas fa-users-cog',
+                'permissions': ['is_admin', 'is_superuser'],
+            },
+            {
+                'label': 'Ð­Ñ€Ñ…Ð¸Ð¹Ð½ Ð±Ò¯Ð»Ð³Ò¯Ò¯Ð´',
+                'url_name': 'main:group_list',
+                'icon': 'fas fa-users',
+                'permissions': ['is_admin', 'is_superuser'],
+            },
+            {
+                'label': 'Ð Ð¾Ð»ÑŒ-Ñ‹Ð½ Ð¼ÑÐ´ÑÑÐ»ÑÐ»',
+                'url_name': 'main:role_info',
+                'icon': 'fas fa-id-badge',
+                'permissions': ['authenticated'],  # Ð‘Ò¯Ñ… Ð½ÑÐ²Ñ‚ÑÑ€ÑÑÐ½ Ñ…ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡
+            },
+            {
+                'label': 'ÐÐ´Ð¼Ð¸Ð½ Ñ…ÑÑÑÐ³',
+                'url_name': 'admin:index',
+                'icon': 'fas fa-cog',
+                'permissions': ['is_staff'],
+                'external': True,  # ÐÐ´Ð¼Ð¸Ð½ Ð¿Ð°Ð½ÐµÐ» Ð±Ð¾Ð» ÑˆÑƒÑƒÐ´ URL Ð°ÑˆÐ¸Ð³Ð»Ð°Ð½Ð°
+            },
+        ]
+    },
+]
+
+
+def user_has_permission(user, permissions):
+    """
+    Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡ ÑÑ€Ñ…Ñ‚ÑÐ¹ ÑÑÑÑ…Ð¸Ð¹Ð³ ÑˆÐ°Ð»Ð³Ð°Ñ…
+    
+    Ð‘Ð¾Ð»Ð¾Ð¼Ð¶Ð¸Ñ‚ ÑÑ€Ñ…Ò¯Ò¯Ð´:
+    - 'authenticated': ÐÑÐ²Ñ‚ÑÑ€ÑÑÐ½ Ð±Ò¯Ñ… Ñ…ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡
+    - 'is_admin': ÐÐ´Ð¼Ð¸Ð½ ÑÑ€Ñ…
+    - 'is_accountant': ÐÑÐ³Ñ‚Ð»Ð°Ð½ Ð±Ð¾Ð´Ð¾Ð³Ñ‡
+    - 'is_teacher': Ð‘Ð°Ð³Ñˆ
+    - 'is_staff': Staff ÑÑ‚Ð°Ñ‚ÑƒÑÑ‚Ð°Ð¹
+    - 'is_superuser': Superuser
+    - 'role:MANAGER': Ð¢Ð¾Ð´Ð¾Ñ€Ñ…Ð¾Ð¹ Ñ€Ð¾Ð»ÑŒ
+    - 'group:ÐÐ³ÑƒÑƒÐ»Ð°Ñ…Ñ‹Ð½ Ð¼ÐµÐ½ÐµÐ¶ÐµÑ€': Ð¢Ð¾Ð´Ð¾Ñ€Ñ…Ð¾Ð¹ Ð±Ò¯Ð»ÑÐ³
+    - 'perm:main.add_product': Django permission
+    """
+    if not user.is_authenticated:
+        return False
+    
+    # ÐÑÐ³ Ñ‡ ÑÑ€Ñ… Ð·Ð°Ð°Ð°Ð³Ò¯Ð¹ Ð±Ð¾Ð» Ð±Ò¯Ñ… Ð½ÑÐ²Ñ‚ÑÑ€ÑÑÐ½ Ñ…ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð´ Ñ…Ð°Ñ€Ð°Ð³Ð´Ð°Ð½Ð°
+    if not permissions:
+        return True
+    
+    for permission in permissions:
+        # Authenticated
+        if permission == 'authenticated' and user.is_authenticated:
+            return True
+        
+        # Superuser Ð±Ð¾Ð» Ð±Ò¯Ð³Ð´Ð¸Ð¹Ð³ Ñ…Ð°Ñ€Ð½Ð°
+        if user.is_superuser:
+            return True
+        
+        # Profile-based ÑÑ€Ñ…Ò¯Ò¯Ð´
+        if hasattr(user, 'profile'):
+            profile = user.profile
+            
+            if permission == 'is_admin' and profile.is_admin:
+                return True
+            if permission == 'is_accountant' and profile.is_accountant:
+                return True
+            if permission == 'is_teacher' and profile.is_teacher:
+                return True
+            
+            # Role ÑˆÐ°Ð»Ð³Ð°Ñ…
+            if permission.startswith('role:'):
+                role_name = permission.split(':')[1]
+                if profile.role == role_name:
+                    return True
+        
+        # User-based ÑÑ€Ñ…Ò¯Ò¯Ð´
+        if permission == 'is_staff' and user.is_staff:
+            return True
+        if permission == 'is_superuser' and user.is_superuser:
+            return True
+        
+        # Group ÑˆÐ°Ð»Ð³Ð°Ñ…
+        if permission.startswith('group:'):
+            group_name = permission.split(':')[1]
+            if user.groups.filter(name=group_name).exists():
+                return True
+        
+        # Django permission ÑˆÐ°Ð»Ð³Ð°Ñ…
+        if permission.startswith('perm:'):
+            perm_name = permission.split(':')[1]
+            if user.has_perm(perm_name):
+                return True
+    
+    return False
+
+
+def get_user_menu(user):
+    """Ð¥ÑÑ€ÑÐ³Ð»ÑÐ³Ñ‡Ð¸Ð¹Ð½ ÑÑ€Ñ…ÑÑÑ€ Ð½ÑŒ Ñ†ÑÑ Ð±ÑƒÑ†Ð°Ð°Ñ…"""
+    filtered_menu = []
+    
+    for section in SIDEBAR_MENU:
+        # Section ÑÑ€Ñ… ÑˆÐ°Ð»Ð³Ð°Ñ…
+        if not user_has_permission(user, section.get('permissions', [])):
+            continue
+        
+        # Items ÑˆÒ¯Ò¯Ñ…
+        filtered_items = []
+        for item in section.get('items', []):
+            if user_has_permission(user, item.get('permissions', [])):
+                filtered_items.append(item)
+        
+        # Ð¥Ð¾Ð¾ÑÐ¾Ð½ section Ñ…Ð°Ñ€ÑƒÑƒÐ»Ð°Ñ…Ð³Ò¯Ð¹
+        if filtered_items:
+            section_copy = section.copy()
+            section_copy['items'] = filtered_items
+            filtered_menu.append(section_copy)
+    
+    return filtered_menu
+

@@ -24,7 +24,7 @@
 
                     <div class="border-b pb-4">
                         <p class="text-sm text-gray-600">Монгол нэр</p>
-                        <p class="text-lg font-bold">{{ profile.mongolian_name|default:"Бүртгээгүй" }}</p>
+                        <p class="text-lg font-bold">{{ profile.full_name|default:"Бүртгээгүй" }}</p>
                     </div>
 
                     <div class="border-b pb-4">
@@ -77,8 +77,7 @@
 
                 <div class="mt-8 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                     <p class="text-sm text-yellow-800">
-                        <strong>Анхаар:</strong> Хувийн мэдээллээ засахын тулд админтай холбогдоно уу эсвэл 
-                        <a href="/admin/" class="underline">Admin панель</a> руу нэвтрэнэ үү.
+                        <strong>Анхаар:</strong> Хувийн мэдээллээ засахын тулд админтай холбогдоно уу.
                     </p>
                 </div>
             </div>

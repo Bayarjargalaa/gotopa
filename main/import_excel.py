@@ -7,10 +7,26 @@ python manage.py shell
 >>> import_students('Бясалгагчийн_мэдээллийн_бааз.xlsx')
 """
 
+import os
+import sys
+import django
+
+# Django environment тохируулах (шууд python-оор ажиллуулахад)
+if not os.environ.get('DJANGO_SETTINGS_MODULE'):
+    # Script-ийн байршлаас project root-ийг олох
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)  # main/ -> gotopa/
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gotopa_project.settings')
+    django.setup()
+
 import pandas as pd
 from django.contrib.auth.models import User
 from django.utils import timezone
-from main.models import UserProfile, UserRole
+from django.db import transaction
+from django.utils.text import slugify
+from main.models import Course, Enrollment, UserProfile, UserRole
 
 def import_students(excel_file):
     """
@@ -118,6 +134,202 @@ def import_students(excel_file):
         for f in os.listdir('.'):
             if f.endswith('.xlsx'):
                 print(f"  - {f}")
+        return None
+
+
+def import_gotopa_names(excel_file):
+    """`Нэрс готопа.xlsx` бүтэцтэй файлаас сурагч, сургалтын мэдээлэл импортлох."""
+
+    course_level_map = {
+        'анхан шат 1': 'BEGINNER_1',
+        'анхан 1': 'BEGINNER_1',
+        'анхан шат 2': 'BEGINNER_2',
+        'анхан 2': 'BEGINNER_2',
+        'дунд': 'INTERMEDIATE',
+        'ахисан': 'ADVANCED',
+        'ахисан шат': 'ADVANCED',
+    }
+
+    def clean_phone(value):
+        if pd.isna(value):
+            return ''
+        digits_only = ''.join(ch for ch in str(value) if ch.isdigit())
+        return digits_only[-8:] if len(digits_only) >= 8 else ''
+
+    def parse_name(raw_name):
+        name = str(raw_name).strip() if pd.notna(raw_name) else ''
+        if not name:
+            return '', '', ''
+
+        if '.' in name:
+            surname_part, given_name = name.split('.', 1)
+            last_name = surname_part.strip()[:1]
+            first_name = given_name.strip()
+        else:
+            parts = name.split()
+            last_name = parts[0][:1] if len(parts) > 1 else ''
+            first_name = ' '.join(parts[1:]).strip() if len(parts) > 1 else name
+
+        return last_name, first_name, name
+
+    def build_username(phone, full_name, row_number):
+        if phone:
+            return f"student_{phone}"
+
+        base = slugify(full_name, allow_unicode=True).replace('-', '_') or f"student_import_{row_number}"
+        username = f"student_{base}"
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"student_{base}_{suffix}"
+        return username
+
+    def find_profile(phone, last_name, first_name, full_name):
+        if phone:
+            profile = UserProfile.objects.select_related('user').filter(role=UserRole.STUDENT, phone=phone).first()
+            if profile:
+                return profile
+
+        profile = UserProfile.objects.select_related('user').filter(
+            role=UserRole.STUDENT,
+            first_name=first_name,
+            last_name=last_name,
+        ).first()
+        if profile:
+            return profile
+
+        return UserProfile.objects.select_related('user').filter(
+            role=UserRole.STUDENT,
+            mongolian_name=full_name,
+        ).first()
+
+    def resolve_course(course_name):
+        normalized = str(course_name).strip().lower()
+        level = course_level_map.get(normalized)
+        if level:
+            return Course.objects.filter(level=level, is_active=True).order_by('-start_date', '-id').first()
+
+        return Course.objects.filter(name=str(course_name).strip(), is_active=True).order_by('-start_date', '-id').first()
+
+    try:
+        df = pd.read_excel(excel_file, engine='openpyxl')
+
+        print(f"Нийт мөр: {len(df)}")
+        print(f"Баганууд: {list(df.columns)}")
+
+        created_students = 0
+        updated_students = 0
+        created_enrollments = 0
+        skipped_rows = 0
+        error_count = 0
+
+        for index, row in df.iterrows():
+            row_number = index + 2
+            try:
+                raw_name = row.get('Нэрс', '')
+                raw_phone = row.get('Утас', '')
+                raw_course = row.get('Анги', '')
+
+                last_name, first_name, full_name = parse_name(raw_name)
+                phone = clean_phone(raw_phone)
+                course_name = str(raw_course).strip() if pd.notna(raw_course) else ''
+
+                if not first_name:
+                    skipped_rows += 1
+                    print(f"Мөр {row_number}: Нэр хоосон тул алгасав.")
+                    continue
+
+                if not course_name:
+                    skipped_rows += 1
+                    print(f"Мөр {row_number}: Хичээлийн нэр хоосон тул алгасав.")
+                    continue
+
+                course = resolve_course(course_name)
+                if not course:
+                    error_count += 1
+                    print(f"✗ Мөр {row_number}: '{course_name}' сургалт олдсонгүй.")
+                    continue
+
+                with transaction.atomic():
+                    profile = find_profile(phone, last_name, first_name, full_name)
+
+                    if profile:
+                        user = profile.user
+                        updated_students += 1
+                    else:
+                        username = build_username(phone, full_name, row_number)
+                        user = User.objects.create(username=username)
+                        profile = UserProfile.objects.create(user=user, role=UserRole.STUDENT)
+                        created_students += 1
+
+                    user.first_name = first_name
+                    user.last_name = last_name
+                    user.save()
+
+                    profile.role = UserRole.STUDENT
+                    profile.last_name = last_name
+                    profile.first_name = first_name
+                    profile.mongolian_name = full_name
+                    if phone:
+                        profile.phone = phone
+                    profile.is_active_student = True
+                    if not profile.enrollment_date:
+                        profile.enrollment_date = timezone.now().date()
+                    profile.save()
+
+                    if phone and not user.has_usable_password():
+                        user.set_password(phone)
+                        user.save()
+
+                    enrollment, enrollment_created = Enrollment.objects.get_or_create(
+                        student=profile,
+                        course=course,
+                        defaults={
+                            'status': 'APPROVED',
+                            'is_active': True,
+                        }
+                    )
+                    if not enrollment_created:
+                        updated_fields = []
+                        if enrollment.status != 'APPROVED':
+                            enrollment.status = 'APPROVED'
+                            updated_fields.append('status')
+                        if not enrollment.is_active:
+                            enrollment.is_active = True
+                            updated_fields.append('is_active')
+                        if updated_fields:
+                            enrollment.save(update_fields=updated_fields + ['updated_at'])
+                    else:
+                        created_enrollments += 1
+
+                    print(f"✓ Мөр {row_number}: {full_name} -> {course.name}")
+
+            except Exception as error:
+                error_count += 1
+                print(f"✗ Мөр {row_number}: {error}")
+
+        print("\n=== Дүн ===")
+        print(f"Шинээр үүсгэсэн сурагч: {created_students}")
+        print(f"Шинэчилсэн сурагч: {updated_students}")
+        print(f"Шинээр үүсгэсэн бүртгэл: {created_enrollments}")
+        print(f"Алгассан мөр: {skipped_rows}")
+        print(f"Алдаа: {error_count}")
+
+        return {
+            'created_students': created_students,
+            'updated_students': updated_students,
+            'created_enrollments': created_enrollments,
+            'skipped_rows': skipped_rows,
+            'errors': error_count,
+        }
+
+    except FileNotFoundError:
+        print(f"Файл олдсонгүй: {excel_file}")
+        return None
+    except Exception as error:
+        print(f"Алдаа гарлаа: {error}")
+        import traceback
+        traceback.print_exc()
         return None
         
     except Exception as e:
@@ -266,8 +478,10 @@ def create_sample_users():
 
 
 if __name__ == '__main__':
-    print("Энэ script-ийг Django shell дотор ажиллуулна уу:")
-    print("python manage.py shell")
-    print(">>> from main.import_excel import import_students, create_sample_users")
-    print(">>> create_sample_users()  # Жишээ хэрэглэгчид үүсгэх")
-    print(">>> import_students('Бясалгагчийн_мэдээллийн_бааз.xlsx')  # Excel импорт")
+    if len(sys.argv) > 1:
+        excel_file = sys.argv[1]
+        print(f"Excel файл импортлож байна: {excel_file}")
+        import_students(excel_file)
+    else:
+        print("Ашиглах: python main/import_excel.py <excel_file.xlsx>")
+        print("Жишээ:   python main/import_excel.py Бясалгагчийн_мэдээллийн_бааз.xlsx")

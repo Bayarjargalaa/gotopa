@@ -1,0 +1,121 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Бүлэг устгах - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <!-- Warning Icon -->
+        <div class="flex justify-center mb-6">
+            <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
+                <svg class="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Title -->
+        <h1 class="text-3xl font-bold text-center text-red-600 mb-6">
+            ⚠️ Бүлэг устгах
+        </h1>
+
+        <!-- Group Info -->
+        <div class="bg-red-50 border-2 border-red-200 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-bold text-red-900 mb-4">{{ group.name }}</h2>
+            
+            <div class="space-y-3 text-red-800">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <span><strong>{{ group.user_set.count }}</strong> хэрэглэгч энэ бүлэгт харьяалагдаж байна</span>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    <span><strong>{{ group.permissions.count }}</strong> эрх оноогдсон байна</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning Message -->
+        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-yellow-800">Энэ үйлдлийг буцаах боломжгүй!</h3>
+                    <div class="mt-2 text-sm text-yellow-700">
+                        <ul class="list-disc list-inside space-y-1">
+                            <li>Бүлэг бүрмөсөн устана</li>
+                            <li>Хэрэглэгчид энэ бүлгийн эрхийг алдана</li>
+                            <li>Permission тохиргоо устана</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users in Group (if any) -->
+        {% if group.user_set.count > 0 %}
+        <div class="mb-6">
+            <h3 class="font-bold mb-3 text-gray-800">👥 Энэ бүлгийн гишүүд:</h3>
+            <div class="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                <ul class="space-y-2">
+                    {% for user in group.user_set.all|slice:":10" %}
+                    <li class="flex items-center gap-2 text-sm">
+                        <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
+                        <span class="font-medium">{{ user.profile.full_name|default:user.username }}</span>
+                        <span class="text-gray-500">({{ user.username }})</span>
+                    </li>
+                    {% endfor %}
+                    {% if group.user_set.count > 10 %}
+                    <li class="text-sm text-gray-500 italic">+ {{ group.user_set.count|add:"-10" }} бусад...</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Confirmation Form -->
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            
+            <div class="bg-white border-2 border-red-300 rounded-lg p-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="confirmDelete" required
+                           class="w-5 h-5 text-red-600 rounded focus:ring-red-500">
+                    <span class="text-gray-800">
+                        Би энэ үйлдлийг ойлгож байна ба устгахыг баталгаажуулж байна
+                    </span>
+                </label>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4">
+                <button type="submit" id="deleteBtn" disabled
+                        class="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-bold text-lg">
+                    🗑️ Устгах
+                </button>
+                <a href="{% url 'main:group_list' %}" 
+                   class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-bold text-lg">
+                    ✗ Болих
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Enable delete button only when checkbox is checked
+document.getElementById('confirmDelete').addEventListener('change', function() {
+    document.getElementById('deleteBtn').disabled = !this.checked;
+});
+</script>
+{% endblock %}

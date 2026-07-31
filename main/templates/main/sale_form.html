@@ -1,0 +1,259 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Борлуулалт бүртгэх - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-secondary">Борлуулалт бүртгэх</h1>
+            <a href="{% url 'main:stock_movement_list' %}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                ← Буцах
+            </a>
+        </div>
+
+        <form method="POST" class="bg-white shadow-md rounded-lg p-6">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Огноо -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Огноо <span class="text-red-500">*</span>
+                    </label>
+                    <input type="date" name="transaction_date" required value="{% now 'Y-m-d' %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Бараа -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Бараа <span class="text-red-500">*</span>
+                    </label>
+                    <select name="product" id="productSelect" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for product in products %}
+                            <option value="{{ product.id|stringformat:'d' }}" 
+                                    data-selling-price="{{ product.selling_price }}"
+                                    data-stock="{{ product.current_stock }}">
+                                {{ product.name }} (Үлдэгдэл: {{ product.current_stock }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Тоо ширхэг -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Тоо ширхэг <span class="text-red-500">*</span>
+                    </label>
+                    <input type="number" name="quantity" id="quantityInput" required min="1" value="1"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <p id="stockWarning" class="text-xs text-red-500 mt-1" style="display:none;"></p>
+                </div>
+
+                <!-- Нэгж үнэ -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Нэгж үнэ <span class="text-red-500">*</span>
+                    </label>
+                    <input type="number" name="price" id="priceInput" required min="0" step="0.01"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+
+                <!-- Төлбөрийн хэлбэр -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Төлбөрийн хэлбэр <span class="text-red-500">*</span>
+                    </label>
+                    <select name="payment_method" id="paymentMethod" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for code, label in payment_methods %}
+                            <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Касс -->
+                <div id="cashAccountField" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Касс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="bank_account" id="cashAccountSelect"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in cash_accounts %}
+                            <option value="{{ account.id|stringformat:'d' }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Банк -->
+                <div id="bankAccountField" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Банкны данс <span class="text-red-500">*</span>
+                    </label>
+                    <select name="bank_account" id="bankAccountSelect"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id|stringformat:'d' }}">{{ account.code }} - {{ account.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Үйлчлүүлэгч -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Үйлчлүүлэгч <span id="customerRequired" class="text-red-500" style="display:none;">*</span>
+                    </label>
+                    <select name="counterparty" id="customerSelect"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for customer in customers %}
+                            <option value="{{ customer.id|stringformat:'d' }}">{{ customer.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Борлуулагч -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Борлуулагч
+                    </label>
+                    <select name="salesperson"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">-- Сонгоно уу --</option>
+                        {% for manager in manager_users %}
+                            <option value="{{ manager.user.id|stringformat:'d' }}">{{ manager.full_name }} ({{ manager.get_role_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Нийт дүн -->
+            <div class="mt-6 p-4 bg-green-50 rounded-lg">
+                <div class="flex justify-between items-center text-lg font-bold">
+                    <span>Нийт дүн:</span>
+                    <span id="totalAmount" class="text-primary">0₮</span>
+                </div>
+            </div>
+
+            <!-- Тэмдэглэл -->
+            <div class="mt-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Тэмдэглэл</label>
+                <textarea name="notes" rows="3"
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+            </div>
+
+            <!-- Товчнууд -->
+            <div class="mt-6 flex gap-4">
+                <button type="submit" id="submitBtn" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-semibold">
+                    ✓ Хадгалах
+                </button>
+                <a href="{% url 'main:stock_movement_list' %}" class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
+                    Цуцлах
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const productSelect = document.getElementById('productSelect');
+const quantityInput = document.getElementById('quantityInput');
+const priceInput = document.getElementById('priceInput');
+const totalAmount = document.getElementById('totalAmount');
+const paymentMethod = document.getElementById('paymentMethod');
+const cashAccountField = document.getElementById('cashAccountField');
+const cashAccountSelect = document.getElementById('cashAccountSelect');
+const bankAccountField = document.getElementById('bankAccountField');
+const bankAccountSelect = document.getElementById('bankAccountSelect');
+const customerSelect = document.getElementById('customerSelect');
+const customerRequired = document.getElementById('customerRequired');
+const stockWarning = document.getElementById('stockWarning');
+const submitBtn = document.getElementById('submitBtn');
+
+let currentStock = 0;
+
+// Бараа сонгох үед үнэ автоматаар гарна
+productSelect.addEventListener('change', function() {
+    const selected = this.options[this.selectedIndex];
+    if (selected.value) {
+        const sellingPrice = selected.getAttribute('data-selling-price');
+        currentStock = parseInt(selected.getAttribute('data-stock'));
+        priceInput.value = sellingPrice;
+        calculateTotal();
+        checkStock();
+    }
+});
+
+// Нийт дүн тооцоолох
+function calculateTotal() {
+    const quantity = parseFloat(quantityInput.value) || 0;
+    const price = parseFloat(priceInput.value) || 0;
+    const total = quantity * price;
+    totalAmount.textContent = total.toLocaleString() + '₮';
+}
+
+// Үлдэгдэл шалгах
+function checkStock() {
+    const quantity = parseInt(quantityInput.value) || 0;
+    
+    if (quantity > currentStock) {
+        stockWarning.textContent = `⚠ Үлдэгдэл хүрэлцэхгүй! Одоо: ${currentStock}`;
+        stockWarning.style.display = 'block';
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        stockWarning.style.display = 'none';
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+quantityInput.addEventListener('input', function() {
+    calculateTotal();
+    checkStock();
+});
+priceInput.addEventListener('input', calculateTotal);
+
+// Төлбөрийн хэлбэр сонгох
+paymentMethod.addEventListener('change', function() {
+    const value = this.value;
+    
+    if (value === 'CASH') {
+        cashAccountField.style.display = 'block';
+        bankAccountField.style.display = 'none';
+        if (cashAccountSelect) cashAccountSelect.required = true;
+        if (bankAccountSelect) bankAccountSelect.required = false;
+        customerSelect.required = false;
+        customerRequired.style.display = 'none';
+    } else if (value === 'BANK') {
+        cashAccountField.style.display = 'none';
+        bankAccountField.style.display = 'block';
+        if (cashAccountSelect) cashAccountSelect.required = false;
+        if (bankAccountSelect) bankAccountSelect.required = true;
+        customerSelect.required = false;
+        customerRequired.style.display = 'none';
+    } else if (value === 'CREDIT') {
+        cashAccountField.style.display = 'none';
+        bankAccountField.style.display = 'none';
+        if (cashAccountSelect) cashAccountSelect.required = false;
+        if (bankAccountSelect) bankAccountSelect.required = false;
+        customerSelect.required = true;
+        customerRequired.style.display = 'inline';
+    } else {
+        cashAccountField.style.display = 'none';
+        bankAccountField.style.display = 'none';
+        if (cashAccountSelect) cashAccountSelect.required = false;
+        if (bankAccountSelect) bankAccountSelect.required = false;
+        customerSelect.required = false;
+        customerRequired.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

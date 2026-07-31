@@ -116,7 +116,7 @@
                                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
                             <option value="">-- Төрөл сонгох (заавал биш) --</option>
                             {% for code, name in income_types %}
-                                <option value="{{ code }}" {% if transaction.income_type == code %}selected{% endif %}>
+                                <option value="{{ code }}" {% if transaction.income_type == code or not transaction.income_type and initial_income_type == code %}selected{% endif %}>
                                     {{ name }}
                                 </option>
                             {% endfor %}
@@ -132,6 +132,43 @@
                                 ➕ Мөр нэмэх
                             </button>
                         </div>
+                        <p class="text-xs text-gray-600 -mt-2">
+                            Нэг мөр дээр нэг сурагч, нэг анги, нэг сарын дүн оруулна. Олон сар эсвэл олон сурагч холбох бол <strong>Мөр нэмэх</strong> товч дарж нэмэлт мөр үүсгэнэ.
+                        </p>
+
+                        <input type="hidden" name="mixed_sale_enabled" id="mixedSaleEnabled" value="{% if existing_sale_allocation %}1{% else %}0{% endif %}">
+                        <div class="p-3 rounded border border-amber-300 bg-amber-50">
+                            <label class="inline-flex items-center gap-2 text-sm font-medium text-amber-900 cursor-pointer">
+                                <input type="checkbox" id="mixedSaleToggle" class="accent-primary" {% if existing_sale_allocation %}checked{% endif %}>
+                                Барааны төлбөрийн хэсэг давхар оруулах
+                            </label>
+                            <p class="text-xs text-amber-700 mt-1">
+                                Идэвхжүүлбэл энэ гүйлгээний тодорхой дүнг борлуулалтад холбоно, үлдсэн дүнг сургалтын хуваарилалтад оруулна.
+                            </p>
+
+                            <div id="mixedSaleFields" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 {% if not existing_sale_allocation %}hidden{% endif %}">
+                                <div>
+                                    <label class="block text-xs text-gray-700 mb-1">Борлуулалт</label>
+                                    <select name="mixed_sale_id" id="mixedSaleSelect"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary">
+                                        <option value="">-- Борлуулалт сонгох --</option>
+                                        {% for sale in sales %}
+                                            <option value="{{ sale.id }}" {% if existing_sale_allocation and existing_sale_allocation.sale_id == sale.id %}selected{% endif %}>
+                                                {{ sale.sale_date|date:"Y-m-d" }} - {{ sale.customer }} - Үлдэгдэл {{ sale.remaining_for_link|floatformat:0 }}₮
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-700 mb-1">Барааны төлбөрийн дүн (₮)</label>
+                                    <input type="number" name="mixed_sale_amount" id="mixedSaleAmount"
+                                           value="{% if existing_sale_allocation %}{{ existing_sale_allocation.amount|floatformat:'2u' }}{% endif %}"
+                                           min="0" step="0.01"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-primary"
+                                           placeholder="Жишээ: 50000">
+                                </div>
+                            </div>
+                        </div>
                         
                         <!-- Төлбөрийн нийт дүн харуулах -->
                         <div class="bg-blue-50 p-3 rounded border border-blue-200">
@@ -140,14 +177,83 @@
                                 <span class="font-bold text-lg">{{ transaction.income_amount|floatformat:0 }}₮</span>
                             </div>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="text-sm text-gray-700">Хуваарилсан дүн:</span>
+                                <span class="text-sm text-gray-700">Барааны төлбөрт хуваарилсан дүн:</span>
+                                <span class="font-bold text-lg text-amber-700" id="mixedSaleAmountPreview">0₮</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-sm text-gray-700">Сургалтын төлбөрт хуваарилсан дүн:</span>
                                 <span class="font-bold text-lg text-green-600" id="allocatedTotal">0₮</span>
                             </div>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="text-sm text-gray-700">Үлдэгдэл:</span>
+                                <span class="text-sm text-gray-700">Сургалтад үлдэх дүн:</span>
                                 <span class="font-bold text-lg text-red-600" id="remainingAmount">{{ transaction.income_amount|floatformat:0 }}₮</span>
                             </div>
                         </div>
+                        
+                        <!-- ОДОО БАЙГАА ХУВААРИЛАЛТУУД -->
+                        {% if existing_allocations or existing_sale_allocation %}
+                        <div class="mt-6 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+                            <h4 class="font-bold text-lg mb-4 text-yellow-900">
+                                📋 {{ transaction.income_amount|floatformat:0 }}₮ Гүйлгээ Холбогдсон Баримтууд:
+                            </h4>
+                            
+                            <!-- Сургалтын хуваарилалтууд -->
+                            {% if existing_allocations %}
+                            <div class="mb-4">
+                                <div class="bg-green-100 border border-green-300 rounded p-3 mb-2">
+                                    <span class="font-bold text-green-800">📚 Сургалтын төлбөр</span>
+                                </div>
+                                <div class="space-y-2 ml-2">
+                                    {% for alloc in existing_allocations %}
+                                    <div class="flex justify-between items-start p-2 bg-white rounded border border-green-200">
+                                        <div class="flex-1">
+                                            <div class="font-medium text-gray-900">{{ alloc.student.full_name }}</div>
+                                            <div class="text-sm text-gray-600 mt-1">
+                                                📖 {{ alloc.course.name }}
+                                            </div>
+                                            <div class="text-sm text-gray-500 mt-1">
+                                                📅 {{ alloc.year }} оны {{ alloc.month }}-р сар
+                                            </div>
+                                        </div>
+                                        <div class="text-right ml-4">
+                                            <div class="font-bold text-green-600 text-lg">
+                                                {{ alloc.amount|floatformat:0 }}₮
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Борлуулалт -->
+                            {% if existing_sale_allocation %}
+                            <div>
+                                <div class="bg-indigo-100 border border-indigo-300 rounded p-3 mb-2">
+                                    <span class="font-bold text-indigo-800">🛍️ Барааны борлуулалт</span>
+                                </div>
+                                <div class="flex justify-between items-start p-2 bg-white rounded border border-indigo-200 ml-2">
+                                    <div class="flex-1">
+                                        <div class="font-medium text-gray-900">
+                                            {{ existing_sale_allocation.sale.sale_number }}
+                                        </div>
+                                        <div class="text-sm text-gray-600 mt-1">
+                                            👤 {{ existing_sale_allocation.sale.customer }}
+                                        </div>
+                                        <div class="text-sm text-gray-500 mt-1">
+                                            📅 {{ existing_sale_allocation.sale.sale_date|date:"Y-m-d" }}
+                                        </div>
+                                    </div>
+                                    <div class="text-right ml-4">
+                                        <div class="font-bold text-indigo-600 text-lg">
+                                            {{ existing_sale_allocation.amount|floatformat:0 }}₮
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         
                         <!-- Төлбөрийн хуваарилалтын мөрүүд -->
                         <div id="allocationsContainer" class="space-y-3">
@@ -159,19 +265,165 @@
                     <div id="saleFields" class="hidden">
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Борлуулалтын бүртгэл
+                            <span class="text-gray-400 font-normal text-xs ml-1" id="saleCountLabel">({{ sales|length }} гүйлгээ)</span>
                         </label>
-                        <select name="sale" id="saleSelect"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
-                            <option value="">-- Борлуулалт сонгох (заавал биш) --</option>
-                            {% for sale in sales %}
-                                <option value="{{ sale.id }}" {% if transaction.income_sale_id == sale.id %}selected{% endif %}>
-                                    {{ sale.sale_date|date:"Y-m-d" }} - {{ sale.customer }} - {{ sale.total_amount|floatformat:0 }}₮
-                                </option>
-                            {% endfor %}
-                        </select>
+
+                        <!-- Далд input — форм submit хийхэд утга авна -->
+                        <input type="hidden" name="sale" id="saleHiddenInput" value="{% if transaction.income_sale_id %}{{ transaction.income_sale_id }}{% endif %}">
+
+                        <!-- Банкны холбоо шүүлтүүр -->
+                        <div class="flex items-center gap-1 mb-2">
+                            <span class="text-xs text-gray-500 mr-1"><i class="fas fa-filter"></i> Банкны холбоо:</span>
+                            <button type="button" id="filterAll"
+                                    onclick="setSaleLinkFilter('all')"
+                                    class="px-2 py-0.5 text-xs rounded border border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium sale-filter-btn active-filter">
+                                Бүгд
+                            </button>
+                            <button type="button" id="filterUnlinked"
+                                    onclick="setSaleLinkFilter('unlinked')"
+                                    class="px-2 py-0.5 text-xs rounded border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 font-medium sale-filter-btn">
+                                Холбоогүй
+                            </button>
+                            <button type="button" id="filterLinked"
+                                    onclick="setSaleLinkFilter('linked')"
+                                    class="px-2 py-0.5 text-xs rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 font-medium sale-filter-btn">
+                                Холбогдсон
+                            </button>
+                        </div>
+
+                        <!-- Хайлт + сонголт хэсэг -->
+                        <div class="border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary">
+                            <!-- Хайлтын талбар -->
+                            <div class="flex items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
+                                <i class="fas fa-search text-gray-400 mr-2 text-sm"></i>
+                                <input type="text" id="saleSearch" placeholder="Борлуулалт хайх... (дугаар, харилцагч, дүн)"
+                                       class="flex-1 bg-transparent text-sm outline-none placeholder-gray-400"
+                                       oninput="filterSales(this.value)">
+                                <button type="button" onclick="clearSaleSearch()" class="text-gray-400 hover:text-gray-600 ml-2 text-sm hidden" id="saleClearBtn">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+
+                            <!-- Сонгогдсон утга -->
+                            <div id="saleSelectedDisplay" class="px-3 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 hidden">
+                                <i class="fas fa-check-circle mr-1 text-blue-500"></i>
+                                <span id="saleSelectedText"></span>
+                                <button type="button" onclick="clearSaleSelection()" class="ml-2 text-blue-400 hover:text-blue-600 text-xs">(цэвэрлэх)</button>
+                            </div>
+
+                            <!-- Жагсаалт -->
+                            <ul id="saleList" class="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                                <li class="px-3 py-2 text-sm text-gray-500 cursor-pointer hover:bg-gray-50 sale-option"
+                                    data-value="" data-text="-- Сонгохгүй --" data-linked="none"
+                                    onclick="selectSale('', '-- Сонгохгүй --')">
+                                    <span class="text-gray-400 italic">-- Сонгохгүй --</span>
+                                </li>
+                                {% for sale in sales %}
+                                <li class="px-3 py-2 text-sm cursor-pointer hover:bg-primary hover:text-white sale-option transition-colors {% if transaction.income_sale_id == sale.id %}bg-primary text-white{% endif %}"
+                                    data-value="{{ sale.id }}"
+                                    data-text="{{ sale.sale_date|date:'Y-m-d' }} | {{ sale.customer|default:'-' }} | {{ sale.sale_number }} | {{ sale.total_amount|floatformat:0 }}₮"
+                                    data-linked="{{ sale.is_linked|yesno:'true,false' }}"
+                                    onclick="selectSale('{{ sale.id }}', '{{ sale.sale_date }} - {{ sale.customer|default:"-"|escapejs }} - {{ sale.sale_number }} - Үлдэгдэл {{ sale.remaining_for_link|floatformat:0 }}₮')">
+                                    <div class="flex justify-between items-center gap-2">
+                                        <span>
+                                            <span class="font-medium">{{ sale.sale_number }}</span>
+                                            — {{ sale.customer|default:"Харилцагчгүй" }}
+                                        </span>
+                                        <span class="text-xs whitespace-nowrap {% if transaction.income_sale_id == sale.id %}text-white opacity-80{% else %}text-gray-500{% endif %}">
+                                            {{ sale.sale_date|date:"Y-m-d" }}
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between text-xs mt-0.5 {% if transaction.income_sale_id == sale.id %}text-white opacity-70{% else %}text-gray-400{% endif %}">
+                                        <span class="flex items-center gap-2">
+                                            {% if sale.expected_payment_method %}
+                                            <span class="{% if transaction.income_sale_id == sale.id %}text-white opacity-70{% else %}text-blue-500{% endif %}">{{ sale.expected_payment_method }}</span>
+                                            {% endif %}
+                                            {% if sale.is_linked %}
+                                            <span class="{% if transaction.income_sale_id == sale.id %}text-white opacity-70{% else %}text-green-600 font-medium{% endif %}">· Холбогдсон</span>
+                                            {% else %}
+                                            <span class="{% if transaction.income_sale_id == sale.id %}text-white opacity-70{% else %}text-orange-500{% endif %}">· Холбоогүй</span>
+                                            {% endif %}
+                                        </span>
+                                        <span>Үлдэгдэл: {{ sale.remaining_for_link|floatformat:0 }}₮</span>
+                                    </div>
+                                </li>
+                                {% empty %}
+                                <li class="px-3 py-4 text-sm text-gray-500 text-center">
+                                    <i class="fas fa-info-circle mr-1"></i>Борлуулалт байхгүй байна
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            <i class="fas fa-filter mr-1"></i>Төлбөрийн хэлбэр: Харилцах
+                        </p>
                     </div>
                 </div>
                 {% endif %}
+
+                <!-- ====== НЭМЭЛТ ХУВААРИЛАЛТ (Extra splits) ====== -->
+                <div class="border border-dashed border-indigo-300 rounded-lg p-4 bg-indigo-50">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-semibold text-sm text-indigo-800">
+                            ➕ Нэмэлт хуваарилалт
+                            <span class="text-xs font-normal text-indigo-600 ml-1">(заавал биш)</span>
+                        </h4>
+                        <button type="button" id="addSplitBtn"
+                                onclick="addSplitRow()"
+                                class="px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                            + Мөр нэмэх
+                        </button>
+                    </div>
+                    <p class="text-xs text-indigo-700 mb-3">
+                        Гүйлгээний нийт дүн олон данс руу хуваарилагдах тохиолдолд ашиглана.<br>
+                        <strong>Жишээ:</strong> 49,000₮ орж ирлээ → 25,000₮ борлуулалт + 24,000₮ хандив
+                        (үндсэн эсрэг данс = үлдэгдэл дүн автоматаар авна)
+                    </p>
+
+                    <div id="splitRows">
+                        {% for split in existing_splits %}
+                        <div class="split-row grid grid-cols-12 gap-2 mb-2 items-start">
+                            <div class="col-span-5">
+                                <select name="splits[{{ forloop.counter0 }}][account]"
+                                        class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+                                    <option value="">-- Данс сонгох --</option>
+                                    {% for acct in all_accounts %}
+                                    <option value="{{ acct.id }}" {% if acct.id == split.account_id %}selected{% endif %}>
+                                        {{ acct.code }} - {{ acct.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-span-2">
+                                <input type="number" name="splits[{{ forloop.counter0 }}][amount]"
+                                       value="{{ split.amount|floatformat:'0' }}"
+                                       min="0" step="1" placeholder="Дүн ₮"
+                                       class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+                            </div>
+                            <div class="col-span-4">
+                                <input type="text" name="splits[{{ forloop.counter0 }}][description]"
+                                       value="{{ split.description }}"
+                                       placeholder="Тайлбар (заавал биш)"
+                                       class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+                            </div>
+                            <div class="col-span-1 flex items-center">
+                                <button type="button" onclick="this.closest('.split-row').remove(); recalcSplitTotal()"
+                                        class="text-red-500 hover:text-red-700 text-lg leading-none">×</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Нэмэлт хуваарилалтын нийт харуулах -->
+                    <div class="mt-2 flex justify-between text-xs text-indigo-700">
+                        <span>Нэмэлт хуваарилалтын нийт дүн:</span>
+                        <span id="splitTotal" class="font-bold">0₮</span>
+                    </div>
+                    <div class="mt-1 flex justify-between text-xs text-indigo-700">
+                        <span>Үндсэн эсрэг данс авах дүн:</span>
+                        <span id="splitRemain" class="font-bold text-green-700">{{ transaction.income_amount|default:transaction.expense_amount|floatformat:0 }}₮</span>
+                    </div>
+                </div>
 
                 <div class="flex gap-4">
                     <button type="submit" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
@@ -250,10 +502,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const saleFields = document.getElementById('saleFields');
     const allocationsContainer = document.getElementById('allocationsContainer');
     const addAllocationBtn = document.getElementById('addAllocationBtn');
+    const mixedSaleToggle = document.getElementById('mixedSaleToggle');
+    const mixedSaleFields = document.getElementById('mixedSaleFields');
+    const mixedSaleAmountInput = document.getElementById('mixedSaleAmount');
+    const mixedSaleEnabledInput = document.getElementById('mixedSaleEnabled');
+    const mixedSaleAmountPreview = document.getElementById('mixedSaleAmountPreview');
     
     if (incomeType && studentFields) {
-        const transactionAmount = {{ transaction.income_amount|default:0 }};
+        const transactionAmount = parseFloat('{{ transaction.income_amount|floatformat:"2u"|default:"0" }}') || 0;
         let allocationCounter = 0;
+
+        function getMixedSaleAmount() {
+            if (!mixedSaleToggle || !mixedSaleToggle.checked) return 0;
+            return parseFloat(mixedSaleAmountInput?.value) || 0;
+        }
+
+        function syncMixedSaleVisibility() {
+            if (!mixedSaleToggle || !mixedSaleFields || !mixedSaleEnabledInput) return;
+            if (mixedSaleToggle.checked) {
+                mixedSaleFields.classList.remove('hidden');
+                mixedSaleEnabledInput.value = '1';
+            } else {
+                mixedSaleFields.classList.add('hidden');
+                mixedSaleEnabledInput.value = '0';
+            }
+            updateAllocationTotal();
+        }
         
         // Төлбөрийн хуваарилалт нэмэх function
         window.addAllocation = function(studentId = '', courseId = '', monthYear = '', amount = '') {
@@ -266,11 +540,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="grid grid-cols-12 gap-2 items-start">
                     <div class="col-span-3">
                         <label class="text-xs text-gray-600">Сурагч</label>
+                        <input type="text"
+                               class="allocation-student-search w-full px-2 py-1 mb-1 border rounded text-sm"
+                               placeholder="Нэр, username, утас, имэйлээр хайх...">
                         <select name="allocations[${allocationCounter}][student]" 
                                 class="allocation-student w-full px-2 py-1 border rounded text-sm" required>
                             <option value="">-- Сонгох --</option>
                             {% for student in students %}
-                                <option value="{{ student.id }}">{{ student.mongolian_name|default:student.user.username }}</option>
+                                <option value="{{ student.id }}"
+                                        data-search="{{ student.full_name|default:student.user.username|default:''|escape }} {{ student.mongolian_name|default:''|escape }} {{ student.user.username|default:''|escape }} {{ student.phone|default:''|escape }} {{ student.user.email|default:''|escape }}">
+                                    {{ student.display_name_short|default:student.user.username }}{% if student.phone %} ({{ student.phone }}){% endif %}
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
@@ -304,8 +584,56 @@ document.addEventListener('DOMContentLoaded', function() {
             allocationsContainer.appendChild(row);
             
             // Сурагч сонгоход ангиудыг дуудах
+            const studentSearchInput = row.querySelector('.allocation-student-search');
             const studentSelect = row.querySelector('.allocation-student');
             const courseSelect = row.querySelector('.allocation-course');
+
+            function normalizeSearchText(value) {
+                return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+            }
+
+            // Сурагчийн нэр хайлтаар dropdown options шүүх
+            const studentOptionPool = Array.from(studentSelect.options)
+                .filter(opt => opt.value)
+                .map(opt => {
+                    const rawSearch = `${opt.textContent || ''} ${opt.dataset.search || ''}`;
+                    return {
+                        value: opt.value,
+                        label: opt.textContent,
+                        searchKey: normalizeSearchText(rawSearch),
+                        searchDigits: rawSearch.replace(/\D/g, ''),
+                    };
+                });
+
+            function renderStudentOptions(keyword = '') {
+                const selectedValue = studentSelect.value;
+                const normalizedKeyword = normalizeSearchText(keyword);
+                const keywordDigits = (keyword || '').replace(/\D/g, '');
+
+                studentSelect.innerHTML = '<option value="">-- Сонгох --</option>';
+
+                studentOptionPool.forEach(student => {
+                    const keywordMatched = !normalizedKeyword || student.searchKey.includes(normalizedKeyword);
+                    const digitsMatched = keywordDigits && student.searchDigits.includes(keywordDigits);
+
+                    if (keywordMatched || digitsMatched) {
+                        const option = document.createElement('option');
+                        option.value = student.value;
+                        option.textContent = student.label;
+                        studentSelect.appendChild(option);
+                    }
+                });
+
+                if (selectedValue && Array.from(studentSelect.options).some(opt => opt.value === selectedValue)) {
+                    studentSelect.value = selectedValue;
+                }
+            }
+
+            studentSearchInput.addEventListener('input', function() {
+                renderStudentOptions(this.value);
+            });
+
+            renderStudentOptions();
             
             studentSelect.addEventListener('change', function() {
                 const studentId = this.value;
@@ -364,6 +692,9 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.allocation-amount').forEach(input => {
                 total += parseFloat(input.value) || 0;
             });
+
+            const mixedSaleAmount = getMixedSaleAmount();
+            const studentTarget = transactionAmount - mixedSaleAmount;
             
             const allocatedTotal = document.getElementById('allocatedTotal');
             const remainingAmount = document.getElementById('remainingAmount');
@@ -371,18 +702,31 @@ document.addEventListener('DOMContentLoaded', function() {
             if (allocatedTotal) {
                 allocatedTotal.textContent = total.toLocaleString() + '₮';
             }
+
+            if (mixedSaleAmountPreview) {
+                mixedSaleAmountPreview.textContent = mixedSaleAmount.toLocaleString() + '₮';
+            }
             
             if (remainingAmount) {
-                const remaining = transactionAmount - total;
+                const remaining = studentTarget - total;
                 remainingAmount.textContent = remaining.toLocaleString() + '₮';
                 remainingAmount.className = 
-                    'font-bold text-lg ' + (remaining >= 0 ? 'text-green-600' : 'text-red-600');
+                    'font-bold text-lg ' + (remaining === 0 ? 'text-green-600' : (remaining > 0 ? 'text-yellow-700' : 'text-red-600'));
             }
         }
         
         // Мөр нэмэх товч
         if (addAllocationBtn) {
             addAllocationBtn.addEventListener('click', () => window.addAllocation());
+        }
+
+        if (mixedSaleToggle) {
+            mixedSaleToggle.addEventListener('change', syncMixedSaleVisibility);
+            syncMixedSaleVisibility();
+        }
+
+        if (mixedSaleAmountInput) {
+            mixedSaleAmountInput.addEventListener('input', updateAllocationTotal);
         }
         
         // Орлогын төрөл сонгох event
@@ -395,14 +739,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.value === 'STUDENT_PAYMENT') {
                 console.log('Showing student fields'); // Debug
                 studentFields.classList.remove('hidden');
-                
-                // Эхний мөрийг автоматаар нэмэх
-                if (allocationsContainer.children.length === 0) {
-                    window.addAllocation();
-                }
+                syncMixedSaleVisibility();
             } else if (this.value === 'PRODUCT_SALE') {
                 console.log('Showing sale fields'); // Debug
                 saleFields.classList.remove('hidden');
+                setTimeout(() => { const s = document.getElementById('saleSearch'); if (s) s.focus(); }, 100);
             }
         });
         
@@ -420,7 +761,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     '{{ alloc.student.id }}',
                     '{{ alloc.course.id }}',
                     '{{ alloc.year }}-{{ alloc.month|stringformat:"02d" }}',
-                    '{{ alloc.amount }}'
+                    '{{ alloc.amount|floatformat:"2u" }}'
                 );
             {% endfor %}
         {% endif %}
@@ -429,7 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Мөнгөн гүйлгээний үзүүлэлт шүүх (орлого/зарлага-аар)
     const cashFlowIndicator = document.getElementById('cashFlowIndicator');
     if (cashFlowIndicator) {
-        const isIncome = {{ transaction.income_amount|default:0 }} > 0;
+        const isIncome = (parseFloat('{{ transaction.income_amount|floatformat:"2u"|default:"0" }}') || 0) > 0;
         const options = Array.from(cashFlowIndicator.options);
         
         options.forEach(option => {
@@ -447,5 +788,135 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Борлуулалт хайх функцүүд
+// ====== НЭМЭЛТ ХУВААРИЛАЛТ (Extra splits) JS ======
+const TOTAL_AMOUNT = parseFloat('{{ transaction.income_amount|default:transaction.expense_amount }}') || 0;
+let splitIndex = {{ existing_splits|length }};
+
+function allAccountOptions() {
+    // all_accounts-с option HTML үүсгэх
+    const opts = [['', '-- Данс сонгох --'], {% for acct in all_accounts %}['{{ acct.id }}', '{{ acct.code }} - {{ acct.name|escapejs }}'],{% endfor %}];
+    return opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+}
+
+function addSplitRow() {
+    const container = document.getElementById('splitRows');
+    const div = document.createElement('div');
+    div.className = 'split-row grid grid-cols-12 gap-2 mb-2 items-start';
+    div.innerHTML = `
+        <div class="col-span-5">
+            <select name="splits[${splitIndex}][account]"
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+                ${allAccountOptions()}
+            </select>
+        </div>
+        <div class="col-span-2">
+            <input type="number" name="splits[${splitIndex}][amount]"
+                   min="0" step="1" placeholder="Дүн ₮"
+                   oninput="recalcSplitTotal()"
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div class="col-span-4">
+            <input type="text" name="splits[${splitIndex}][description]"
+                   placeholder="Тайлбар (заавал биш)"
+                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div class="col-span-1 flex items-center">
+            <button type="button" onclick="this.closest('.split-row').remove(); recalcSplitTotal()"
+                    class="text-red-500 hover:text-red-700 text-lg leading-none">×</button>
+        </div>`;
+    container.appendChild(div);
+    splitIndex++;
+    recalcSplitTotal();
+}
+
+function recalcSplitTotal() {
+    let total = 0;
+    document.querySelectorAll('.split-row input[type="number"]').forEach(inp => {
+        total += parseFloat(inp.value) || 0;
+    });
+    const remain = TOTAL_AMOUNT - total;
+    document.getElementById('splitTotal').textContent = total.toLocaleString('mn-MN') + '₮';
+    const remainEl = document.getElementById('splitRemain');
+    remainEl.textContent = remain.toLocaleString('mn-MN') + '₮';
+    remainEl.className = 'font-bold ' + (remain < 0 ? 'text-red-600' : 'text-green-700');
+}
+
+// Хуудас ачаалахад одоо байгаа splits-ийн нийт тооцоолох
+document.addEventListener('DOMContentLoaded', function() { recalcSplitTotal(); });
+
+let currentSaleLinkFilter = 'unlinked'; // анхдагч: Холбоогүй
+
+function setSaleLinkFilter(filter) {
+    currentSaleLinkFilter = filter;
+    // Товч идэвхтэй байдлыг шинэчлэх
+    document.querySelectorAll('.sale-filter-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-offset-1', 'ring-gray-400');
+    });
+    const activeBtn = document.getElementById(filter === 'all' ? 'filterAll' : filter === 'unlinked' ? 'filterUnlinked' : 'filterLinked');
+    if (activeBtn) activeBtn.classList.add('ring-2', 'ring-offset-1', 'ring-gray-400');
+    filterSales(document.getElementById('saleSearch').value);
+}
+
+function filterSales(query) {
+    const items = document.querySelectorAll('#saleList .sale-option');
+    const clearBtn = document.getElementById('saleClearBtn');
+    const q = query.trim().toLowerCase();
+    clearBtn.classList.toggle('hidden', !q);
+    let visibleCount = 0;
+    items.forEach(item => {
+        const text = (item.dataset.text || item.textContent).toLowerCase();
+        const linked = item.dataset.linked; // 'true', 'false', 'none'
+        const textMatch = (!q || text.includes(q));
+        let linkMatch = true;
+        if (linked !== 'none') {
+            if (currentSaleLinkFilter === 'unlinked') linkMatch = linked === 'false';
+            else if (currentSaleLinkFilter === 'linked') linkMatch = linked === 'true';
+        }
+        const visible = textMatch && linkMatch;
+        item.style.display = visible ? '' : 'none';
+        if (visible && linked !== 'none') visibleCount++;
+    });
+    const countLabel = document.getElementById('saleCountLabel');
+    if (countLabel) countLabel.textContent = `(${visibleCount} гүйлгээ)`;
+}
+
+function clearSaleSearch() {
+    document.getElementById('saleSearch').value = '';
+    filterSales('');
+}
+
+function selectSale(id, label) {
+    document.getElementById('saleHiddenInput').value = id;
+    const display = document.getElementById('saleSelectedDisplay');
+    const text = document.getElementById('saleSelectedText');
+    if (id) {
+        text.textContent = label;
+        display.classList.remove('hidden');
+    } else {
+        display.classList.add('hidden');
+    }
+    document.querySelectorAll('#saleList .sale-option').forEach(item => {
+        const isSelected = item.dataset.value == id && id !== '';
+        item.classList.toggle('bg-primary', isSelected);
+        item.classList.toggle('text-white', isSelected);
+    });
+}
+
+// Хуудас ачаалагдахад одоогийн сонголтыг тохируулах
+(function initSaleSelection() {
+    // Анхдагч: Холбоогүй шүүлтүүр идэвхжүүлэх
+    setSaleLinkFilter('unlinked');
+
+    const hiddenVal = document.getElementById('saleHiddenInput') && document.getElementById('saleHiddenInput').value;
+    if (hiddenVal) {
+        const item = document.querySelector(`#saleList .sale-option[data-value="${hiddenVal}"]`);
+        if (item) {
+            document.getElementById('saleSelectedText').textContent = item.dataset.text || item.textContent.trim();
+            document.getElementById('saleSelectedDisplay').classList.remove('hidden');
+        }
+    }
+})();
 </script>
 {% endblock %}

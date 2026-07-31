@@ -1,0 +1,190 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Алсын хараа, Эрхэм зорилго - Готопа Академи{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<div class="relative overflow-hidden bg-gradient-to-br from-rose-50 via-white to-pink-50">
+  <div class="absolute inset-0 opacity-20"
+       style="background-image:radial-gradient(circle at 15% 60%, #AB334C 0%, transparent 45%), radial-gradient(circle at 85% 20%, #AB334C 0%, transparent 40%);">
+  </div>
+  <div class="absolute top-0 left-0 right-0 h-1 bg-primary"></div>
+  <div class="relative max-w-5xl mx-auto px-6 py-20">
+    <p class="text-[0.7rem] text-primary font-black uppercase tracking-[0.22em] mb-3">ГОТОПА АКАДЕМИ</p>
+    <h1 class="text-5xl font-black text-secondary mb-2" style="font-family:'Playfair Display',Georgia,serif;">Алсын хараа</h1>
+    <h1 class="text-5xl font-black text-primary mb-8" style="font-family:'Playfair Display',Georgia,serif;">& Эрхэм зорилго</h1>
+    <div class="w-16 h-0.5 bg-primary"></div>
+  </div>
+</div>
+
+<!-- Mission & Vision cards -->
+<div class="max-w-5xl mx-auto px-6 -mt-8 mb-16 relative z-10">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Эрхэм зорилго -->
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-primary/20">
+      <div class="bg-primary/10 border-b border-primary/20 px-7 py-5">
+        <div class="flex items-center gap-3 mb-1">
+          <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+            </svg>
+          </div>
+          <p class="text-[0.65rem] text-primary font-black uppercase tracking-[0.18em]">ЭРХЭМ ЗОРИЛГО</p>
+        </div>
+      </div>
+      <div class="px-7 py-6">
+        <p class="text-secondary text-[1.08rem] font-semibold leading-relaxed" style="font-family:'Playfair Display',Georgia,serif;">
+          Бид дотоод гэрлийн хүчээр дээд ухамсарт хөтөлдөг шинэ эриний бясалгалыг түгээн дэлгэрүүлнэ.
+        </p>
+        <div class="mt-5 pt-5 border-t border-gray-100">
+          <p class="text-gray-500 text-[0.88rem] leading-relaxed">
+            Бясалгалын уламжлалт мэдлэгийг орчин үеийн шинжлэх ухааны ойлголттой уялдуулан, хүн бүрт хэрэгжүүлэхэд хялбар хэлбэрээр түгээхийг зорьдог.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Алсын хараа -->
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-primary/20">
+      <div class="bg-primary/10 border-b border-primary/20 px-7 py-5">
+        <div class="flex items-center gap-3 mb-1">
+          <div class="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <p class="text-[0.65rem] text-primary font-black uppercase tracking-[0.18em]">АЛСЫН ХАРАА</p>
+        </div>
+      </div>
+      <div class="px-7 py-6">
+        <p class="text-secondary text-[1.08rem] font-semibold leading-relaxed" style="font-family:'Playfair Display',Georgia,serif;">
+          Дээд ухамсарт хөтлөх (шинэ эриний) бясалгалыг дэлхийд түгээгч академи болно.
+        </p>
+        <div class="mt-5 pt-5 border-t border-gray-100">
+          <p class="text-gray-500 text-[0.88rem] leading-relaxed">
+            Хүн бүрийн дотоод ухамсар, сэтгэл зүй, бие махбодын хөгжлийг цогцоор нь дэмжиж, гэрэлтсэн нийгмийг бүтээхэд хувь нэмэр оруулна.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Үнэт зүйлс -->
+<div class="max-w-5xl mx-auto px-6 pb-20">
+  <div class="flex items-center gap-5 mb-10">
+    <div>
+      <p class="text-[0.68rem] text-primary font-black uppercase tracking-[0.18em] mb-1">МАНАЙ ҮНЭТ ЗҮЙЛС</p>
+      <h2 class="text-3xl font-black text-secondary" style="font-family:'Playfair Display',Georgia,serif;">Бидний итгэл үнэмшил</h2>
+    </div>
+    <div class="flex-1 h-px bg-gray-100"></div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+    <!-- 1. Энэрэл, нигүүлсэл -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <!-- Зүүн: icon бүтэн -->
+      <div class="w-24 flex-shrink-0 bg-rose-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/>
+        </svg>
+      </div>
+      <!-- Баруун: бичвэр -->
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Энэрэл, нигүүлсэл</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид бусдыг ойлгож, хүндэтгэн, эерэг харилцааг эрхэмлэнэ.</p>
+      </div>
+    </div>
+
+    <!-- 2. Хамтын хөгжил -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <div class="w-24 flex-shrink-0 bg-blue-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
+        </svg>
+      </div>
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Хамтын хөгжил</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид бие биенээ дэмжиж, хамтдаа тасралтгүй хөгжихийг эрхэмлэнэ.</p>
+      </div>
+    </div>
+
+    <!-- 3. Шударга, хариуцлагатай байдал -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <div class="w-24 flex-shrink-0 bg-amber-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.97zm-16.5 0c-1.01.143-2.01.317-3 .52m3-.52L2.63 15.696c-.122.499.106 1.028.589 1.202a5.989 5.989 0 002.031.352 5.989 5.989 0 002.031-.352c.483-.174.711-.703.59-1.202L5.25 4.97z"/>
+        </svg>
+      </div>
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Шударга, хариуцлагатай байдал</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид үнэнч, ил тод, хариуцлагатай хандлагыг баримтална.</p>
+      </div>
+    </div>
+
+    <!-- 4. Мэдлэг түгээх хандлага -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <div class="w-24 flex-shrink-0 bg-emerald-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+        </svg>
+      </div>
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Мэдлэг түгээх хандлага</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид сурсан мэдсэнээ бусадтай хуваалцаж, үнэ цэнийг түгээнэ.</p>
+      </div>
+    </div>
+
+    <!-- 5. Суралцагч төвтэй хандлага -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <div class="w-24 flex-shrink-0 bg-violet-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342"/>
+        </svg>
+      </div>
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Суралцагч төвтэй хандлага</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид суралцагч бүрийн өсөлт, хөгжлийг нэн тэргүүнд тавина.</p>
+      </div>
+    </div>
+
+    <!-- 6. Итгэл, боломжийг дэмжих -->
+    <div class="group flex rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all duration-300">
+      <div class="w-24 flex-shrink-0 bg-sky-50 group-hover:bg-primary/10 flex items-center justify-center transition-colors duration-300">
+        <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/>
+        </svg>
+      </div>
+      <div class="flex-1 bg-white px-5 py-5">
+        <h3 class="text-[0.92rem] font-black text-secondary mb-1.5">Итгэл, боломжийг дэмжих</h3>
+        <p class="text-[0.8rem] text-gray-500 leading-relaxed">Бид хүн бүр өөрийн дотоод чадамжаа хөгжүүлэх боломжтой гэдэгт итгэдэг.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-14 bg-primary rounded-2xl px-10 py-8 flex flex-col md:flex-row items-center justify-between gap-6">
+    <div>
+      <p class="text-white/70 text-[0.7rem] uppercase tracking-[0.14em] mb-1">БИДЭНТЭЙ НЭГДЭХ</p>
+      <h3 class="text-white text-xl font-bold" style="font-family:'Playfair Display',Georgia,serif;">Бясалгалын замд хамт алхаарай</h3>
+    </div>
+    <div class="flex gap-3 flex-shrink-0">
+      <a href="{% url 'main:about' %}" class="inline-flex items-center px-5 py-2.5 bg-white text-primary text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded no-underline hover:opacity-90 transition-opacity">
+        Бидний тухай
+      </a>
+      <a href="{% url 'main:contact' %}" class="inline-flex items-center px-5 py-2.5 border-2 border-white text-white text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded no-underline hover:bg-white hover:text-primary transition-colors">
+        Холбоо барих
+      </a>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

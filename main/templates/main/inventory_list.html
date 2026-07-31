@@ -8,15 +8,24 @@
     <!-- Гарчиг ба товчнууд -->
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold text-secondary">📦 Бараа материалын бүртгэл</h1>
-        <div class="space-x-2">
-            <a href="{% url 'main:product_create' %}" class="bg-primary text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
-                + Шинэ бараа нэмэх
+        <div class="flex gap-2">
+            <a href="{% url 'main:purchase_create_multi' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all font-bold">
+                ⬇ Худалдан авалт
             </a>
-            <a href="{% url 'main:stock_movement_create' %}" class="bg-green-600 text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
-                📊 Хөдөлгөөн бүртгэх
+            <a href="{% url 'main:stock_free_intake' %}" class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition-all font-bold">
+                ➕ Үнэгүй орлогодох
             </a>
-            <a href="{% url 'main:stock_movement_list' %}" class="bg-blue-600 text-gray px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
-                📋 Хөдөлгөөний жагсаалт
+            <a href="{% url 'main:stock_free_outgoing' %}" class="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-all font-bold">
+                ➖ Үнэгүй зарлагадах
+            </a>
+            <a href="{% url 'main:sale_create_multi' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-all font-bold">
+                ⬆ Борлуулалт бүртгэх (Олон бараа)
+            </a>
+            <a href="{% url 'main:product_create' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
+                + Бараа нэмэх
+            </a>
+            <a href="{% url 'main:stock_movement_list' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-all font-bold">
+                📋 Жагсаалт
             </a>
         </div>
     </div>
@@ -124,6 +133,10 @@
                         </td>
                         <td class="px-4 py-3 text-center">
                             <a href="{% url 'main:product_edit' product.id %}" class="text-primary hover:text-opacity-80 mr-2">✏️ Засах</a>
+                            <button onclick="openInitialStockModal({{ product.id }}, '{{ product.name }}', {{ product.current_stock }}, {{ product.initial_stock }})" 
+                                    class="text-blue-600 hover:text-blue-800">
+                                📊 Үлдэгдэл
+                            </button>
                         </td>
                     </tr>
                     {% empty %}
@@ -138,4 +151,81 @@
         </div>
     </div>
 </div>
+
+<!-- Эхний үлдэгдэл оруулах Modal -->
+<div id="initialStockModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-secondary">Эхний үлдэгдэл оруулах</h3>
+            <button onclick="closeInitialStockModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="initialStockForm" method="POST" action="{% url 'main:product_set_initial_stock' %}">
+            {% csrf_token %}
+            <input type="hidden" name="product_id" id="modal_product_id">
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-600 mb-2">Бараа:</p>
+                <p class="font-semibold text-lg" id="modal_product_name"></p>
+            </div>
+            
+            <div class="mb-4 bg-blue-50 p-3 rounded-lg">
+                <p class="text-sm text-blue-600 mb-1">📊 Одоогийн үлдэгдэл (тооцоолсон):</p>
+                <p class="font-bold text-2xl text-blue-800" id="modal_current_stock"></p>
+                <p class="text-xs text-blue-600 mt-1">= Эхний үлдэгдэл + Орлого - Зарлага</p>
+            </div>
+            
+            <div class="mb-4">
+                <label for="initial_stock" class="block text-sm font-medium mb-2">Эхний үлдэгдэл *</label>
+                <input type="number" name="initial_stock" id="initial_stock" required min="0" step="1"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                <p class="text-xs text-gray-500 mt-1">💡 Бараа анх агуулахад орж ирсэн тоо ширхэг</p>
+            </div>
+            
+            <div class="mb-4">
+                <label for="initial_stock_note" class="block text-sm font-medium mb-2">Тайлбар</label>
+                <textarea name="note" id="initial_stock_note" rows="3"
+                          placeholder="Эхний үлдэгдэл тохируулга..."
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"></textarea>
+            </div>
+            
+            <div class="flex gap-3">
+                <button type="button" onclick="closeInitialStockModal()" 
+                        class="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300">
+                    Болих
+                </button>
+                <button type="submit" 
+                        class="flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
+                    Хадгалах
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openInitialStockModal(productId, productName, currentStock, initialStock) {
+    document.getElementById('modal_product_id').value = productId;
+    document.getElementById('modal_product_name').textContent = productName;
+    document.getElementById('modal_current_stock').textContent = currentStock;
+    document.getElementById('initial_stock').value = initialStock || 0;
+    document.getElementById('initialStockModal').classList.remove('hidden');
+}
+
+function closeInitialStockModal() {
+    document.getElementById('initialStockModal').classList.add('hidden');
+    document.getElementById('initialStockForm').reset();
+}
+
+// ESC-ээр хаах
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeInitialStockModal();
+    }
+});
+</script>
 {% endblock %}

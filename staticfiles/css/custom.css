@@ -1,4 +1,4 @@
-/* Custom styles for Gotopa Meditation Center */
+﻿/* Custom styles for Gotopa Meditation Center */
 
 /* Font for script text */
 .font-script {
@@ -20,7 +20,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #b5245b;
+    background: #AB334C;
     border-radius: 5px;
 }
 

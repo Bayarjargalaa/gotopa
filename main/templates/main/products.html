@@ -12,32 +12,77 @@
     </div>
 </section>
 
-<section class="py-16">
+<section class="py-12">
     <div class="container mx-auto px-4">
-        <div class="max-w-6xl mx-auto">
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
-                    <div class="text-primary text-5xl mb-4">📚</div>
-                    <h3 class="text-2xl font-bold mb-4">Ном</h3>
-                    <p class="text-gray-700 mb-6">Бясалгал, гэгээрлийн номууд</p>
-                    <a href="{% url 'main:books' %}" class="inline-block bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">Дэлгэрэнгүй</a>
+
+        {% if categories %}
+        <div class="flex flex-wrap gap-2 mb-8">
+            <a href="{% url 'main:products' %}"
+               class="px-4 py-2 rounded-full text-sm font-medium border {% if not selected_category %}bg-primary text-white border-primary{% else %}bg-white text-secondary border-gray-300 hover:border-primary hover:text-primary{% endif %}">
+                Бүгд
+            </a>
+            {% for cat in categories %}
+            <a href="{% url 'main:products' %}?category={{ cat.id }}"
+               class="px-4 py-2 rounded-full text-sm font-medium border {% if selected_category == cat.id|stringformat:'s' %}bg-primary text-white border-primary{% else %}bg-white text-secondary border-gray-300 hover:border-primary hover:text-primary{% endif %}">
+                {{ cat.name }}
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if products %}
+        <div class="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {% for product in products %}
+            <div class="bg-white rounded-xl shadow hover:shadow-lg transition-shadow flex flex-col">
+                {% if product.image %}
+                <img src="{{ product.image.url }}" alt="{{ product.name }}"
+                     class="w-full h-52 object-cover rounded-t-xl">
+                {% else %}
+                <div class="w-full h-52 bg-gray-100 rounded-t-xl flex items-center justify-center">
+                    <span class="text-6xl">🛍️</span>
                 </div>
-                
-                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
-                    <div class="text-primary text-5xl mb-4">🔮</div>
-                    <h3 class="text-2xl font-bold mb-4">Энергийн бүтээгдэхүүн</h3>
-                    <p class="text-gray-700 mb-6">Чулуу, кристал, эрдэнэсийн хос</p>
-                    <a href="{% url 'main:contact' %}" class="inline-block bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">Холбоо барих</a>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
-                    <div class="text-primary text-5xl mb-4">✨</div>
-                    <h3 class="text-2xl font-bold mb-4">Био энергийн оношилгоо</h3>
-                    <p class="text-gray-700 mb-6">Хувийн энергийн оношилгоо, зөвлөгөө</p>
-                    <a href="{% url 'main:contact' %}" class="inline-block bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">Захиалах</a>
+                {% endif %}
+
+                <div class="p-4 flex flex-col flex-1">
+                    {% if product.category %}
+                    <span class="text-xs text-primary font-semibold uppercase tracking-wide mb-1">{{ product.category.name }}</span>
+                    {% endif %}
+
+                    <h3 class="text-base font-bold text-secondary mb-2 line-clamp-2">{{ product.name }}</h3>
+
+                    {% if product.description %}
+                    <p class="text-gray-500 text-sm mb-3 line-clamp-2">{{ product.description }}</p>
+                    {% endif %}
+
+                    <div class="mt-auto">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xl font-bold text-primary">{{ product.selling_price|floatformat:0 }}₮</span>
+                            {% if product.current_stock > 0 %}
+                            <span class="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full">
+                                Үлдэгдэл: {{ product.current_stock }} {{ product.get_unit_display }}
+                            </span>
+                            {% else %}
+                            <span class="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded-full">
+                                Дууссан
+                            </span>
+                            {% endif %}
+                        </div>
+                        <a href="{% url 'main:product_detail' product.id %}"
+                           class="block text-center bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 transition">
+                            Дэлгэрэнгүй харах
+                        </a>
+                    </div>
                 </div>
             </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="text-center py-20 text-gray-400">
+            <div class="text-6xl mb-4">🛍️</div>
+            <p class="text-xl">Одоогоор бүтээгдэхүүн байхгүй байна</p>
+        </div>
+        {% endif %}
+
     </div>
 </section>
 {% endblock %}

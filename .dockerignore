@@ -1,0 +1,102 @@
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.git
+.venv/
+.vscode
+node_modules
+dist
+build
+*.egg-info
+staticfiles
+media
+env
+ENV/
+*.sqlite3
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+.venv/
+venv/
+env/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+staticfiles/
+media/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Tests
+.pytest_cache/
+.coverage
+
+# Scripts - production-д хэрэггүй
+check_*.py
+fix_*.py
+test_*.py
+auto_fix_*.py
+demo_*.py
+clear_*.py
+split_*.py
+setup_*.py
+restore_*.py
+create_sample_*.py
+delete_*.py
+manager_role_decision.py
+
+# Docs
+*.md
+!README.md
+aikido_venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.git/
+.gitignore
+*.md
+check_*.py
+create_test_*.py
+debug_*.py
+test_*.py
+fix_*.py
+analyze_*.py
+auto_link_*.py
+delete_*.py
+find_*.py
+link_*.py
+reset_*.py
+setup_*.py
+update_*.txt
+*.txt
+!requirements.txt

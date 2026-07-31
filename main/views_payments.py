@@ -20,8 +20,20 @@ def student_payments(request):
     - Баганы: Он, сар
     - Нүд: Төлбөр дүн + Ирц тоо
     """
-    # Зөвхөн админ болон багш харна
-    if not (request.user.profile.is_admin or request.user.profile.is_teacher):
+    profile = request.user.profile
+    user = request.user
+    
+    # Эрх шалгах: админ, нягтлан бодогч, багш, Менежер бүлэг эсвэл төлбөр харах эрхтэй
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        profile.is_teacher or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.view_banktransaction')
+    )
+    
+    if not has_access:
         messages.error(request, 'Таньд энэ хуудас руу нэвтрэх эрх байхгүй.')
         return redirect('main:dashboard')
     
@@ -58,7 +70,14 @@ def student_payments(request):
     enrollments = Enrollment.objects.filter(
         is_active=True,
         status__in=['APPROVED', 'COMPLETED']
-    ).select_related('student', 'course')
+    ).select_related('student__user', 'course').order_by(
+        'course__level',
+        'course__name',
+        'student__first_name',
+        'student__last_name',
+        'student__mongolian_name',
+        'student__user__username'
+    )
     
     # Курс шүүлт
     if selected_course != 'all':
@@ -221,9 +240,19 @@ def update_payment_comment(request, transaction_id):
         # Transaction олох
         transaction = BankTransaction.objects.get(id=transaction_id)
         
-        # Зөвхөн админ хэрэглэгч засах эрхтэй
-        if not request.user.profile.is_admin:
-            return JsonResponse({'success': False, 'error': 'Зөвхөн админ засах эрхтэй'})
+        # Эрх шалгах: админ, нягтлан бодогч, Менежер бүлэг эсвэл банкны гүйлгээ засах эрхтэй
+        profile = request.user.profile
+        user = request.user
+        has_access = (
+            profile.is_admin or
+            profile.is_accountant or
+            user.is_superuser or
+            user.groups.filter(name='Менежер').exists() or
+            user.has_perm('main.change_banktransaction')
+        )
+        
+        if not has_access:
+            return JsonResponse({'success': False, 'error': 'Засах эрх танд байхгүй'})
         
         # Хадгалах
         transaction.payment_comment = comment

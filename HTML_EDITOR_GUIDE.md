@@ -1,4 +1,4 @@
-# 🎨 HTML Засварлах систем - CKEditor
+﻿# 🎨 HTML Засварлах систем - CKEditor
 
 ## Тойм
 
@@ -66,11 +66,11 @@ Password: gotopa2025
 **Toolbar:**
 1. Текст сонгох: "Готопа бясалгал"
 2. 🎨 Text Color товч дарах
-3. Өнгө сонгох (жишээ: ягаан #b5245b)
+3. Өнгө сонгох (жишээ: ягаан #AB334C)
 
 **Үр дүн:**
 ```html
-<span style="color: #b5245b;">Готопа бясалгал</span>
+<span style="color: #AB334C;">Готопа бясалгал</span>
 ```
 
 ### Жишээ 3: Жагсаалт
@@ -116,7 +116,7 @@ Password: gotopa2025
 
 **Жишээ HTML:**
 ```html
-<p>Энэ нь <strong style="color: #b5245b;">онцгой</strong> текст юм.</p>
+<p>Энэ нь <strong style="color: #AB334C;">онцгой</strong> текст юм.</p>
 <ul>
   <li>Нэг</li>
   <li>Хоёр</li>
@@ -167,7 +167,7 @@ CKEDITOR_CONFIGS = {
 
 - Монгол хэл дээр бичих
 - Товч, ойлгомжтой текст
-- Өнгө ашиглахдаа brand color (#b5245b) сонгох
+- Өнгө ашиглахдаа brand color (#AB334C) сонгох
 - HTML validation шалгах
 
 ### ❌ Хийхгүй

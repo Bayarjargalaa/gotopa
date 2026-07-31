@@ -1,0 +1,59 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Худалдан авалт устгах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-2xl">
+        <!-- Буцах товч -->
+        <div class="mb-4">
+            <a href="{% url 'main:purchase_list' %}" class="text-primary hover:underline">← Жагсаалт руу буцах</a>
+        </div>
+
+        <!-- Гарчиг -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-3xl font-bold text-red-600 mb-6">🗑️ Худалдан авалт устгах</h2>
+
+            <!-- Мэдээлэл -->
+            <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+                <h3 class="font-bold text-red-800 mb-4">Та энэ худалдан авалтыг устгахдаа итгэлтэй байна уу?</h3>
+                
+                <div class="space-y-2 text-sm text-red-700">
+                    <p><strong>Бараа:</strong> {{ movement.product.name }}</p>
+                    <p><strong>Тоо ширхэг:</strong> {{ movement.quantity }}</p>
+                    <p><strong>Нэгж үнэ:</strong> {{ movement.price|floatformat:0 }}₮</p>
+                    <p><strong>Нийт дүн:</strong> {{ movement.total_amount|floatformat:0 }}₮</p>
+                    <p><strong>Огноо:</strong> {{ movement.created_at|date:"Y-m-d H:i" }}</p>
+                    {% if movement.counterparty %}
+                    <p><strong>Нийлүүлэгч:</strong> {{ movement.counterparty.name }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Анхааруулга -->
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <p class="text-sm text-yellow-800">
+                    <strong>⚠️ Анхаар:</strong> Устгахад:
+                </p>
+                <ul class="list-disc list-inside text-sm text-yellow-700 mt-2 space-y-1">
+                    <li>Бараа материалын үлдэгдэл {{ movement.quantity }} ширхгээр буурна</li>
+                    <li>Журналын бичилт устгагдана</li>
+                    <li>Энэ үйлдлийг буцаах боломжгүй!</li>
+                </ul>
+            </div>
+
+            <!-- Товчнууд -->
+            <form method="post" class="flex gap-4">
+                {% csrf_token %}
+                <button type="submit" class="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium">
+                    ✓ Тийм, устга
+                </button>
+                <a href="{% url 'main:purchase_list' %}" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-medium">
+                    Үгүй, буцах
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

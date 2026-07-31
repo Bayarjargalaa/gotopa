@@ -10,7 +10,7 @@
         <div class="mb-6">
             <h1 class="text-3xl font-bold text-secondary mb-2">{{ course.name }}</h1>
             <div class="flex items-center text-gray-600 space-x-4">
-                <span><i class="fas fa-chalkboard-teacher mr-2"></i>{{ course.teacher.mongolian_name }}</span>
+                <span><i class="fas fa-chalkboard-teacher mr-2"></i>{{ course.teacher.full_name }}</span>
                 <span><i class="fas fa-users mr-2"></i>{{ course.enrolled_count }} сурагч</span>
                 <span><i class="fas fa-calendar mr-2"></i>{{ course.schedule|default:"Хуваарь тодорхойгүй" }}</span>
             </div>
@@ -78,7 +78,6 @@
                                     <div class="flex items-center justify-center">
                                         <input type="checkbox" 
                                                id="checkAll" 
-                                               checked
                                                class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                                                onchange="document.querySelectorAll('input[type=checkbox][name^=present_]').forEach(cb => cb.checked = this.checked)">
                                         <label for="checkAll" class="ml-2">Ирсэн</label>
@@ -92,7 +91,7 @@
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ forloop.counter }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-medium text-gray-900">{{ data.enrollment.student.mongolian_name }}</div>
+                                    <div class="text-sm font-medium text-gray-900">{{ data.enrollment.student.display_name_short|default:data.enrollment.student.full_name }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {{ data.enrollment.student.phone }}
@@ -164,4 +163,49 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+// Хуудас ачаалагдсан үед checkAll checkbox-ыг одоогийн төлөвтэй тааруулах
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[type=checkbox][name^=present_]');
+    const checkAll = document.getElementById('checkAll');
+    
+    // checkAll-г бодит төлөвтэй синхрончлох функц
+    function updateCheckAll() {
+        if (checkboxes.length > 0 && checkAll) {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkAll.checked = allChecked;
+        }
+    }
+    
+    // Эхлээд синхрончлох
+    updateCheckAll();
+    
+    // Сурагчдын checkbox өөрчлөгдөх үед checkAll-г шинэчлэх
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            updateCheckAll();
+        });
+    });
+    
+    // АНХААРУУЛГА: Form submit-д өмнө debug хийх
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Debug: Хэдэн checkbox checked байгааг харуулах
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            console.log(`✅ ${checkedCount}/${checkboxes.length} сурагч ирсэн гэж бүртгэгдэнэ`);
+            
+            // Тасалсан сурагчдыг харуулах
+            checkboxes.forEach(cb => {
+                if (!cb.checked) {
+                    const row = cb.closest('tr');
+                    const studentName = row.querySelector('td:nth-child(2) .text-sm').textContent;
+                    console.log(`❌ Тасалсан: ${studentName} (${cb.name})`);
+                }
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

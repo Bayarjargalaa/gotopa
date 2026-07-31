@@ -1,98 +1,119 @@
 {% extends 'main/base.html' %}
 {% load static %}
 
-{% block title %}Багш нарын жагсаалт - Готопа{% endblock %}
+{% block title %}Багш нар - Готопа Академи{% endblock %}
 
 {% block content %}
-<div class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto px-4">
-        <div class="mb-4">
-            <a href="{% url 'main:dashboard' %}" class="text-primary hover:underline">← Dashboard руу буцах</a>
+<div class="max-w-6xl mx-auto py-12 px-4">
+
+    <!-- Гарчиг -->
+    <div class="mb-10">
+        <p class="text-[0.72rem] text-primary font-black uppercase tracking-[0.18em] mb-2">ГОТОПА АКАДЕМИ</p>
+        <h1 class="text-4xl font-bold text-secondary mb-4" style="font-family:'Playfair Display',Georgia,serif;">Багш нар</h1>
+        <div class="w-12 h-0.5 bg-primary"></div>
+        {% if user.is_authenticated and user.profile.is_admin %}
+        <div class="mt-4">
+            <a href="{% url 'main:teacher_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-[0.72rem] font-extrabold uppercase tracking-[0.1em] rounded no-underline hover:opacity-90 transition-opacity">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                Шинэ багш нэмэх
+            </a>
         </div>
+        {% endif %}
+    </div>
 
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-3xl font-bold text-secondary">Багш нарын жагсаалт</h2>
-                {% if user.profile.is_admin %}
-                <a href="{% url 'main:teacher_create' %}" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors">
-                    <i class="fas fa-user-plus mr-2"></i>Шинэ багш
-                </a>
-                {% endif %}
-            </div>
+    {% if surgagch_cards or dadlagajigch_cards %}
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">№</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Монгол нэр</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Түвшин</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Утас</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Имэйл</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Хаяг</th>
-                            {% if user.profile.is_admin %}
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for teacher in teachers %}
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ forloop.counter }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900">{{ teacher.mongolian_name|default:teacher.user.username }}</div>
-                                <div class="text-sm text-gray-500">{{ teacher.user.username }}</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                {% if teacher.role == 'TEACHER_BEGINNER' %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                    Анхан
-                                </span>
-                                {% elif teacher.role == 'TEACHER_INTERMEDIATE' %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                    Дунд
-                                </span>
-                                {% elif teacher.role == 'TEACHER_ADVANCED' %}
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
-                                    Дээд
-                                </span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ teacher.phone|default:"-" }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ teacher.user.email|default:"-" }}</td>
-                            <td class="px-6 py-4 text-sm text-gray-900">{{ teacher.address|default:"-"|truncatewords:5 }}</td>
-                            {% if user.profile.is_admin %}
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <a href="{% url 'main:teacher_update' teacher.id %}" class="text-blue-600 hover:text-blue-900 mr-3" title="Засах">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <form method="post" action="{% url 'main:teacher_delete' teacher.id %}" class="inline" onsubmit="return confirm('{{ teacher.mongolian_name|default:teacher.user.username }}-г устгахдаа итгэлтэй байна уу?');">
-                                    {% csrf_token %}
-                                    <button type="submit" class="text-red-600 hover:text-red-900" title="Устгах">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
-                                Одоогоор багш бүртгэгдээгүй байна.
-                                {% if user.profile.is_admin %}
-                                <div class="mt-4">
-                                    <a href="{% url 'main:teacher_create' %}" class="inline-block bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90">
-                                        <i class="fas fa-user-plus mr-2"></i>Шинэ багш нэмэх
-                                    </a>
-                                </div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <!-- Сургагч багш нар -->
+    {% if surgagch_cards %}
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold text-secondary mb-6" style="font-family:'Playfair Display',Georgia,serif;">Сургагч багш</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-7">
+            {% for teacher in surgagch_cards %}
+            <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100 flex flex-col">
+                <div class="relative overflow-hidden bg-gray-100" style="aspect-ratio:3/4;">
+                    {% if teacher.photo_filename %}
+                    <img src="{% static 'images/багшнар/' %}{{ teacher.photo_filename }}" alt="{{ teacher.last_name }}.{{ teacher.first_name }}" class="w-full h-full object-cover object-top" onerror="this.style.display='none'; this.parentNode.querySelector('.no-photo').style.display='flex';">
+                    {% endif %}
+                    <div class="no-photo absolute inset-0 bg-gray-100 {% if teacher.photo_filename %}hidden{% else %}flex{% endif %} items-center justify-center">
+                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </div>
+                </div>
+                <div class="px-5 py-4 flex-1 flex flex-col">
+                    <div class="mb-3">
+                        {% if teacher.last_name %}<p class="text-[0.72rem] text-primary font-bold uppercase tracking-[0.1em] mb-0.5">{{ teacher.last_name }}.</p>{% endif %}
+                        <h3 class="text-[1.05rem] font-black text-secondary leading-tight" style="font-family:'Playfair Display',Georgia,serif;">{{ teacher.first_name }}</h3>
+                    </div>
+                    {% if user.is_authenticated %}
+                    <div class="border-t border-gray-100 pt-3 mt-auto space-y-1">
+                        {% if teacher.phone %}<div class="flex items-center gap-2 text-[0.78rem] text-gray-600"><svg class="w-3.5 h-3.5 text-primary flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>{{ teacher.phone }}</div>{% endif %}
+                        {% if teacher.email %}<div class="flex items-center gap-2 text-[0.78rem] text-gray-600"><svg class="w-3.5 h-3.5 text-primary flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg><span class="truncate">{{ teacher.email }}</span></div>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if user.is_authenticated and user.profile.is_admin and teacher.is_profile %}
+                    <div class="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <a href="{% url 'main:teacher_update' teacher.id %}" class="flex-1 text-center text-[0.7rem] font-bold text-blue-600 hover:text-blue-800 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors no-underline">Засах</a>
+                        <form method="post" action="{% url 'main:teacher_delete' teacher.id %}" class="flex-1" onsubmit="return confirm('{{ teacher.last_name }}.{{ teacher.first_name }}-г устгахдаа итгэлтэй байна уу?');">{% csrf_token %}<button type="submit" class="w-full text-[0.7rem] font-bold text-red-600 hover:text-red-800 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">Устгах</button></form>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
+            {% endfor %}
         </div>
     </div>
+    {% endif %}
+
+    <!-- Дадлагажигч багш нар -->
+    {% if dadlagajigch_cards %}
+    <div class="mb-12">
+        <h2 class="text-2xl font-bold text-secondary mb-6" style="font-family:'Playfair Display',Georgia,serif;">Дадлагажигч багш</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-7">
+            {% for teacher in dadlagajigch_cards %}
+            <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100 flex flex-col">
+                <div class="relative overflow-hidden bg-gray-100" style="aspect-ratio:3/4;">
+                    {% if teacher.photo_filename %}
+                    <img src="{% static 'images/багшнар/' %}{{ teacher.photo_filename }}" alt="{{ teacher.last_name }}.{{ teacher.first_name }}" class="w-full h-full object-cover object-top" onerror="this.style.display='none'; this.parentNode.querySelector('.no-photo').style.display='flex';">
+                    {% endif %}
+                    <div class="no-photo absolute inset-0 bg-gray-100 {% if teacher.photo_filename %}hidden{% else %}flex{% endif %} items-center justify-center">
+                        <svg class="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </div>
+                </div>
+                <div class="px-5 py-4 flex-1 flex flex-col">
+                    <div class="mb-3">
+                        {% if teacher.last_name %}<p class="text-[0.72rem] text-primary font-bold uppercase tracking-[0.1em] mb-0.5">{{ teacher.last_name }}.</p>{% endif %}
+                        <h3 class="text-[1.05rem] font-black text-secondary leading-tight" style="font-family:'Playfair Display',Georgia,serif;">{{ teacher.first_name }}</h3>
+                    </div>
+                    {% if user.is_authenticated %}
+                    <div class="border-t border-gray-100 pt-3 mt-auto space-y-1">
+                        {% if teacher.phone %}<div class="flex items-center gap-2 text-[0.78rem] text-gray-600"><svg class="w-3.5 h-3.5 text-primary flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>{{ teacher.phone }}</div>{% endif %}
+                        {% if teacher.email %}<div class="flex items-center gap-2 text-[0.78rem] text-gray-600"><svg class="w-3.5 h-3.5 text-primary flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg><span class="truncate">{{ teacher.email }}</span></div>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if user.is_authenticated and user.profile.is_admin and teacher.is_profile %}
+                    <div class="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <a href="{% url 'main:teacher_update' teacher.id %}" class="flex-1 text-center text-[0.7rem] font-bold text-blue-600 hover:text-blue-800 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors no-underline">Засах</a>
+                        <form method="post" action="{% url 'main:teacher_delete' teacher.id %}" class="flex-1" onsubmit="return confirm('{{ teacher.last_name }}.{{ teacher.first_name }}-г устгахдаа итгэлтэй байна уу?');">{% csrf_token %}<button type="submit" class="w-full text-[0.7rem] font-bold text-red-600 hover:text-red-800 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">Устгах</button></form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="bg-white rounded-xl border border-gray-100 px-8 py-16 text-center">
+        <svg class="w-14 h-14 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
+        </svg>
+        <p class="text-gray-500">Одоогоор багш бүртгэгдээгүй байна.</p>
+        {% if user.is_authenticated and user.profile.is_admin %}
+        <a href="{% url 'main:teacher_create' %}" class="inline-block mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:opacity-90 no-underline text-sm font-semibold">
+            Шинэ багш нэмэх
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}

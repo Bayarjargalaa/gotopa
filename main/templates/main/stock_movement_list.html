@@ -43,6 +43,7 @@
                         <th class="px-4 py-3 text-right text-sm font-semibold">Нийт дүн</th>
                         <th class="px-4 py-3 text-left text-sm font-semibold">Үйлчлүүлэгч</th>
                         <th class="px-4 py-3 text-left text-sm font-semibold">Бүртгэсэн</th>
+                        <th class="px-4 py-3 text-center text-sm font-semibold">Үйлдэл</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -94,12 +95,23 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-600">
-                            {{ movement.created_by.profile.mongolian_name|default:movement.created_by.username }}
+                            {{ movement.created_by.profile.full_name|default:movement.created_by.username }}
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="flex justify-center gap-2">
+                                {% if movement.movement_type == 'IN' %}
+                                <a href="{% url 'main:purchase_edit' movement.id %}" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Засах">✏️</a>
+                                <a href="{% url 'main:purchase_delete' movement.id %}" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600" title="Устгах">🗑️</a>
+                                {% elif movement.movement_type == 'OUT' %}
+                                <a href="{% url 'main:sale_edit' movement.id %}" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Засах">✏️</a>
+                                <a href="{% url 'main:sale_delete' movement.id %}" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600" title="Устгах">🗑️</a>
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                             Хөдөлгөөн олдсонгүй.
                         </td>
                     </tr>

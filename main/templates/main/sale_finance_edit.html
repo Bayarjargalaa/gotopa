@@ -1,0 +1,244 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Борлуулалт засах - {{ sale.sale_number }}{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+  <div class="container mx-auto px-4 max-w-3xl">
+
+    <!-- Буцах -->
+    <div class="mb-4 flex items-center gap-3">
+      <a href="{% url 'main:sale_detail' sale.id %}" class="text-primary hover:underline text-sm">
+        ← {{ sale.sale_number }} дэлгэрэнгүй руу буцах
+      </a>
+      <span class="text-gray-400 text-sm">|</span>
+      <a href="{% url 'main:sale_list' %}" class="text-gray-500 hover:underline text-sm">Жагсаалт</a>
+    </div>
+
+    <!-- Гарчиг -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="flex items-center gap-3 mb-1">
+        <i class="fas fa-edit text-primary text-xl"></i>
+        <h2 class="text-2xl font-bold text-secondary">Борлуулалт засах</h2>
+      </div>
+      <p class="text-gray-500 text-sm">
+        <span class="font-mono font-semibold text-primary">{{ sale.sale_number }}</span>
+        — одоогийн мэдээллийг засна
+      </p>
+    </div>
+
+    <!-- Засах форм -->
+    <form method="post">
+      {% csrf_token %}
+      <div class="bg-white rounded-lg shadow-md p-6 space-y-6">
+
+        <!-- Огноо + Харилцагч -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">
+              <i class="fas fa-calendar-alt mr-1 text-primary"></i> Огноо
+            </label>
+            <input type="date" name="sale_date"
+                   value="{{ sale.sale_date|date:'Y-m-d' }}"
+                   required
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">
+              <i class="fas fa-user mr-1 text-primary"></i> Харилцагч
+            </label>
+            <select name="customer_id"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+              <option value="">— Бэлэн худалдан авагч —</option>
+              {% for c in customers %}
+              <option value="{{ c.id }}" {% if sale.customer_id == c.id %}selected{% endif %}>
+                {{ c.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Төлөв + Хүлээн авсан хүн -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">
+              <i class="fas fa-flag mr-1 text-primary"></i> Төлөв
+            </label>
+            <select name="status"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+              {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if sale.status == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">
+              <i class="fas fa-user-tie mr-1 text-primary"></i> Хүлээн авсан хүн
+            </label>
+            <input type="text" name="salesperson_name"
+                   value="{{ sale.salesperson_name }}"
+                   placeholder="Ажилтны нэр"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+          </div>
+        </div>
+
+        <!-- Төлбөрийн хэлбэр -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-credit-card mr-1 text-primary"></i> Төлбөрийн хэлбэр
+          </label>
+          <div class="flex flex-wrap gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="expected_payment_method" value="Касс"
+                     {% if sale.expected_payment_method == "Касс" %}checked{% endif %}
+                     class="accent-primary">
+              <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">Касс</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="expected_payment_method" value="Харилцах"
+                     {% if sale.expected_payment_method == "Харилцах" %}checked{% endif %}
+                     class="accent-primary">
+              <span class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-full">Харилцах</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="expected_payment_method" value="Касс + Харилцах"
+                     {% if "Касс" in sale.expected_payment_method and "Харилцах" in sale.expected_payment_method %}checked{% endif %}
+                     class="accent-primary">
+              <span class="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-full">Касс + Харилцах</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="expected_payment_method" value=""
+                     {% if not sale.expected_payment_method %}checked{% endif %}
+                     class="accent-primary">
+              <span class="text-sm text-gray-500">Тодорхойгүй</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Тэмдэглэл -->
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">
+            <i class="fas fa-sticky-note mr-1 text-primary"></i> Тэмдэглэл
+          </label>
+          <textarea name="notes" rows="3"
+                    placeholder="Нэмэлт мэдээлэл..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm resize-none">{{ sale.notes }}</textarea>
+        </div>
+
+        <!-- Барааны жагсаалт (засах горим) -->
+        <div>
+          <div class="text-sm font-semibold text-gray-700 mb-2">
+            <i class="fas fa-boxes mr-1 text-primary"></i> Барааны мэдээлэл
+            <span class="text-gray-400 font-normal ml-1">(бараа, тоо, үнэ засах боломжтой)</span>
+          </div>
+          <div class="rounded-lg overflow-hidden border border-gray-200">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2 text-left text-gray-500 font-medium">Бараа</th>
+                  <th class="px-3 py-2 text-center text-gray-500 font-medium w-24">Тоо</th>
+                  <th class="px-3 py-2 text-right text-gray-500 font-medium w-36">Нэгж үнэ</th>
+                  <th class="px-3 py-2 text-right text-gray-500 font-medium w-36">Нийт</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200" id="items-tbody">
+                {% for item in sale.items.all %}
+                <tr class="hover:bg-gray-50" data-item="{{ item.id }}">
+                  <td class="px-3 py-2">
+                    <select name="item_{{ item.id }}_product"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary focus:border-primary item-product">
+                      {% for p in products %}
+                      <option value="{{ p.id }}" data-selling-price="{{ p.selling_price|floatformat:'2u' }}" {% if p.id == item.product_id %}selected{% endif %}>{{ p.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td class="px-3 py-2">
+                    <input type="number" name="item_{{ item.id }}_qty"
+                           value="{{ item.quantity|stringformat:'d' }}" min="1"
+                           class="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center focus:ring-1 focus:ring-primary focus:border-primary item-qty">
+                  </td>
+                  <td class="px-3 py-2">
+                    <input type="number" name="item_{{ item.id }}_price"
+                           value="{{ item.unit_price|floatformat:'2u' }}" min="0" step="0.01"
+                           class="w-full border border-gray-300 rounded px-2 py-1 text-sm text-right focus:ring-1 focus:ring-primary focus:border-primary item-price">
+                  </td>
+                  <td class="px-3 py-2 text-right font-semibold text-green-600 item-total">
+                    {{ item.total_price|floatformat:0 }}₮
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colspan="3" class="px-3 py-2 text-right font-bold text-gray-700">Нийт дүн:</td>
+                  <td class="px-3 py-2 text-right font-bold text-green-600 text-base" id="grand-total">
+                    {{ sale.total_amount|floatformat:0 }}₮
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">⚠️ Тоо, үнэ өөрчлөгдвөл нийт дүн автоматаар шинэчлэгдэнэ.</p>
+        </div>
+
+      </div>
+
+      <!-- Товчнууд -->
+      <div class="flex justify-end gap-3 mt-6">
+        <a href="{% url 'main:sale_detail' sale.id %}"
+           class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium">
+          Болих
+        </a>
+        <button type="submit"
+                class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 text-sm font-semibold flex items-center gap-2">
+          <i class="fas fa-save"></i> Хадгалах
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var itemsTbody = document.getElementById('items-tbody');
+
+  function recalcRow(row) {
+    var qty   = parseFloat(row.querySelector('.item-qty').value)   || 0;
+    var price = parseFloat(row.querySelector('.item-price').value) || 0;
+    var total = qty * price;
+    row.querySelector('.item-total').textContent = Math.round(total).toLocaleString() + '₮';
+    return total;
+  }
+
+  function recalcAll() {
+    var rows  = document.querySelectorAll('#items-tbody tr');
+    var grand = 0;
+    rows.forEach(function (row) { grand += recalcRow(row); });
+    document.getElementById('grand-total').textContent = Math.round(grand).toLocaleString() + '₮';
+  }
+
+  function onProductChange(e) {
+    if (!e.target.classList.contains('item-product')) return;
+
+    var row = e.target.closest('tr');
+    if (!row) return;
+
+    var selectedOption = e.target.options[e.target.selectedIndex];
+    var sellingPrice = parseFloat(selectedOption.dataset.sellingPrice || '0');
+    var priceInput = row.querySelector('.item-price');
+    if (priceInput) {
+      priceInput.value = sellingPrice.toFixed(2);
+    }
+
+    recalcAll();
+  }
+
+  itemsTbody.addEventListener('input', recalcAll);
+  itemsTbody.addEventListener('change', onProductChange);
+  recalcAll();
+})();
+</script>
+{% endblock %}

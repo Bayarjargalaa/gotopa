@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-cmz#-4n==as*cg!l9)@5u%=v_gkllwr1j^o95&5*0mau5!$9w3'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cmz#-4n==as*cg!l9)@5u%=v_gkllwr1j^o95&5*0mau5!$9w3')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['202.179.22.189', 'localhost', '127.0.0.1']
+# 1. Тухайн IP болон портыг итгэмжлэгдсэн жагсаалтад оруулна (http:// заавал байх ёстой)
+CSRF_TRUSTED_ORIGINS = [
+    'http://202.179.22.189:8002',
+    'http://202.179.22.189',
+]
+
+_allowed = os.environ.get('DJANGO_ALLOWED_HOSTS', '202.179.22.189,localhost,127.0.0.1')
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
 
 
 # Application definition
@@ -37,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'ckeditor',
     'main',
 ]
@@ -50,6 +59,13 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Production-д (DEBUG=False) whitenoise ашиглана
+if not DEBUG:
+    try:
+        MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+    except ImportError:
+        pass
 
 ROOT_URLCONF = 'gotopa_project.urls'
 
@@ -78,7 +94,7 @@ WSGI_APPLICATION = 'gotopa_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('DATABASE_PATH', str(BASE_DIR / 'data' / 'db.sqlite3')),
     }
 }
 
@@ -112,6 +128,11 @@ TIME_ZONE = 'Asia/Ulaanbaatar'
 USE_I18N = True
 
 USE_TZ = True
+
+# Number formatting - Мянгачлах тохиргоо
+USE_THOUSAND_SEPARATOR = True
+THOUSAND_SEPARATOR = ','
+NUMBER_GROUPING = 3
 
 # Authentication backends - утас/имэйлээр нэвтрэх
 AUTHENTICATION_BACKENDS = [

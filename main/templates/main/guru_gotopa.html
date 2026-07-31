@@ -1,80 +1,169 @@
-{% extends 'main/base.html' %}
+﻿{% extends 'main/base.html' %}
 {% load static %}
-{% load content_tags %}
 
-{% block title %}Гүрү Готопа багш - Готопа бясалгалын төв{% endblock %}
+{% block title %}Гүрү Готопа багш - Готопа Академи{% endblock %}
 
 {% block content %}
-<!-- Page Header -->
-<section class="bg-gradient-to-r from-primary to-purple-700 text-white py-20">
-    <div class="container mx-auto px-4">
-        <h1 class="text-5xl font-bold mb-4">{% editable 'guru_title' 'Гүрү Готопа багш' %}</h1>
-        <p class="text-xl">{% editable 'guru_subtitle' 'Гэгээрлийн замд удирдагч' %}</p>
+<div class="max-w-5xl mx-auto py-12 px-4">
+
+  <!-- Breadcrumb -->
+  <nav class="flex items-center gap-2 text-[0.72rem] text-gray-400 mb-10">
+    <a href="{% url 'main:home' %}" class="hover:text-primary no-underline transition-colors">Эхлэл</a>
+    <span>/</span>
+    <a href="{% url 'main:about' %}" class="hover:text-primary no-underline transition-colors">Бидний тухай</a>
+    <span>/</span>
+    <span class="text-secondary font-semibold">Гүрү Готопа багш</span>
+  </nav>
+
+  <!-- Hero хэсэг -->
+  <div class="grid grid-cols-[1fr_300px] gap-12 mb-14 items-start">
+    <div>
+      <p class="text-[0.72rem] text-primary font-black uppercase tracking-[0.18em] mb-2">ГОТОПА АКАДЕМИ</p>
+      <h1 class="text-4xl font-semibold text-secondary mb-1" style="font-family:'Playfair Display',Georgia,serif;">
+        Гүрү Готопа багш
+      </h1>
+      <p class="text-[0.85rem] text-gray-400 mb-5">Ж.Доржготов — Үүсгэн байгуулагч, Тэргүүний багш</p>
+      <div class="w-12 h-0.5 bg-primary mb-7"></div>
+      <p class="text-gray-700 leading-relaxed text-[0.95rem] mb-4">
+        Гүрү Готопа багш буюу <strong>Ж.Доржготов</strong> нь хүний дотоод хөгжил, ухамсрын боловсрол, бясалгалын арга ухааныг түгээн дэлгэрүүлэх үйлсэд өөрийн амьдралаа зориулсан багш, сургагч, бясалгагч юм.
+      </p>
+      <p class="text-gray-700 leading-relaxed text-[0.95rem]">
+        Тэрээр 1978 оны 1 дүгээр сарын 13-нд Улаанбаатар хотод төрж, бага насныхаа жилүүдийг Өвөрхангай аймгийн Хужирт суманд өнгөрүүлжээ. Хүүхэд наснаасаа амьдралын утга учир, хүний мөн чанарын талаар эргэцүүлэн бодож, мэдлэг боловсрол эзэмшихийн зэрэгцээ дотоод хөгжлийн эрэл хайгуулд тэмүүлж ирсэн байна.
+      </p>
     </div>
-</section>
 
-<!-- Main Content -->
-<section class="py-16">
-    <div class="container mx-auto px-4">
-        <div class="max-w-4xl mx-auto">
-            <div class="grid md:grid-cols-2 gap-12 items-center mb-12">
-                <div>
-                    <img src="{% static 'images/bagshin_zurag.jpg' %}" alt="Гүрү Готопа" class="w-full rounded-lg shadow-lg">
-                </div>
-                <div>
-                    <h2 class="text-3xl font-bold text-secondary mb-6">Гүрү Готопа</h2>
-                    <p class="text-gray-700 text-lg leading-relaxed mb-4">
-                        Гүрү Готопа бол өндөр давтамжийн бясалгалын мастер, гэгээрэлтэд хүрсэн багш бөгөөд олон мянган хүмүүсийг бясалгалын замд удирдаж ирсэн.
-                    </p>
-                    <p class="text-gray-700 text-lg leading-relaxed mb-4">
-                        Багш нь 30 гаруй жилийн турш янз бүрийн гэгээрэлтийн арга барилыг судалж, практик хийсний үр дүнд өөрийн өвөрмөц систем бүтээсэн.
-                    </p>
-                    <p class="text-gray-700 text-lg leading-relaxed">
-                        Түүний зааж буй бясалгалын аргууд нь энгийн бөгөөд үр дүнтэй, хэн бүхэнд ойлгомжтой байдлаараа онцлог юм.
-                    </p>
-                </div>
-            </div>
-
-            <!-- Philosophy -->
-            <div class="bg-light rounded-lg p-8 mb-12">
-                <h3 class="text-2xl font-bold text-secondary mb-6">Багшийн үзэл санаа</h3>
-                <blockquote class="text-gray-700 text-lg italic border-l-4 border-primary pl-6">
-                    "Гэгээрэлт гэдэг нь алс хол дахь зүйл биш, харин энд яг одоо, бидний дотор байдаг. Зөвхөн түүнийг олж харах хэрэгтэй."
-                </blockquote>
-            </div>
-
-            <!-- Achievements -->
-            <div class="mb-12">
-                <h3 class="text-2xl font-bold text-secondary mb-6">Үйл ажиллагаа</h3>
-                <div class="space-y-4">
-                    <div class="flex items-start">
-                        <span class="text-primary text-2xl mr-3">•</span>
-                        <p class="text-gray-700">10,000 гаруй хүн бясалгалын хичээлд хамрагдсан</p>
-                    </div>
-                    <div class="flex items-start">
-                        <span class="text-primary text-2xl mr-3">•</span>
-                        <p class="text-gray-700">15 гаруй ном, эрдэм шинжилгээний өгүүлэл бичсэн</p>
-                    </div>
-                    <div class="flex items-start">
-                        <span class="text-primary text-2xl mr-3">•</span>
-                        <p class="text-gray-700">Олон улсын бясалгалын хурал, семинарт зохион байгуулалттай оролцсон</p>
-                    </div>
-                    <div class="flex items-start">
-                        <span class="text-primary text-2xl mr-3">•</span>
-                        <p class="text-gray-700">Монгол болон дэлхийн өнцөг булан бүрт бясалгалын төв байгуулсан</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- CTA -->
-            <div class="text-center bg-primary text-white rounded-lg p-8">
-                <h3 class="text-2xl font-bold mb-4">Багштай уулзах уу?</h3>
-                <p class="mb-6">Зуны VIP бясалгалд оролцож, багштай биечлэн уулзах боломжтой</p>
-                <a href="{% url 'main:vip_meditation' %}" class="inline-block bg-white text-primary px-8 py-3 rounded-lg font-bold hover:bg-gray-100 transition-all">
-                    Дэлгэрэнгүй
-                </a>
-            </div>
+    <!-- Нэрийн карт -->
+    <div class="sticky top-20">
+      <div class="bg-gray-50 border border-gray-100 rounded-2xl overflow-hidden">
+        <div class="bg-primary/5 h-48 flex items-center justify-center">
+          <div class="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center">
+            <svg class="w-12 h-12 text-primary/50" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+            </svg>
+          </div>
         </div>
+        <div class="p-5">
+          <h3 class="text-[0.95rem] font-bold text-secondary mb-0.5">Ж.Доржготов</h3>
+          <p class="text-[0.72rem] text-primary font-semibold mb-4">Гүрү Готопа багш</p>
+          <ul class="space-y-2.5 text-[0.78rem] text-gray-600">
+            <li class="flex items-start gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0"></span>
+              Төрсөн: 1978.01.13, УБ хот
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0"></span>
+              ШУТИС — Цахилгаан системийн автоматжуулалт
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0"></span>
+              2010 — Даяанчлалын зам
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0"></span>
+              2011 — Готопа Академи үүсгэн байгуулсан
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
-</section>
+  </div>
+
+  <!-- Намтар timeline -->
+  <div class="mb-14">
+    <div class="flex items-center gap-4 mb-8">
+      <h2 class="text-[0.72rem] font-black uppercase tracking-[0.14em] text-secondary whitespace-nowrap">НАМТАР</h2>
+      <div class="flex-1 h-px bg-gray-100"></div>
+    </div>
+
+    <div class="space-y-0">
+
+      <div class="grid grid-cols-[72px_1fr] gap-6">
+        <div class="flex flex-col items-center pt-1">
+          <div class="w-7 h-7 rounded-full bg-white border-2 border-primary flex items-center justify-center flex-shrink-0">
+            <div class="w-2 h-2 rounded-full bg-primary"></div>
+          </div>
+          <div class="flex-1 w-px bg-gray-100 mt-1"></div>
+        </div>
+        <div class="pb-8">
+          <p class="text-[0.68rem] font-black text-primary uppercase tracking-[0.1em] mb-1">2004</p>
+          <p class="text-[0.9rem] font-semibold text-secondary mb-2">Дээд боловсрол — ШУТИС</p>
+          <p class="text-[0.88rem] text-gray-600 leading-relaxed">
+            Цахилгаан системийн автоматжуулалт мэргэжлээр бакалаврын зэрэгтэй төгсөж, Улаанбаатар хотын Дулааны Цахилгаан Станц-3-т ажиллаж, улмаар уул уурхайн салбарт үргэлжлүүлэн ажилласан. Энэ хугацаа сахилга бат, хариуцлагыг төлөвшүүлэхэд чухал нөлөө үзүүлжээ.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-[72px_1fr] gap-6">
+        <div class="flex flex-col items-center pt-1">
+          <div class="w-7 h-7 rounded-full bg-white border-2 border-primary flex items-center justify-center flex-shrink-0">
+            <div class="w-2 h-2 rounded-full bg-primary"></div>
+          </div>
+          <div class="flex-1 w-px bg-gray-100 mt-1"></div>
+        </div>
+        <div class="pb-8">
+          <p class="text-[0.68rem] font-black text-primary uppercase tracking-[0.1em] mb-1">2010</p>
+          <p class="text-[0.9rem] font-semibold text-secondary mb-2">Даяанчлалын зам — Дотоод эргэлт</p>
+          <p class="text-[0.88rem] text-gray-600 leading-relaxed">
+            Материаллаг амжилтаас илүү хүний дотоод амар амгалан, жинхэнэ аз жаргалын үнэ цэнийг эрэлхийлж бясалгалын гүн ухаан руу хөтлөгдсөн. Нэг жилийн турш гүн бясалгал, дотоод танин мэдэхүйн дадлыг тууштай хэрэгжүүлж, хүний ухамсарын хөгжлийн талаар гүн ойлголтыг олжээ.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-[72px_1fr] gap-6">
+        <div class="flex flex-col items-center pt-1">
+          <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+            <div class="w-2 h-2 rounded-full bg-white"></div>
+          </div>
+        </div>
+        <div class="pb-4">
+          <p class="text-[0.68rem] font-black text-primary uppercase tracking-[0.1em] mb-1">2011 — ӨНӨӨДӨР</p>
+          <p class="text-[0.9rem] font-semibold text-secondary mb-2">Готопа Академи — Олон нийтийн үйлчилгээ</p>
+          <p class="text-[0.88rem] text-gray-600 leading-relaxed">
+            Бясалгалын мэдлэг, туршлагаа олон нийттэй хуваалцаж сургалт, лекц, бясалгалын хөтөлбөрүүдийг тогтмол зохион байгуулж эхэлсэн. Өнөөдөр Готопа Академийн тэргүүний хувьд олон мянган суралцагчдад дотоод амар амгалан, зөв ухамсар, энэрэнгүй сэтгэлийн үнэ цэнийг түгээн ажиллаж байна.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Сургаалын гол утга -->
+  <div class="bg-gray-50 border border-gray-100 rounded-2xl p-8 mb-14">
+    <div class="flex items-center gap-4 mb-6">
+      <h2 class="text-[0.72rem] font-black uppercase tracking-[0.14em] text-secondary whitespace-nowrap">СУРГААЛЫН ГОЛ УТГА</h2>
+      <div class="flex-1 h-px bg-gray-200"></div>
+    </div>
+    <blockquote class="border-l-4 border-primary pl-6 mb-5">
+      <p class="text-secondary text-[1.05rem] font-semibold leading-relaxed italic" style="font-family:'Playfair Display',Georgia,serif;">
+        "Бясалгал нь зөвхөн бясалгалын танхимд хийх дадал бус, өдөр тутмын амьдралд хэрэгжих ухамсарт амьдралын хэв маяг юм."
+      </p>
+      <footer class="mt-3 text-[0.78rem] text-primary font-semibold">— Гүрү Готопа багш</footer>
+    </blockquote>
+    <p class="text-gray-600 leading-relaxed text-[0.9rem]">
+      Гүрү Готопа багшийн сургаалын гол мөн чанар нь хүн өөрийгөө танин мэдэж, сэтгэл оюунаа хөгжүүлэн, амьдралдаа зөв хандлага, зөв дадлыг төлөвшүүлэхэд оршдог. Түүний удирдан хөгжүүлж буй Готопа Академи нь бясалгал, дотоод хөгжил, ухамсрын боловсролын чиглэлээр олон нийтийн суралцах, хөгжих орон зай болон өргөжин хөгжиж байна.
+    </p>
+  </div>
+
+  <!-- CTA -->
+  <div class="bg-primary rounded-2xl px-10 py-8 flex items-center justify-between">
+    <div>
+      <p class="text-white/70 text-[0.7rem] uppercase tracking-[0.14em] mb-1">БАГШИЙН СУРГАЛТАД ХАМРАГДАХ</p>
+      <h3 class="text-white text-xl font-bold" style="font-family:'Playfair Display',Georgia,serif;">
+        Бясалгалын замд хамт алхаарай
+      </h3>
+    </div>
+    <div class="flex gap-3">
+      <a href="{% url 'main:course_list' %}"
+         class="inline-flex items-center px-5 py-2.5 bg-white text-primary text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded no-underline hover:opacity-90 transition-opacity">
+        Сургалтууд
+      </a>
+      <a href="{% url 'main:contact' %}"
+         class="inline-flex items-center px-5 py-2.5 border-2 border-white text-white text-[0.72rem] font-extrabold uppercase tracking-[0.08em] rounded no-underline hover:bg-white hover:text-primary transition-colors">
+        Холбоо барих
+      </a>
+    </div>
+  </div>
+
+</div>
 {% endblock %}
+

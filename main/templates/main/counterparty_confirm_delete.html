@@ -1,0 +1,49 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Харилцагч устгах - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+        <div class="text-center mb-6">
+            <i class="fas fa-exclamation-triangle text-red-500 text-6xl mb-4"></i>
+            <h1 class="text-2xl font-bold text-secondary">Харилцагч устгах</h1>
+        </div>
+
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <p class="text-sm text-yellow-800">
+                <strong>Анхааруулга:</strong> Энэ үйлдлийг буцаах боломжгүй!
+            </p>
+        </div>
+
+        <div class="mb-6">
+            <p class="text-gray-700 mb-2">Та дараах харилцагчийг устгахдаа итгэлтэй байна уу?</p>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <p class="font-semibold text-gray-900">{{ counterparty.name }}</p>
+                <p class="text-sm text-gray-600">{{ counterparty.get_counterparty_type_display }}</p>
+                {% if counterparty.phone %}
+                <p class="text-sm text-gray-600">Утас: {{ counterparty.phone }}</p>
+                {% endif %}
+                {% if counterparty.balance != 0 %}
+                <p class="text-sm font-semibold mt-2 {% if counterparty.balance > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                    Үлдэгдэл: {{ counterparty.balance|floatformat:0 }}₮
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
+                    <i class="fas fa-trash mr-2"></i>Устгах
+                </button>
+                <a href="{% url 'main:counterparty_list' %}" class="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 text-center">
+                    <i class="fas fa-times mr-2"></i>Болих
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
