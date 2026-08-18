@@ -327,6 +327,14 @@
                                 {% if tx.offset_account %}
                                     <div class="font-medium text-green-600">{{ tx.offset_account.code }}</div>
                                     <div class="text-gray-500 text-xs">{{ tx.offset_account.name }}</div>
+                                {% elif tx.effective_offset_account %}
+                                    {% with eff=tx.effective_offset_account %}
+                                    <div class="font-medium text-green-600">{{ eff.code }}</div>
+                                    <div class="text-gray-500 text-xs">{{ eff.name }}</div>
+                                    <div class="text-gray-400 text-xs mt-0.5">журналын бичилтээс</div>
+                                    {% endwith %}
+                                {% elif tx.is_sale_linked %}
+                                    <span class="text-yellow-600 font-medium text-xs">Борлуулалттай холбоотой — журналд ороогүй</span>
                                 {% else %}
                                     <span class="text-yellow-600 font-medium">Хоосон</span>
                                 {% endif %}

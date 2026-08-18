@@ -18,6 +18,38 @@ from django.utils import timezone
 from django.db import IntegrityError, transaction
 
 
+def next_entry_number(stem, width=4):
+    """`stem`-ээр эхэлсэн журналын дугааруудын дараах дараалалыг буцаана
+
+    Дугаарыг НИЙТ ТООГООР бодохгүй, байгаа дугааруудын ХАМГИЙН ИХ дараалал дээр
+    нэмж бодно. Устгагдсан бичилтээс болж дугаарлалтад цоорхой үүссэн үед
+    (жишээ нь BNK20260120: 1..14, 16) тоогоор бодох нь аль хэдийн байгаа
+    дугаарыг дахин үүсгэж `UNIQUE constraint failed` алдаа гаргадаг байсан.
+
+    Args:
+        stem: дугаарын угтвар (жишээ 'BNK20260120', 'PUR-20260120-')
+        width: дарааллын оронгийн тоо (default 4 → 0001)
+
+    Returns:
+        (seq, entry_number) хос
+    """
+    import re
+
+    pattern = re.compile(rf'^{re.escape(stem)}(\d+)')
+    max_seq = 0
+    for existing in AccountingEntry.objects.filter(
+        entry_number__startswith=stem
+    ).values_list('entry_number', flat=True):
+        match = pattern.match(existing or '')
+        if match:
+            seq = int(match.group(1))
+            if seq > max_seq:
+                max_seq = seq
+
+    next_seq = max_seq + 1
+    return next_seq, f'{stem}{next_seq:0{width}d}'
+
+
 def create_accounting_entry_safe(**kwargs):
     """Module-level helper to create AccountingEntry with basic retry on IntegrityError.
 
@@ -39,11 +71,13 @@ def create_accounting_entry_safe(**kwargs):
             en = kwargs.get('entry_number', '')
             m = re.match(r'^(?P<prefix>[A-Z]+)(?P<date>\d{8})(?P<seq>\d+)', en)
             if m:
-                prefix = m.group('prefix')
-                date_key = m.group('date')
-                existing = AccountingEntry.objects.filter(entry_number__startswith=f'{prefix}{date_key}').count()
-                kwargs['entry_number'] = f"{prefix}{date_key}{existing + 1:04d}"
-                continue
+                stem = f"{m.group('prefix')}{m.group('date')}"
+                _, candidate = next_entry_number(stem, width=len(m.group('seq')))
+                # Дугаар өөрчлөгдөөгүй бол дахин мөн адил алдаа гарах тул
+                # давхардахгүй санамсаргүй дагаваар шилжинэ
+                if candidate != en:
+                    kwargs['entry_number'] = candidate
+                    continue
             suffix = uuid.uuid4().hex[:6].upper()
             kwargs['entry_number'] = f"{en}-{suffix}"
             continue
@@ -51,6 +85,134 @@ def create_accounting_entry_safe(**kwargs):
     if last_exc:
         raise last_exc
     raise IntegrityError('Failed to create AccountingEntry after retries')
+
+
+SALE_REVENUE_CODE = '510101'
+
+
+def sync_sale_revenue_journal(bt, user, dry_run=False):
+    """Борлуулалтад холбогдсон гүйлгээний орлогын журналыг тэнцүүлэх
+
+    Бичилт: Дт банк/касс — Кт 510101 Борлуулалтын орлого, дүн нь борлуулалтад
+    хуваарилагдсан нийт дүн. Борлуулалтад холбоход журнал шууд үүсч, эсрэг данс
+    бөглөгдөнө; хуваарилалт өөрчлөгдөхөд дүн шинэчлэгдэж, бүх холбоос тасрахад
+    бичилт устгагдана.
+
+    Сурагчийн төлбөртэй хамт хуваарилагдсан (хосолсон) гүйлгээг хөндөхгүй —
+    түүнийг нягтлан "журналд холбох" хуудсаар гараар ангилна. Мөн 510101-ээс
+    өөр данс руу гараар ангилсан бичилтийг ч дарж бичихгүй.
+
+    Args:
+        dry_run: True бол өгөгдлийг хөндөхгүй, зөвхөн юу болохыг буцаана
+
+    Returns:
+        str: 'created' | 'updated' | 'offset' | 'deleted' | 'skipped'
+    """
+    from decimal import Decimal
+    from django.db.models import Sum
+
+    # Автоматаар үүссэн кассын эсрэг мөр өөрөө журнал үүсгэхгүй
+    if bt.transfer_source_id:
+        return 'skipped'
+
+    student_alloc = bt.allocations.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    sale_alloc = bt.sale_allocations.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+
+    # Legacy бүрэн холбоос (income_sale) — гүйлгээний дүн бүхэлдээ борлуулалтад тооцогдоно
+    if sale_alloc == 0 and bt.income_sale_id:
+        sale_alloc = bt.income_amount or Decimal('0')
+
+    # Хосолсон хуваарилалт — гараар ангилуулна
+    if student_alloc > 0:
+        return 'skipped'
+
+    revenue_account = ChartOfAccounts.objects.filter(code=SALE_REVENUE_CODE).first()
+    if not revenue_account or not bt.bank_account_id:
+        return 'skipped'
+
+    entry = bt.accounting_entry
+    # Зөвхөн өөрсдөө үүсгэсэн (Кт 510101, Дт тухайн банк/касс) бичилтийг хөндөнө
+    is_own_entry = bool(
+        entry and
+        entry.credit_account_id == revenue_account.id and
+        entry.debit_account_id == bt.bank_account_id
+    )
+
+    if sale_alloc <= 0:
+        # Холбоос бүрэн тасарсан — өөрсдөө үүсгэсэн бичилтийг цэвэрлэнэ
+        if is_own_entry and not bt.income_sale_id:
+            if dry_run:
+                return 'deleted'
+            bt.accounting_entry = None
+            bt.offset_account = None
+            bt.is_processed = False
+            bt.save(update_fields=['accounting_entry', 'offset_account', 'is_processed'])
+            entry.delete()
+            return 'deleted'
+        return 'skipped'
+
+    if entry and not is_own_entry:
+        # Гараар өөр дансаар ангилсан байна — хөндөхгүй
+        return 'skipped'
+
+    fully_posted = sale_alloc >= (bt.income_amount or 0)
+    needs_offset = bt.offset_account_id != revenue_account.id
+    needs_processed = bt.is_processed != fully_posted
+
+    if dry_run:
+        if not is_own_entry:
+            return 'created'
+        if entry.debit_amount != sale_alloc or entry.credit_amount != sale_alloc:
+            return 'updated'
+        if needs_offset or needs_processed:
+            return 'offset'
+        return 'skipped'
+
+    update_fields = []
+    result = 'skipped'
+
+    if is_own_entry:
+        if entry.debit_amount != sale_alloc or entry.credit_amount != sale_alloc:
+            entry.debit_amount = sale_alloc
+            entry.credit_amount = sale_alloc
+            entry.save()
+            result = 'updated'
+    else:
+        date_key = bt.transaction_date.strftime('%Y%m%d')
+        prefix = 'CSH' if bt.account_type == 'CASH' else 'BNK'
+        _, entry_number = next_entry_number(f'{prefix}{date_key}')
+
+        linked_sales = [alloc.sale for alloc in bt.sale_allocations.select_related('sale')]
+        entry = create_accounting_entry_safe(
+            entry_date=bt.transaction_date,
+            entry_number=entry_number,
+            description=bt.description,
+            debit_account=bt.bank_account,
+            debit_amount=sale_alloc,
+            credit_account=revenue_account,
+            credit_amount=sale_alloc,
+            created_by=user,
+            related_sale=linked_sales[0] if len(linked_sales) == 1 else None,
+        )
+        bt.accounting_entry = entry
+        update_fields.append('accounting_entry')
+        result = 'created'
+
+    if needs_offset:
+        bt.offset_account = revenue_account
+        update_fields.append('offset_account')
+
+    # Гүйлгээний дүн бүхэлдээ борлуулалтад хуваарилагдсан бол л журналд орсонд тооцно
+    if needs_processed:
+        bt.is_processed = fully_posted
+        update_fields.append('is_processed')
+
+    if update_fields:
+        bt.save(update_fields=update_fields)
+        if result == 'skipped':
+            result = 'offset'
+
+    return result
 
 
 def is_cash_account(account):
@@ -419,10 +581,7 @@ def regenerate_accounting_entries(bank_transactions, user):
 
         def _next_seq_and_number(date_key, prefix):
             """Return next sequence-based entry_number for prefix+date_key."""
-            existing = AccountingEntry.objects.filter(
-                entry_number__startswith=f'{prefix}{date_key}'
-            ).count()
-            return existing + 1, f"{prefix}{date_key}{existing + 1:04d}"
+            return next_entry_number(f'{prefix}{date_key}')
 
         # Use module-level safe creator to avoid entry_number collisions
 

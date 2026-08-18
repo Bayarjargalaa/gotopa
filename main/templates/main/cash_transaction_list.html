@@ -187,6 +187,14 @@
                             {% if transaction.offset_account %}
                                 <span class="font-mono">{{ transaction.offset_account.code }}</span><br>
                                 <span class="text-gray-600 text-xs">{{ transaction.offset_account.name }}</span>
+                            {% elif transaction.effective_offset_account %}
+                                {% with eff=transaction.effective_offset_account %}
+                                <span class="font-mono">{{ eff.code }}</span><br>
+                                <span class="text-gray-600 text-xs">{{ eff.name }}</span><br>
+                                <span class="text-gray-400 text-xs">журналын бичилтээс</span>
+                                {% endwith %}
+                            {% elif transaction.is_sale_linked %}
+                                <span class="text-amber-600 text-xs">Борлуулалттай холбоотой — журналд ороогүй</span>
                             {% else %}
                                 <span class="text-red-500 text-xs">Эсрэг данс холбоогүй</span>
                             {% endif %}

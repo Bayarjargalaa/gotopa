@@ -18,7 +18,7 @@ from .models import (
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Sum, Count, F
+from django.db.models import Q, Sum, Count, F, Exists, OuterRef
 from django.db import transaction
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -27,7 +27,7 @@ from datetime import datetime, date
 import re
 import os
 from .import_counterparties import import_counterparties
-from .import_bank_transactions import import_bank_transactions
+from .import_bank_transactions import import_bank_transactions, next_entry_number
 
 def home(request):
     """Нүүр хуудас"""
@@ -2877,11 +2877,21 @@ def sale_detail(request, sale_id):
         available = max_for_this_sale if same_sale_alloc == 0 else max_for_this_sale
         return available if available > 0 else Decimal('0')
 
-    # Холбох боломжтой гүйлгээнүүд — бүх төрлийн, аль хэдийн cold борлуулалттай холбогдсоныг хасна
+    # Холбох боломжтой гүйлгээнүүд — бүх төрлийн, аль хэдийн cold борлуулалттай холбогдсоныг хасна.
+    # Мөн шууд дансанд (эсрэг данс / журналын бичилт) холбогдсон гүйлгээг хасна —
+    # жишээ нь "Хандивийн орлого" болгож ангилсан гүйлгээг борлуулалтад дахин холбож болохгүй.
+    # Борлуулалтад хэсэгчлэн хуваарилагдсан гүйлгээ бол үлдэгдлээ холбох боломжтой хэвээр байна.
     available_txs = BankTransaction.objects.filter(
         income_amount__gt=0,
     ).exclude(
         income_sale__isnull=False
+    ).annotate(
+        has_sale_alloc=Exists(
+            SalePaymentAllocation.objects.filter(transaction=OuterRef('pk'))
+        )
+    ).exclude(
+        Q(has_sale_alloc=False) &
+        (Q(offset_account__isnull=False) | Q(accounting_entry__isnull=False))
     ).select_related('bank_account', 'counterparty').order_by('-transaction_date')
 
     # Хайлтын параметрүүд
@@ -3045,8 +3055,21 @@ def sale_link_bank(request, sale_id):
             SalePaymentAllocation.objects.filter(transaction=tx, sale=sale).delete()
             if tx.income_sale_id == sale.id:
                 tx.income_sale = None
+                tx.save(update_fields=['income_sale'])
             messages.success(request, f'Гүйлгээ #{tx_id} холбоос тасарлаа.')
         else:
+            # Шууд дансанд (эсрэг данс / журнал) холбогдсон гүйлгээг борлуулалтад холбохгүй
+            already_classified = tx.offset_account_id or tx.accounting_entry_id
+            if already_classified and not tx.sale_allocations.exists():
+                acct = tx.offset_account
+                acct_label = f'"{acct.code} - {acct.name}" данс' if acct else 'журналын бичилт'
+                messages.error(
+                    request,
+                    f'Гүйлгээ #{tx_id} аль хэдийн {acct_label}-тай холбогдсон байна. '
+                    f'Эхлээд банк/кассын гүйлгээний хуудаснаас тэр холболтыг цуцалж, дараа нь борлуулалтад холбоно уу.'
+                )
+                return redirect(redirect_url)
+
             amount_raw = request.POST.get('link_amount', '').replace(',', '').strip()
             if amount_raw:
                 try:
@@ -3189,6 +3212,21 @@ def sale_link_bank(request, sale_id):
         if update_fields:
             tx.save(update_fields=update_fields)
 
+        # Борлуулалтын орлогын журнал (Дт банк/касс — Кт 510101) болон эсрэг дансыг тэнцүүлэх
+        from .import_bank_transactions import sync_sale_revenue_journal
+        try:
+            journal_result = sync_sale_revenue_journal(tx, request.user)
+            if journal_result == 'created':
+                messages.info(
+                    request,
+                    f'Журналын бичилт үүслээ: {tx.accounting_entry.entry_number} '
+                    f'(Дт {tx.bank_account.code} / Кт {tx.offset_account.code} {tx.offset_account.name})'
+                )
+            elif journal_result == 'deleted':
+                messages.info(request, 'Холбоос тасарсан тул орлогын журналын бичилт устгагдлаа.')
+        except Exception as e:
+            messages.warning(request, f'Журналын бичилт үүсгэхэд алдаа гарлаа: {e}')
+
         # Аль ч тохиолдолд paid_amount дахин тооцоолох (legacy + partial allocation)
         paid_legacy = BankTransaction.objects.filter(
             income_sale=sale
@@ -3278,7 +3316,7 @@ def sale_link_expense(request, sale_id):
             messages.error(request, 'Борлуулалтын дүн 0 байна — бичилт үүсгэх боломжгүй.')
             return redirect(back_url)
 
-        from .import_bank_transactions import create_accounting_entry_safe
+        from .import_bank_transactions import create_accounting_entry_safe, next_entry_number
 
         # Дахин холбох бол хуучин бичилтийг устгана
         if sale.expense_accounting_entry_id:
@@ -3288,11 +3326,11 @@ def sale_link_expense(request, sale_id):
             old_entry.delete()
 
         date_key = sale.sale_date.strftime('%Y%m%d')
-        seq = AccountingEntry.objects.filter(entry_number__startswith=f'EXP{date_key}').count() + 1
+        _, entry_number = next_entry_number(f'EXP{date_key}')
 
         entry = create_accounting_entry_safe(
             entry_date=sale.sale_date,
-            entry_number=f'EXP{date_key}{seq:04d}',
+            entry_number=entry_number,
             description=f'Дотоод хэрэгцээ: {sale.sale_number}',
             debit_account=expense_account,
             debit_amount=amount,
@@ -3780,6 +3818,7 @@ def journal_list(request):
         'banktransaction_set__sale_allocations__sale__customer',
         'banktransaction_set__allocations__student',
         'banktransaction_set__allocations__course',
+        'expense_sales',
     ]
     if BankTransactionSplit:
         prefetch_paths.append('banktransaction_set__extra_splits__account')
@@ -3793,7 +3832,7 @@ def journal_list(request):
         entries = entries.filter(split_source__isnull=True)
 
     entries = entries.order_by('-entry_date', '-entry_number')
-    
+
     # Хайлт
     search = request.GET.get('search', '')
     if search:
@@ -3803,7 +3842,7 @@ def journal_list(request):
             Q(debit_account__name__icontains=search) |
             Q(credit_account__name__icontains=search)
         )
-    
+
     # Огноогоор шүүлт
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -3811,22 +3850,119 @@ def journal_list(request):
         entries = entries.filter(entry_date__gte=date_from)
     if date_to:
         entries = entries.filter(entry_date__lte=date_to)
-    
+
+    # Дебит/Кредит дансаар шүүх
+    debit_account_id = request.GET.get('debit_account', '')
+    credit_account_id = request.GET.get('credit_account', '')
+    if debit_account_id:
+        entries = entries.filter(debit_account_id=debit_account_id)
+    if credit_account_id:
+        entries = entries.filter(credit_account_id=credit_account_id)
+
+    # Харилцсан дансны бүлгээс дарахад дансны кодоор шүүх
+    debit_prefix = request.GET.get('debit_prefix', '').strip()
+    credit_prefix = request.GET.get('credit_prefix', '').strip()
+    if debit_prefix:
+        entries = entries.filter(debit_account__code__startswith=debit_prefix)
+    if credit_prefix:
+        entries = entries.filter(credit_account__code__startswith=credit_prefix)
+
+    # Үүсгэсэн хэрэглэгчээр шүүх
+    created_by_id = request.GET.get('created_by', '')
+    if created_by_id:
+        entries = entries.filter(created_by_id=created_by_id)
+
+    # Банкны гүйлгээний дугаараар шүүх
+    bank_transaction_id = request.GET.get('bank_transaction_id', '').strip()
+    if bank_transaction_id.isdigit():
+        entries = entries.filter(
+            Exists(BankTransaction.objects.filter(
+                accounting_entry=OuterRef('pk'), pk=int(bank_transaction_id)
+            ))
+        )
+
+    # Банк/кассын гүйлгээтэй холбогдсон эсэхээр шүүх
+    linked_status = request.GET.get('linked_status', '')
+    has_tx = Exists(BankTransaction.objects.filter(accounting_entry=OuterRef('pk')))
+    if linked_status == 'linked':
+        entries = entries.filter(has_tx)
+    elif linked_status == 'unlinked':
+        entries = entries.filter(~has_tx)
+
     # Статистик
     total_entries = entries.count()
     total_debit = entries.aggregate(Sum('debit_amount'))['debit_amount__sum'] or 0
     total_credit = entries.aggregate(Sum('credit_amount'))['credit_amount__sum'] or 0
-    
+
+    # Харилцсан дансаар (Дебит → Кредит) бүлэглэсэн статистик
+    pair_groups = list(
+        entries.order_by().values(
+            'debit_account__code', 'debit_account__name',
+            'credit_account__code', 'credit_account__name',
+        ).annotate(cnt=Count('id')).order_by('-cnt')
+    )
+    grouped_total = sum(p['cnt'] for p in pair_groups)
+
+    # Шүүлтийн dropdown-д зөвхөн журналд хэрэглэгдсэн дансууд/хэрэглэгчид
+    debit_accounts = ChartOfAccounts.objects.filter(
+        id__in=AccountingEntry.objects.values('debit_account_id')
+    ).order_by('code')
+    credit_accounts = ChartOfAccounts.objects.filter(
+        id__in=AccountingEntry.objects.values('credit_account_id')
+    ).order_by('code')
+    creators = User.objects.filter(
+        id__in=AccountingEntry.objects.values('created_by_id')
+    ).order_by('username')
+
+    # Хуудаслалт
+    paginator = Paginator(entries, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    # Мөр тус бүрд холбогдсон баримтын шуурхай холбоос
+    for entry in page_obj:
+        txs = list(entry.banktransaction_set.all())
+        entry.first_tx = txs[0].id if txs else None
+
+        related_sale_id = None
+        for tx in txs:
+            if tx.income_sale_id:
+                related_sale_id = tx.income_sale_id
+                break
+            sale_allocs = list(tx.sale_allocations.all())
+            if sale_allocs:
+                related_sale_id = sale_allocs[0].sale_id
+                break
+        if related_sale_id is None:
+            expense_sale = entry.expense_sales.first()
+            related_sale_id = expense_sale.id if expense_sale else None
+        entry.related_sale_id = related_sale_id
+
     context = {
-        'entries': entries,
+        'entries': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': page_obj.has_other_pages(),
         'total_entries': total_entries,
         'total_debit': total_debit,
         'total_credit': total_credit,
+        'pair_groups': pair_groups,
+        'grouped_total': grouped_total,
+        'grouped_total_equals': grouped_total == total_entries,
+        'debit_accounts': debit_accounts,
+        'credit_accounts': credit_accounts,
+        'creators': creators,
         'search': search,
         'date_from': date_from,
         'date_to': date_to,
+        'debit_account_id': debit_account_id,
+        'credit_account_id': credit_account_id,
+        'created_by_id': created_by_id,
+        'bank_transaction_id': bank_transaction_id,
+        'linked_status': linked_status,
+        'debit_prefix': debit_prefix,
+        'credit_prefix': credit_prefix,
     }
-    
+
     return render(request, 'main/journal_list.html', context)
 
 
@@ -4292,7 +4428,8 @@ def bank_transaction_list(request):
     transactions = BankTransaction.objects.filter(
         account_type='BANK'
     ).select_related(
-        'bank_account', 'offset_account', 'income_sale__customer', 'accounting_entry'
+        'bank_account', 'offset_account', 'income_sale__customer',
+        'accounting_entry__debit_account', 'accounting_entry__credit_account'
     ).prefetch_related(
         'allocations__student', 'allocations__course',
         'sale_allocations__sale__customer'
@@ -4885,7 +5022,9 @@ def link_bank_transaction_to_journal(request, transaction_id):
                 return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
 
             # Журналын бичилт үүсгэх
-            from .import_bank_transactions import regenerate_accounting_entries, create_accounting_entry_safe
+            from .import_bank_transactions import (
+                regenerate_accounting_entries, create_accounting_entry_safe, next_entry_number
+            )
 
             # Борлуулалттай холбогдсон бол (offset_account байхгүй ч) splits-д журнал үүсгэнэ
             sale_linked = (transaction.income_sale_id or
@@ -4911,13 +5050,11 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                 defaults={'amount': ses.amount, 'description': ses.description or ''}
                             )
                             if not bts.accounting_entry:
-                                seq = AccountingEntry.objects.filter(
-                                    entry_number__startswith=f'{prefix}{date_key}'
-                                ).count() + 1
+                                _, split_entry_number = next_entry_number(f'{prefix}{date_key}')
                                 split_desc = ses.description or transaction.description
                                 split_entry = create_accounting_entry_safe(
                                     entry_date=transaction.transaction_date,
-                                    entry_number=f'{prefix}{date_key}{seq:04d}',
+                                    entry_number=split_entry_number,
                                     description=split_desc,
                                     debit_account=bt_bank_acct,
                                     debit_amount=bts.amount,
@@ -4946,12 +5083,10 @@ def link_bank_transaction_to_journal(request, transaction_id):
                             if main_amount > 0:
                                 revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
                                 if revenue_account:
-                                    seq = AccountingEntry.objects.filter(
-                                        entry_number__startswith=f'{prefix}{date_key}'
-                                    ).count() + 1
+                                    _, main_entry_number = next_entry_number(f'{prefix}{date_key}')
                                     main_entry = create_accounting_entry_safe(
                                         entry_date=transaction.transaction_date,
-                                        entry_number=f'{prefix}{date_key}{seq:04d}',
+                                        entry_number=main_entry_number,
                                         description=transaction.description,
                                         debit_account=bt_bank_acct,
                                         debit_amount=main_amount,
@@ -4977,12 +5112,10 @@ def link_bank_transaction_to_journal(request, transaction_id):
                         main_splits_total = Decimal('0')
                     main_amount = transaction.income_amount - main_splits_total
                     if main_amount > 0 and bt_bank_acct:
-                        seq = AccountingEntry.objects.filter(
-                            entry_number__startswith=f'{prefix}{date_key}'
-                        ).count() + 1
+                        _, main_entry_number = next_entry_number(f'{prefix}{date_key}')
                         main_entry = create_accounting_entry_safe(
                             entry_date=transaction.transaction_date,
-                            entry_number=f'{prefix}{date_key}{seq:04d}',
+                            entry_number=main_entry_number,
                             description=transaction.description,
                             debit_account=bt_bank_acct,
                             debit_amount=main_amount,
@@ -4998,13 +5131,11 @@ def link_bank_transaction_to_journal(request, transaction_id):
                 if bt_bank_acct:
                     if hasattr(transaction, 'extra_splits'):
                         for split in transaction.extra_splits.filter(accounting_entry__isnull=True):
-                            seq = AccountingEntry.objects.filter(
-                                entry_number__startswith=f'{prefix}{date_key}'
-                            ).count() + 1
+                            _, split_entry_number = next_entry_number(f'{prefix}{date_key}')
                             split_desc = split.description or transaction.description
                             split_entry = create_accounting_entry_safe(
                                 entry_date=transaction.transaction_date,
-                                entry_number=f'{prefix}{date_key}{seq:04d}',
+                                entry_number=split_entry_number,
                                 description=split_desc,
                                 debit_account=bt_bank_acct,
                                 debit_amount=split.amount,
@@ -5618,7 +5749,8 @@ def cash_transaction_list(request):
     transactions = BankTransaction.objects.filter(
         account_type='CASH'
     ).select_related(
-        'bank_account', 'offset_account', 'income_sale', 'accounting_entry'
+        'bank_account', 'offset_account', 'income_sale',
+        'accounting_entry__debit_account', 'accounting_entry__credit_account'
     ).prefetch_related(
         'allocations__student', 'allocations__course', 'sale_allocations__sale'
     ).order_by('-transaction_date', '-id')
@@ -6060,8 +6192,9 @@ def purchase_create(request):
                     if not inventory_account:
                         raise Exception('150101-Бараа материал данс олдсонгүй!')
                     
-                    today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                    entry_number = f"PUR-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                    _, entry_number = next_entry_number(
+                        f"PUR-{transaction_date.strftime('%Y%m%d')}-"
+                    )
                     
                     entry = AccountingEntry.objects.create(
                         entry_number=entry_number,
@@ -6085,8 +6218,9 @@ def purchase_create(request):
                     payable_account = ChartOfAccounts.objects.filter(code='2101').first()
                     
                     if inventory_account and payable_account:
-                        today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                        entry_number = f"PUR-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                        _, entry_number = next_entry_number(
+                            f"PUR-{transaction_date.strftime('%Y%m%d')}-"
+                        )
                         
                         entry = AccountingEntry.objects.create(
                             entry_number=entry_number,
@@ -6222,8 +6356,9 @@ def purchase_create_multi(request):
                     if not inventory_account:
                         raise Exception('150101-Бараа материалын данс олдсонгүй!')
                     
-                    today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                    entry_number = f"PUR-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                    _, entry_number = next_entry_number(
+                        f"PUR-{transaction_date.strftime('%Y%m%d')}-"
+                    )
                     
                     # Худалдан авалтын бичилт
                     entry = AccountingEntry.objects.create(
@@ -6261,8 +6396,9 @@ def purchase_create_multi(request):
                     payable_account = ChartOfAccounts.objects.filter(code='2101').first()
                     
                     if inventory_account and payable_account:
-                        today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                        entry_number = f"PUR-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                        _, entry_number = next_entry_number(
+                            f"PUR-{transaction_date.strftime('%Y%m%d')}-"
+                        )
                         
                         entry = AccountingEntry.objects.create(
                             entry_number=entry_number,
@@ -6594,8 +6730,9 @@ def sale_create(request):
                     if not revenue_account:
                         raise Exception('510101-Борлуулалтын орлого данс олдсонгүй!')
                     
-                    today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                    entry_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                    _, entry_number = next_entry_number(
+                        f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                    )
                     
                     entry = AccountingEntry.objects.create(
                         entry_number=entry_number,
@@ -6635,8 +6772,9 @@ def sale_create(request):
                     revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
                     
                     if receivable_account and revenue_account:
-                        today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                        entry_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                        _, entry_number = next_entry_number(
+                            f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                        )
                         
                         entry = AccountingEntry.objects.create(
                             entry_number=entry_number,
@@ -6845,8 +6983,9 @@ def sale_create_multi(request):
                     if not revenue_account:
                         raise Exception('510101-Борлуулалтын орлого данс олдсонгүй!')
                     
-                    today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                    entry_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                    _, entry_number = next_entry_number(
+                        f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                    )
                     
                     # Орлогын бичилт
                     entry = AccountingEntry.objects.create(
@@ -6896,8 +7035,9 @@ def sale_create_multi(request):
                     revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
                     
                     if receivable_account and revenue_account:
-                        today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                        entry_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}"
+                        _, entry_number = next_entry_number(
+                            f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                        )
                         
                         entry = AccountingEntry.objects.create(
                             entry_number=entry_number,
@@ -6936,8 +7076,10 @@ def sale_create_multi(request):
                     inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
                     cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
                     if inventory_account and cogs_account:
-                        today_entries = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                        cogs_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_entries + 1:04d}-COGS"
+                        _, cogs_stem = next_entry_number(
+                            f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                        )
+                        cogs_number = f"{cogs_stem}-COGS"
                         AccountingEntry.objects.create(
                             entry_number=cogs_number,
                             entry_date=transaction_date,
@@ -6978,8 +7120,10 @@ def sale_create_multi(request):
                                 # BANK төлбөрийн аргаар банкны гүйлгээтэй холбосон бол
                                 # нэмэлт split-д тус бүр AccountingEntry үүсгэнэ
                                 if bank_transaction and payment_method == 'BANK':
-                                    today_count = AccountingEntry.objects.filter(entry_date=transaction_date).count()
-                                    split_entry_number = f"SALE-{transaction_date.strftime('%Y%m%d')}-{today_count + 1:04d}-SPL"
+                                    _, split_stem = next_entry_number(
+                                        f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+                                    )
+                                    split_entry_number = f"{split_stem}-SPL"
                                     split_entry = AccountingEntry.objects.create(
                                         entry_number=split_entry_number,
                                         entry_date=transaction_date,

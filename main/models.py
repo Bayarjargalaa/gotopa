@@ -1372,6 +1372,38 @@ class BankTransaction(models.Model):
         remaining = self.income_amount - reserved
         return remaining if remaining > 0 else 0
 
+    @property
+    def is_sale_linked(self):
+        """Борлуулалттай (хэсэгчлэн эсвэл бүрэн) холбогдсон эсэх"""
+        if self.income_sale_id:
+            return True
+        return self.sale_allocations.exists()
+
+    @property
+    def effective_offset_account(self):
+        """Харагдацад зориулсан эсрэг данс
+
+        Борлуулалтад холбогдсон гүйлгээнд `offset_account` гараар тавигддаггүй ч
+        журналын бичилт үүссэн байдаг (жишээ нь Дт банк / Кт 510101 Борлуулалтын орлого).
+        Тиймээс гараар холбосон эсрэг данс байхгүй бол журналын бичилтээс тодорхойлно.
+        """
+        if self.offset_account_id:
+            return self.offset_account
+
+        entry = self.accounting_entry
+        if not entry:
+            return None
+
+        if self.income_amount and self.income_amount > 0:
+            candidates = [entry.credit_account, entry.debit_account]
+        else:
+            candidates = [entry.debit_account, entry.credit_account]
+
+        for account in candidates:
+            if account and account.id != self.bank_account_id:
+                return account
+        return None
+
 
 class IncomeCategory(models.Model):
     """Орлогын төрөл - админд нэмэлтээр нэмэх боломжтой"""
