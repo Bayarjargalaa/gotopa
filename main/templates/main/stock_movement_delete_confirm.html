@@ -1,0 +1,29 @@
+{% extends 'main/base.html' %}
+{% block title %}Хөдөлгөөн устгах{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-lg">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold text-red-700 mb-4">🗑️ Хөдөлгөөн устгах уу?</h2>
+        <div class="bg-red-50 border border-red-200 rounded p-4 mb-6 text-sm">
+            <p><strong>Бараа:</strong> {{ movement.product.name }}</p>
+            <p><strong>Төрөл:</strong> {{ movement.get_movement_type_display }}</p>
+            <p><strong>Тоо:</strong> {{ movement.quantity }} ш</p>
+            <p><strong>Дүн:</strong> {{ movement.total_amount|floatformat:0 }}₮</p>
+            {% if movement.reference_number %}
+            <p><strong>Баримт:</strong> {{ movement.reference_number }}</p>
+            {% endif %}
+        </div>
+        <div class="flex gap-3">
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">
+                    Тийм, устгах
+                </button>
+            </form>
+            <a href="{% url 'main:inventory_list' %}" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300">
+                Болих
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,23 +1,36 @@
+# Готопа бясалгалын төв - Django Application
 FROM python:3.13-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Системийн орчин тохируулах
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=gotopa_project.settings
 
 WORKDIR /app
 
-# Install system deps for common Python packages (Pillow, etc.)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libjpeg-dev zlib1g-dev \
+# Системийн хамаарлууд суулгах (Pillow-д хэрэгтэй)
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+# Python хамаарлууд суулгах
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir django-ckeditor gunicorn
 
-# Copy project files
-COPY . /app
+# Апп-ын кодыг хуулах
+COPY . .
+
+# entrypoint скрипт ажиллах эрх олгох
+RUN chmod +x /app/entrypoint.sh
+
+# Media болон staticfiles директор үүсгэх
+RUN mkdir -p /app/media /app/staticfiles
+
+# Static файлуудыг цуглуулах
+RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-# Run Django development server binding to all interfaces
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+ENTRYPOINT ["/app/entrypoint.sh"]

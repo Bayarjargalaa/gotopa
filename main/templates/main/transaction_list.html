@@ -125,7 +125,7 @@
                                 {% endif %}
                             </td>
                             <td class="px-4 py-3 text-center">
-                                <a href="/admin/main/transaction/{{ transaction.id }}/change/" 
+                                <a href="/admin/main/transaction/{{ transaction.id|stringformat:'d' }}/change/"
                                    class="text-primary hover:underline text-sm">
                                     Засах
                                 </a>

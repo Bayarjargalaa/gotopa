@@ -339,7 +339,7 @@
                                 {% endif %}
                             </td>
                             <td class="px-4 py-3 text-center text-sm">
-                                <a href="{% url 'main:link_bank_transaction_to_journal' tx.id %}" 
+                                <a href="{% url 'main:link_bank_transaction_to_journal' tx.id %}?return_to={{ request.get_full_path|urlencode }}"
                                    class="text-primary hover:underline font-medium text-xs">
                                     {% if tx.is_processed %}✏️ Засах{% else %}🔗 Холбох{% endif %}
                                 </a>

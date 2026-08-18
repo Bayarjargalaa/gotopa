@@ -53,6 +53,11 @@
         </div>
         {% endif %}
 
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 no-print text-sm text-blue-800">
+            <i class="fas fa-info-circle mr-2"></i>
+            Энэ тайлан <strong>борлуулалтын мөр (SaleItem)</strong>-д тулгуурлан тооцдог тул борлуулалтын жагсаалтын нийт дүнтэй нийцнэ. Цуцлагдсан борлуулалт оруулаагүй болно.
+        </div>
+
         <div class="print-area">
             <h1 class="text-2xl font-bold text-secondary mb-4">{{ report_title }}</h1>
             {% if date_from or date_to %}
@@ -104,11 +109,11 @@
                     </tr>
                     {% endfor %}
                     {% if report_data %}
-                    <tr class="bg-gray-100 font-bold">
-                        <td colspan="5" class="px-6 py-4 text-right text-gray-900">НИЙТ ДҮН:</td>
-                        <td class="px-6 py-4 text-right text-green-600 text-lg">
-                            {{ grand_total|floatformat:0 }}₮
-                        </td>
+                    <tr class="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <td colspan="3" class="px-6 py-4 text-right text-gray-900">НИЙТ:</td>
+                        <td class="px-6 py-4 text-right text-blue-700 text-lg">{{ grand_total_quantity|floatformat:0 }}</td>
+                        <td class="px-6 py-4"></td>
+                        <td class="px-6 py-4 text-right text-green-600 text-lg">{{ grand_total|floatformat:0 }}₮</td>
                     </tr>
                     {% endif %}
                 </tbody>

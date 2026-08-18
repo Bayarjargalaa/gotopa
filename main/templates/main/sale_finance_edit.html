@@ -31,6 +31,7 @@
     <!-- Засах форм -->
     <form method="post">
       {% csrf_token %}
+      <input type="hidden" name="return_to" value="{{ request.GET.return_to }}">
       <div class="bg-white rounded-lg shadow-md p-6 space-y-6">
 
         <!-- Огноо + Харилцагч -->
@@ -52,7 +53,7 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm">
               <option value="">— Бэлэн худалдан авагч —</option>
               {% for c in customers %}
-              <option value="{{ c.id }}" {% if sale.customer_id == c.id %}selected{% endif %}>
+              <option value="{{ c.id|stringformat:'d' }}" {% if sale.customer_id == c.id %}selected{% endif %}>
                 {{ c.name }}
               </option>
               {% endfor %}
@@ -109,6 +110,12 @@
               <span class="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-full">Касс + Харилцах</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="expected_payment_method" value="Дотоод хэрэгцээ"
+                     {% if sale.expected_payment_method == "Дотоод хэрэгцээ" %}checked{% endif %}
+                     class="accent-primary">
+              <span class="text-sm bg-orange-100 text-orange-700 px-3 py-1 rounded-full">Дотоод хэрэгцээ</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="expected_payment_method" value=""
                      {% if not sale.expected_payment_method %}checked{% endif %}
                      class="accent-primary">
@@ -145,23 +152,23 @@
               </thead>
               <tbody class="divide-y divide-gray-200" id="items-tbody">
                 {% for item in sale.items.all %}
-                <tr class="hover:bg-gray-50" data-item="{{ item.id }}">
+                <tr class="hover:bg-gray-50" data-item="{{ item.id|stringformat:'d' }}">
                   <td class="px-3 py-2">
-                    <select name="item_{{ item.id }}_product"
+                    <select name="item_{{ item.id|stringformat:'d' }}_product"
                             class="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-primary focus:border-primary item-product">
                       {% for p in products %}
-                      <option value="{{ p.id }}" data-selling-price="{{ p.selling_price|floatformat:'2u' }}" {% if p.id == item.product_id %}selected{% endif %}>{{ p.name }}</option>
+                      <option value="{{ p.id|stringformat:'d' }}" data-selling-price="{{ p.selling_price|floatformat:'2u' }}" {% if p.id == item.product_id %}selected{% endif %}>{{ p.name }}</option>
                       {% endfor %}
                     </select>
                   </td>
                   <td class="px-3 py-2">
-                    <input type="number" name="item_{{ item.id }}_qty"
-                           value="{{ item.quantity|stringformat:'d' }}" min="1"
+                    <input type="number" name="item_{{ item.id|stringformat:'d' }}_qty"
+                           value="{{ item.quantity|stringformat:'d' }}" min="1" step="1" required
                            class="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center focus:ring-1 focus:ring-primary focus:border-primary item-qty">
                   </td>
                   <td class="px-3 py-2">
-                    <input type="number" name="item_{{ item.id }}_price"
-                           value="{{ item.unit_price|floatformat:'2u' }}" min="0" step="0.01"
+                    <input type="number" name="item_{{ item.id|stringformat:'d' }}_price"
+                           value="{{ item.unit_price|floatformat:'2u' }}" min="0" step="0.01" required
                            class="w-full border border-gray-300 rounded px-2 py-1 text-sm text-right focus:ring-1 focus:ring-primary focus:border-primary item-price">
                   </td>
                   <td class="px-3 py-2 text-right font-semibold text-green-600 item-total">
@@ -227,9 +234,10 @@
     if (!row) return;
 
     var selectedOption = e.target.options[e.target.selectedIndex];
-    var sellingPrice = parseFloat(selectedOption.dataset.sellingPrice || '0');
+    var sellingPrice = parseFloat(selectedOption.dataset.sellingPrice);
     var priceInput = row.querySelector('.item-price');
-    if (priceInput) {
+    // Зарах үнэ тодорхойгүй бараа сонгоход одоогийн үнийг 0 болгож дарж бичихгүй
+    if (priceInput && !isNaN(sellingPrice) && sellingPrice > 0) {
       priceInput.value = sellingPrice.toFixed(2);
     }
 

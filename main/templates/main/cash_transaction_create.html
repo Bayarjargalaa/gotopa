@@ -313,7 +313,7 @@ function addAllocation() {
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                     <option value="">-- Сонгоно уу --</option>
                     {% for student in students %}
-                        <option value="{{ student.id }}">{{ student.display_name_short }}</option>
+                        <option value="{{ student.id }}">{{ student.full_name|default:student.user.username }}{% if student.phone %} ({{ student.phone }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>

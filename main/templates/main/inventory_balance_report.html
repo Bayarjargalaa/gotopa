@@ -19,8 +19,21 @@
             </div>
         </div>
 
+        <!-- Үнийн хэлбэр toggle -->
+        <div class="flex gap-2 mb-4 no-print">
+            <a href="?price_mode=selling{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
+               class="px-4 py-2 rounded-lg font-semibold text-sm {% if price_mode == 'selling' %}bg-primary text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                💰 Борлуулах үнэ
+            </a>
+            <a href="?price_mode=purchase{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
+               class="px-4 py-2 rounded-lg font-semibold text-sm {% if price_mode == 'purchase' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                🏷️ Худалдан авсан үнэ
+            </a>
+        </div>
+
         <!-- Шүүлтүүр -->
         <form method="GET" class="bg-gray-50 p-4 rounded-lg mb-6 no-print">
+            <input type="hidden" name="price_mode" value="{{ price_mode }}">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Эхлэх огноо</label>

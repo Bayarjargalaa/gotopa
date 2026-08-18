@@ -105,6 +105,8 @@
                                 {% elif movement.movement_type == 'OUT' %}
                                 <a href="{% url 'main:sale_edit' movement.id %}" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Засах">✏️</a>
                                 <a href="{% url 'main:sale_delete' movement.id %}" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600" title="Устгах">🗑️</a>
+                                {% else %}
+                                <a href="{% url 'main:stock_movement_delete' movement.id %}" class="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600" title="Устгах">🗑️</a>
                                 {% endif %}
                             </div>
                         </td>

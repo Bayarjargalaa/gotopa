@@ -24,21 +24,28 @@
             <a href="{% url 'main:product_create' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
                 + Бараа нэмэх
             </a>
-            <a href="{% url 'main:stock_movement_list' %}" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-all font-bold">
-                📋 Жагсаалт
+
+            <a href="{% url 'main:inventory_cost_calculation' %}" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-all font-bold">
+                📊 Өртөг бодолт
             </a>
         </div>
     </div>
 
     <!-- Статистик -->
-    <div class="grid md:grid-cols-3 gap-6 mb-6">
+    <div class="grid md:grid-cols-4 gap-6 mb-6">
         <div class="bg-white rounded-lg shadow-md p-6">
             <p class="text-gray-600 text-sm">Нийт бүтээгдэхүүн</p>
             <p class="text-3xl font-bold text-primary">{{ total_products }}</p>
         </div>
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <p class="text-gray-600 text-sm">Үлдэгдлийн үнэ</p>
-            <p class="text-3xl font-bold text-green-600">{{ total_stock_value|floatformat:0 }}₮</p>
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-400">
+            <p class="text-gray-600 text-sm">Эхний үлдэгдлийн дүн</p>
+            <p class="text-2xl font-bold text-blue-700">{{ total_initial_value|floatformat:0 }}₮</p>
+            <p class="text-xs text-gray-400 mt-1">= Дансны бараа материалын эхний үлдэгдэл</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-400">
+            <p class="text-gray-600 text-sm">Дундаж өртөгөөр үлдэгдэл</p>
+            <p class="text-2xl font-bold text-purple-700">{{ total_avg_stock_value|floatformat:0 }}₮</p>
+            <p class="text-xs text-gray-400 mt-1">Дундаж өртөг × одоогийн үлдэгдэл</p>
         </div>
         <div class="bg-white rounded-lg shadow-md p-6">
             <p class="text-gray-600 text-sm">Үлдэгдэл бага</p>
@@ -92,6 +99,7 @@
                         <th class="px-4 py-3 text-left text-sm font-semibold">Нэр</th>
                         <th class="px-4 py-3 text-left text-sm font-semibold">Ангилал</th>
                         <th class="px-4 py-3 text-right text-sm font-semibold">Худалдан авах үнэ</th>
+                        <th class="px-4 py-3 text-right text-sm font-semibold text-purple-700">Дундаж өртөг</th>
                         <th class="px-4 py-3 text-right text-sm font-semibold">Борлуулах үнэ</th>
                         <th class="px-4 py-3 text-center text-sm font-semibold">Үлдэгдэл</th>
                         <th class="px-4 py-3 text-center text-sm font-semibold">Нэгж</th>
@@ -111,6 +119,12 @@
                         </td>
                         <td class="px-4 py-3 text-sm">{{ product.category.name|default:"-" }}</td>
                         <td class="px-4 py-3 text-right text-sm">{{ product.purchase_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-3 text-right text-sm font-semibold text-purple-700">
+                            {{ product.avg_cost|floatformat:0 }}₮
+                            {% if product.avg_cost != product.purchase_price %}
+                            <div class="text-xs font-normal text-gray-400">өөрчлөгдсән</div>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-right text-sm">{{ product.selling_price|floatformat:0 }}₮</td>
                         <td class="px-4 py-3 text-center">
                             {% if product.is_low_stock %}
@@ -141,12 +155,22 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                        <td colspan="10" class="px-4 py-8 text-center text-gray-500">
                             Бүтээгдэхүүн олдсонгүй.
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
+                <tfoot class="bg-gray-100 border-t-2 border-gray-300">
+                    <tr>
+                        <td colspan="3" class="px-4 py-3 text-sm font-bold text-gray-700">Нийт {{ total_products }} бараа</td>
+                        <td class="px-4 py-3 text-right text-sm font-bold text-blue-700">{{ total_initial_value|floatformat:0 }}₮<div class="text-xs font-normal text-gray-400">{{ total_initial_quantity }} ширхэг • эхний үлдэгдэл</div></td>
+                        <td class="px-4 py-3 text-right text-sm font-bold text-purple-700">{{ total_avg_stock_value|floatformat:0 }}₮<div class="text-xs font-normal text-gray-400">дундаж өртөгөөр</div></td>
+                        <td class="px-4 py-3"></td>
+                        <td class="px-4 py-3 text-center text-sm font-bold text-green-700">{{ total_current_quantity }} ширхэг<div class="text-xs font-normal text-gray-400">одоогийн үлдэгдэл</div></td>
+                        <td colspan="3" class="px-4 py-3"></td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>

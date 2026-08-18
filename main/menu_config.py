@@ -182,12 +182,6 @@ SIDEBAR_MENU = [
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.can_manage_inventory', 'perm:main.add_sale'],
             },
             {
-                'label': 'Хөдөлгөөн',
-                'url_name': 'main:stock_movement_list',
-                'icon': 'fas fa-exchange-alt',
-                'permissions': ['is_admin', 'is_accountant', 'perm:main.can_view_inventory', 'perm:main.view_stockmovement'],
-            },
-            {
                 'label': 'Худалдан авалтын жагсаалт',
                 'url_name': 'main:purchase_list',
                 'icon': 'fas fa-shopping-cart',
@@ -245,9 +239,15 @@ SIDEBAR_MENU = [
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.view_purchase', 'perm:main.view_stockmovement'],
             },
             {
-                'label': 'Үлдэгдлийн тайлан',
-                'url_name': 'main:inventory_balance_report',
+                'label': 'Үлдэгдэл — Борлуулах үнэ',
+                'url': '/reports/inventory-balance/?price_mode=selling',
                 'icon': 'fas fa-balance-scale',
+                'permissions': ['is_admin', 'is_accountant', 'perm:main.view_product'],
+            },
+            {
+                'label': 'Үлдэгдэл — Худалдан авсан үнэ',
+                'url': '/reports/inventory-balance/?price_mode=purchase',
+                'icon': 'fas fa-tags',
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.view_product'],
             },
             {

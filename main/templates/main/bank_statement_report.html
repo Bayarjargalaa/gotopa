@@ -182,8 +182,8 @@
                                         Холбоогүй
                                     </span>
                                     <div class="mt-1">
-                                        <a href="{% url 'main:link_bank_transaction_to_journal' row.tx.id %}"
-                                           class="text-xs text-primary hover:underline">Холбох</a>
+                                                     <a href="{% url 'main:link_bank_transaction_to_journal' row.tx.id %}?return_to={{ request.get_full_path|urlencode }}"
+                                                         class="text-xs text-primary hover:underline">Холбох</a>
                                     </div>
                                 {% endif %}
                             </td>

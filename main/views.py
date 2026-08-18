@@ -354,9 +354,10 @@ def student_list(request):
             'enrollments__course__level',
         ]
 
+        # iucontains — Кирилл үсгийг ч том/жижиг ялгахгүй хайна (main/db_lookups.py)
         search_query = Q()
         for field in searchable_fields:
-            search_query |= Q(**{f'{field}__icontains': q})
+            search_query |= Q(**{f'{field}__iucontains': q})
 
         students = students.filter(search_query)
 
@@ -1802,6 +1803,189 @@ def product_set_initial_stock(request):
 
 
 @login_required
+def inventory_cost_calculation(request):
+    """Дундаж өртгийн (WAC) тооцоолол — бараа тус бүрээр эхний үлдэгдэл, орлого, дундаж өртөг"""
+    profile = request.user.profile
+    user = request.user
+
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.view_product')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
+        return redirect('main:dashboard')
+
+    products = Product.objects.filter(is_active=True).prefetch_related('movements').order_by('name')
+
+    rows = []
+    grand_initial_qty = 0
+    grand_initial_value = Decimal('0')
+    grand_in_qty = 0
+    grand_in_value = Decimal('0')
+    grand_current_qty = 0
+    grand_avg_value = Decimal('0')
+
+    for product in products:
+        init_qty = product.initial_stock or 0
+        init_price = product.purchase_price or Decimal('0')
+        init_value = init_qty * init_price
+
+        # Орлогын хөдөлгөөнүүд (худалдан авалт, үнэгүй орлого)
+        in_movements = [m for m in product.movements.all() if m.movement_type == 'IN']
+        in_qty = sum(m.quantity for m in in_movements)
+        in_value = sum((m.total_amount or Decimal('0')) for m in in_movements)
+
+        total_qty = init_qty + in_qty
+        total_value = init_value + in_value
+
+        avg_cost = (total_value / total_qty) if total_qty > 0 else init_price
+        current_qty = product.current_stock
+        avg_inventory_value = current_qty * avg_cost
+
+        rows.append({
+            'product': product,
+            'init_qty': init_qty,
+            'init_price': init_price,
+            'init_value': init_value,
+            'in_qty': in_qty,
+            'in_value': in_value,
+            'in_movements': in_movements,
+            'total_qty': total_qty,
+            'total_value': total_value,
+            'avg_cost': avg_cost,
+            # Дундаж өртөг нь эхний үнээс өөр болсон эсэх (өнгөөр тэмдэглэхэд)
+            'price_changed': bool(in_qty) and avg_cost != init_price,
+            'current_qty': current_qty,
+            'avg_inventory_value': avg_inventory_value,
+        })
+
+        grand_initial_qty += init_qty
+        grand_initial_value += init_value
+        grand_in_qty += in_qty
+        grand_in_value += in_value
+        grand_current_qty += current_qty
+        grand_avg_value += avg_inventory_value
+
+    context = {
+        'rows': rows,
+        'grand_initial_qty': grand_initial_qty,
+        'grand_initial_value': grand_initial_value,
+        'grand_in_qty': grand_in_qty,
+        'grand_in_value': grand_in_value,
+        'grand_current_qty': grand_current_qty,
+        'grand_avg_value': grand_avg_value,
+    }
+    return render(request, 'main/inventory_cost_calculation.html', context)
+
+
+@login_required
+def unlink_bank_transaction(request, transaction_id):
+    """Unlink a single bank/cash transaction from any related documents and journal entries."""
+    profile = request.user.profile
+    user = request.user
+
+    # Permission: admin/accountant/manager or change permission
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.change_banktransaction')
+    )
+
+    if not has_access:
+        messages.error(request, 'Энэ үйлдэл хийх эрх танд байхгүй.')
+        return redirect('main:dashboard')
+
+    transaction = get_object_or_404(BankTransaction, id=transaction_id)
+
+    # Where to return after unlinking: prefer explicit POST/GET `return_to`, then Referer
+    return_to = request.POST.get('return_to', request.GET.get('return_to', '')).strip()
+
+    if request.method != 'POST':
+        messages.error(request, 'Энэ үйлдлийг POST аргаар дуудаж байх шаардлагатай.')
+        return redirect('main:cash_transaction_list')
+
+    try:
+        # Detach accounting entry on transaction
+        if transaction.accounting_entry:
+            ae = transaction.accounting_entry
+            transaction.accounting_entry = None
+            transaction.is_processed = False
+            transaction.save(update_fields=['accounting_entry', 'is_processed'])
+            try:
+                ae.delete()
+            except Exception:
+                pass
+
+        # Remove auto-created cash counterpart rows (кассын эсрэг мөр)
+        try:
+            from .import_bank_transactions import delete_cash_transfer_mirrors
+            delete_cash_transfer_mirrors(transaction)
+        except Exception:
+            pass
+
+        # Remove extra splits' accounting entries (but keep split records)
+        try:
+            if hasattr(transaction, 'extra_splits'):
+                for bts in transaction.extra_splits.all():
+                    if bts.accounting_entry:
+                        ae2 = bts.accounting_entry
+                        bts.accounting_entry = None
+                        bts.save(update_fields=['accounting_entry'])
+                        try:
+                            ae2.delete()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # Remove student payment allocations
+        try:
+            PaymentAllocation.objects.filter(transaction=transaction).delete()
+        except Exception:
+            pass
+
+        # Remove sale payment allocations and legacy sale link
+        try:
+            SalePaymentAllocation.objects.filter(transaction=transaction).delete()
+            if transaction.income_sale_id:
+                transaction.income_sale = None
+            transaction.is_processed = False
+            transaction.save(update_fields=['income_sale', 'is_processed'])
+        except Exception:
+            pass
+
+        messages.success(request, 'Гүйлгээний холболт амжилттай цуцлагдлаа.')
+    except Exception as e:
+        messages.error(request, f'Цуцлах явцад алдаа гарлаа: {e}')
+
+    # Try returning to provided return_to (must be local path)
+    if return_to and return_to.startswith('/'):
+        return redirect(return_to)
+
+    # Fallback to Referer header if available and local
+    try:
+        from urllib.parse import urlparse
+        ref = request.META.get('HTTP_REFERER', '')
+        if ref:
+            parsed = urlparse(ref)
+            ref_path = parsed.path or ''
+            if parsed.query:
+                ref_path = f"{ref_path}?{parsed.query}"
+            if ref_path.startswith('/'):
+                return redirect(ref_path)
+    except Exception:
+        pass
+
+    return redirect('main:cash_transaction_list')
+
+
+@login_required
 def inventory_list(request):
     """Бараа материалын жагсаалт"""
     profile = request.user.profile
@@ -2040,6 +2224,49 @@ def stock_movement_create(request):
         'movement_types': StockMovement.MOVEMENT_TYPE_CHOICES,
     }
     return render(request, 'main/stock_movement_form.html', context)
+
+
+@login_required
+def stock_movement_delete(request, movement_id):
+    """Агуулахын хөдөлгөөн устгах (борлуулалттай холбоогүй хөдөлгөөн)"""
+    profile = request.user.profile
+    user = request.user
+
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.delete_stockmovement')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
+        return redirect('main:inventory_list')
+
+    movement = get_object_or_404(StockMovement, id=movement_id)
+
+    # Борлуулалттай холбогдсон хөдөлгөөнийг эндээс устгахгүй — борлуулалтаараа устгана
+    if getattr(movement, 'sale_id', None):
+        messages.error(
+            request,
+            'Энэ хөдөлгөөн борлуулалттай холбогдсон байна. Борлуулалтаа устгаснаар хамт устна.'
+        )
+        return redirect('main:inventory_list')
+
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                product_name = movement.product.name
+                # current_stock нь @property тул тусад нь өөрчлөх шаардлагагүй —
+                # StockMovement устсаны дараа автоматаар тооцоологдоно.
+                movement.delete()
+
+            messages.success(request, f'"{product_name}" барааны хөдөлгөөн амжилттай устгагдлаа.')
+            return redirect('main:inventory_list')
+        except Exception as e:
+            messages.error(request, f'Алдаа гарлаа: {str(e)}')
+
+    return render(request, 'main/stock_movement_delete_confirm.html', {'movement': movement})
 
 
 @login_required
@@ -2742,6 +2969,11 @@ def sale_detail(request, sale_id):
     tx_filter_params = request.GET.copy()
     tx_filter_params.pop('tx_page', None)
 
+    # Дотоод хэрэгцээний зардлын данс сонгох dropdown-д (5xxx)
+    expense_accounts = ChartOfAccounts.objects.filter(
+        code__startswith='5', is_active=True
+    ).order_by('code')
+
     context = {
         'sale':             sale,
         'linked_txs':       linked_txs,
@@ -2757,6 +2989,7 @@ def sale_detail(request, sale_id):
         'q_actype':         q_actype,
         'q_txtype':         q_txtype,
         'return_to':        return_to,
+        'expense_accounts': expense_accounts,
     }
     return render(request, 'main/sale_detail.html', context)
 
@@ -2975,6 +3208,112 @@ def sale_link_bank(request, sale_id):
         messages.error(request, f'Гүйлгээ #{tx_id} олдсонгүй.')
 
     return redirect(redirect_url)
+
+
+@login_required
+def sale_link_expense(request, sale_id):
+    """Дотоод хэрэгцээний борлуулалтыг зардлын дансанд холбох / холболтыг цуцлах
+
+    Бичилт: Дебит = сонгосон зардлын данс (5xxx), Кредит = 510101 Борлуулалтын орлого.
+    """
+    profile = request.user.profile
+    user = request.user
+
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.change_sale')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ үйлдэл хийх эрх танд байхгүй.')
+        return redirect('main:sale_list')
+
+    sale = get_object_or_404(Sale, pk=sale_id)
+
+    return_to = request.POST.get('return_to', '').strip()
+    if return_to and (not return_to.startswith('/') or return_to.startswith('//')):
+        return_to = ''
+    back_url = return_to or reverse('main:sale_detail', args=[sale.id])
+
+    if request.method != 'POST':
+        return redirect(back_url)
+
+    action = request.POST.get('action', '').strip()
+
+    try:
+        if action == 'unlink':
+            if sale.expense_accounting_entry_id:
+                entry = sale.expense_accounting_entry
+                sale.expense_accounting_entry = None
+                sale.save(update_fields=['expense_accounting_entry'])
+                entry.delete()
+                messages.success(request, 'Зардлын журналын бичилт цуцлагдлаа.')
+            else:
+                messages.error(request, 'Энэ борлуулалтад холбогдсон зардлын бичилт олдсонгүй.')
+            return redirect(back_url)
+
+        if action != 'link':
+            messages.error(request, 'Үйлдэл танигдсангүй.')
+            return redirect(back_url)
+
+        expense_account_id = request.POST.get('expense_account')
+        if not expense_account_id:
+            messages.error(request, 'Зардлын данс сонгоно уу.')
+            return redirect(back_url)
+
+        expense_account = ChartOfAccounts.objects.filter(id=expense_account_id).first()
+        if not expense_account:
+            messages.error(request, 'Сонгосон данс олдсонгүй.')
+            return redirect(back_url)
+
+        revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
+        if not revenue_account:
+            messages.error(request, '510101 "Борлуулалтын орлого" данс дансны төлөвлөгөөнд байхгүй байна.')
+            return redirect(back_url)
+
+        amount = sale.total_amount or Decimal('0')
+        if amount <= 0:
+            messages.error(request, 'Борлуулалтын дүн 0 байна — бичилт үүсгэх боломжгүй.')
+            return redirect(back_url)
+
+        from .import_bank_transactions import create_accounting_entry_safe
+
+        # Дахин холбох бол хуучин бичилтийг устгана
+        if sale.expense_accounting_entry_id:
+            old_entry = sale.expense_accounting_entry
+            sale.expense_accounting_entry = None
+            sale.save(update_fields=['expense_accounting_entry'])
+            old_entry.delete()
+
+        date_key = sale.sale_date.strftime('%Y%m%d')
+        seq = AccountingEntry.objects.filter(entry_number__startswith=f'EXP{date_key}').count() + 1
+
+        entry = create_accounting_entry_safe(
+            entry_date=sale.sale_date,
+            entry_number=f'EXP{date_key}{seq:04d}',
+            description=f'Дотоод хэрэгцээ: {sale.sale_number}',
+            debit_account=expense_account,
+            debit_amount=amount,
+            credit_account=revenue_account,
+            credit_amount=amount,
+            created_by=user,
+            related_sale=sale,
+        )
+
+        sale.expense_accounting_entry = entry
+        sale.save(update_fields=['expense_accounting_entry'])
+
+        messages.success(
+            request,
+            f'✓ "{expense_account.code} - {expense_account.name}" зардлын дансанд холбогдож, '
+            f'журналын бичилт {entry.entry_number} үүслээ.'
+        )
+    except Exception as e:
+        messages.error(request, f'Алдаа гарлаа: {e}')
+
+    return redirect(back_url)
 
 
 @login_required
@@ -3430,17 +3769,30 @@ def journal_list(request):
         )
         return redirect('main:finance_dashboard')
     
-    entries = AccountingEntry.objects.select_related(
-        'debit_account', 'credit_account', 'created_by'
-    ).prefetch_related(
+    # BankTransactionSplit модель байхгүй байж болно (migration-аар устгагдсан)
+    try:
+        from .models import BankTransactionSplit
+    except Exception:
+        BankTransactionSplit = None
+
+    prefetch_paths = [
         'banktransaction_set__income_sale__customer',
         'banktransaction_set__sale_allocations__sale__customer',
         'banktransaction_set__allocations__student',
         'banktransaction_set__allocations__course',
-        'banktransaction_set__extra_splits__account',
-    ).filter(
-        split_source__isnull=True  # Нэмэлт хуваарилалтын entry-г дангаар харуулахгүй
-    ).order_by('-entry_date', '-entry_number')
+    ]
+    if BankTransactionSplit:
+        prefetch_paths.append('banktransaction_set__extra_splits__account')
+
+    entries = AccountingEntry.objects.select_related(
+        'debit_account', 'credit_account', 'created_by'
+    ).prefetch_related(*prefetch_paths)
+
+    if BankTransactionSplit:
+        # Нэмэлт хуваарилалтын entry-г дангаар харуулахгүй
+        entries = entries.filter(split_source__isnull=True)
+
+    entries = entries.order_by('-entry_date', '-entry_number')
     
     # Хайлт
     search = request.GET.get('search', '')
@@ -3581,8 +3933,81 @@ def journal_delete(request, entry_id):
         entry.delete()
         messages.success(request, f'Журналын бичилт {entry_number} устгагдлаа.')
         return redirect('main:journal_list')
-    
+
     return redirect('main:journal_list')
+
+
+@login_required
+def journal_unlink_transactions(request, entry_id):
+    """Журналын бичилтээс холбогдсон гүйлгээ/баримтуудыг салгах (бичилт өөрөө үлдэнэ)"""
+    profile = request.user.profile
+    user = request.user
+
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.change_accountingentry')
+    )
+
+    if not has_access:
+        messages.error(request, 'Энэ үйлдэл хийх эрх танд байхгүй.')
+        return redirect('main:journal_list')
+
+    entry = get_object_or_404(AccountingEntry, id=entry_id)
+
+    return_to = request.POST.get('return_to', request.GET.get('return_to', '')).strip()
+    if return_to and (not return_to.startswith('/') or return_to.startswith('//')):
+        return_to = ''
+    back_url = return_to or reverse('main:journal_list')
+
+    if request.method != 'POST':
+        messages.error(request, 'Энэ үйлдлийг POST аргаар дуудаж байх шаардлагатай.')
+        return redirect(back_url)
+
+    detached = 0
+    try:
+        # Банк/кассын гүйлгээнүүдээс салгах
+        for tx in BankTransaction.objects.filter(accounting_entry=entry):
+            tx.accounting_entry = None
+            tx.is_processed = False
+            tx.save(update_fields=['accounting_entry', 'is_processed'])
+            detached += 1
+            # Автоматаар үүссэн кассын эсрэг мөрүүдийг мөн устгах
+            try:
+                from .import_bank_transactions import delete_cash_transfer_mirrors
+                delete_cash_transfer_mirrors(tx)
+            except Exception:
+                pass
+
+        # Нэмэлт хуваарилалтуудаас салгах
+        try:
+            from .models import BankTransactionSplit
+            for split in BankTransactionSplit.objects.filter(accounting_entry=entry):
+                split.accounting_entry = None
+                split.save(update_fields=['accounting_entry'])
+                detached += 1
+        except Exception:
+            pass
+
+        # Дотоод хэрэгцээний зардлын холбоосоос салгах
+        for sale in Sale.objects.filter(expense_accounting_entry=entry):
+            sale.expense_accounting_entry = None
+            sale.save(update_fields=['expense_accounting_entry'])
+            detached += 1
+
+        if detached:
+            messages.success(
+                request,
+                f'Журналын бичилт {entry.entry_number}-с {detached} холбоос салгагдлаа.'
+            )
+        else:
+            messages.info(request, f'{entry.entry_number} бичилтэд холбогдсон гүйлгээ олдсонгүй.')
+    except Exception as e:
+        messages.error(request, f'Салгах явцад алдаа гарлаа: {e}')
+
+    return redirect(back_url)
 
 
 @login_required
@@ -3752,6 +4177,60 @@ def chart_account_delete(request, account_id):
         account.delete()
         messages.success(request, f'Данс {account_name} амжилттай устгагдлаа.')
     
+    return redirect('main:chart_of_accounts_list')
+
+
+@login_required
+def chart_account_delete_empty(request):
+    """Хоосон (үлдэгдэлгүй, гүйлгээгүй) дансуудыг бөөнөөр устгах"""
+    if not request.user.profile.is_accountant:
+        messages.error(request, 'Данс устгах эрх танд байхгүй.')
+        return redirect('main:chart_of_accounts_list')
+
+    if request.method != 'POST':
+        return redirect('main:chart_of_accounts_list')
+
+    # Аль дансанд AccountingEntry, BankTransaction холбоос байхгүй, бүх үлдэгдэл нь 0 байгааг олох
+    candidates = ChartOfAccounts.objects.exclude(
+        id__in=AccountingEntry.objects.values_list('debit_account_id', flat=True)
+    ).exclude(
+        id__in=AccountingEntry.objects.values_list('credit_account_id', flat=True)
+    ).exclude(
+        id__in=BankTransaction.objects.values_list('bank_account_id', flat=True)
+    ).exclude(
+        id__in=BankTransaction.objects.filter(
+            offset_account__isnull=False
+        ).values_list('offset_account_id', flat=True)
+    ).filter(
+        opening_balance=0,
+        debit_balance=0,
+        credit_balance=0,
+    )
+
+    deleted_names = []
+    skipped = 0
+    for account in list(candidates):
+        try:
+            with transaction.atomic():
+                name = f'{account.code} - {account.name}'
+                account.delete()
+                deleted_names.append(name)
+        except Exception:
+            # ProtectedError гэх мэт — өөр хүснэгтээс хамааралтай данс
+            skipped += 1
+
+    if deleted_names:
+        messages.success(
+            request,
+            f'{len(deleted_names)} хоосон данс устгагдлаа: ' + ', '.join(deleted_names[:10]) +
+            ('…' if len(deleted_names) > 10 else '')
+        )
+    else:
+        messages.info(request, 'Устгах боломжтой хоосон данс олдсонгүй.')
+
+    if skipped:
+        messages.warning(request, f'{skipped} данс өөр бүртгэлтэй холбоотой тул устгагдсангүй.')
+
     return redirect('main:chart_of_accounts_list')
 
 
@@ -3983,6 +4462,20 @@ def link_bank_transaction_to_journal(request, transaction_id):
     # Гүйлгээ авах (банк болон кассын гүйлгээ хоёуланд зориулна)
     transaction = get_object_or_404(BankTransaction, id=transaction_id)
 
+    # Автоматаар үүссэн кассын эсрэг мөр — холболтыг эх гүйлгээ хариуцна
+    if transaction.transfer_source_id:
+        messages.info(
+            request,
+            'Энэ кассын гүйлгээ харилцахын гүйлгээний холболтоос автоматаар үүссэн. '
+            'Холболтыг эх гүйлгээн дээр удирдана.'
+        )
+        return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction.transfer_source_id)
+
+    # GET болон POST хоёроос return_to уншина (форм POST хийхэд GET param алдагдаж болно)
+    return_to = (request.POST.get('return_to') or request.GET.get('return_to', '')).strip()
+    if return_to and (not return_to.startswith('/') or return_to.startswith('//')):
+        return_to = ''
+
     def recalc_sale_paid_amount(sale_obj):
         """Борлуулалтын paid_amount-г legacy + partial allocation-аар дахин тооцоолно"""
         paid_legacy = BankTransaction.objects.filter(
@@ -4006,12 +4499,109 @@ def link_bank_transaction_to_journal(request, transaction_id):
         sale_obj.save(update_fields=['paid_amount', 'status'])
     
     if request.method == 'POST':
+        # First handle unlink actions triggered from the link page (journal, split, allocation, sale link)
+        unlink_type = request.POST.get('unlink_type', '').strip()
+        if unlink_type:
+            # return_to POST-оор ч ирж болно (form hidden input)
+            _post_return = request.POST.get('return_to', '').strip()
+            _effective_return = _post_return if (_post_return and _post_return.startswith('/') and not _post_return.startswith('//')) else return_to
+            _link_url = reverse('main:link_bank_transaction_to_journal', args=[transaction_id])
+            _back_url = _effective_return if _effective_return else _link_url
+            try:
+                # Unlink entire accounting entry attached to this transaction
+                if unlink_type == 'journal':
+                    if transaction.accounting_entry:
+                        ae = transaction.accounting_entry
+                        transaction.accounting_entry = None
+                        transaction.is_processed = False
+                        transaction.save(update_fields=['accounting_entry', 'is_processed'])
+                        ae.delete()
+                        from .import_bank_transactions import delete_cash_transfer_mirrors
+                        delete_cash_transfer_mirrors(transaction)
+                        messages.success(request, 'Гүйлгээн дэх журналын бичилт амжилттай цуцлагдлаа.')
+                    else:
+                        messages.error(request, 'Энэ гүйлгээнд холбогдсон журналын бичилт олдсонгүй.')
+                    return redirect(_back_url)
+
+                # Unlink a specific manual split's accounting entry (and optionally the split record)
+                if unlink_type == 'split':
+                    split_id = request.POST.get('split_id')
+                    try:
+                        from .models import BankTransactionSplit
+                    except Exception:
+                        BankTransactionSplit = None
+
+                    if not BankTransactionSplit:
+                        messages.error(request, 'Нэмэлт хуваарилалтын модель боломжитгүй байна (migration байхгүй).')
+                        return redirect(_back_url)
+
+                    bts = BankTransactionSplit.objects.filter(id=split_id, transaction=transaction).first()
+                    if not bts:
+                        messages.error(request, 'Сонгосон нэмэлт хуваарилалт олдсонгүй.')
+                        return redirect(_back_url)
+                    if bts.accounting_entry:
+                        ae = bts.accounting_entry
+                        bts.accounting_entry = None
+                        bts.save(update_fields=['accounting_entry'])
+                        ae.delete()
+                        messages.success(request, 'Нэмэлт хуваарилалтын журналын бичилт цуцлагдлаа.')
+                    else:
+                        messages.error(request, 'Энэ мөрөнд холбогдсон журналын бичилт илрээгүй.')
+                    return redirect(_back_url)
+
+                # Unlink a specific payment allocation (student allocation)
+                if unlink_type == 'alloc':
+                    alloc_id = request.POST.get('alloc_id')
+                    pa = PaymentAllocation.objects.filter(id=alloc_id, transaction=transaction).first()
+                    if not pa:
+                        messages.error(request, 'Сонгосон хуваарилалт олдсонгүй.')
+                        return redirect(_back_url)
+                    pa.delete()
+                    messages.success(request, 'Хуваарилалт амжилттай устгагдлаа.')
+                    return redirect(_back_url)
+
+                # Unlink everything: journal, splits, allocations, sale link
+                if unlink_type == 'all':
+                    # remove sale allocations and payment allocations
+                    SalePaymentAllocation.objects.filter(transaction=transaction).delete()
+                    PaymentAllocation.objects.filter(transaction=transaction).delete()
+                    # remove legacy income_sale link
+                    if transaction.income_sale_id:
+                        transaction.income_sale = None
+                    # detach and delete accounting entry if present
+                    if transaction.accounting_entry:
+                        ae = transaction.accounting_entry
+                        transaction.accounting_entry = None
+                        ae.delete()
+                    # автоматаар үүссэн кассын эсрэг мөрүүдийг устгах
+                    from .import_bank_transactions import delete_cash_transfer_mirrors
+                    delete_cash_transfer_mirrors(transaction)
+                    transaction.offset_account = None
+                    transaction.income_type = None
+                    transaction.is_processed = False
+                    transaction.save(update_fields=['income_sale', 'accounting_entry', 'is_processed', 'offset_account', 'income_type'])
+                    messages.success(request, 'Гүйлгээний бүх холболт амжилттай цуцлагдлаа.')
+                    return redirect(_back_url)
+
+                if unlink_type in ('sale_alloc', 'sale'):
+                    # remove SalePaymentAllocation for this transaction
+                    SalePaymentAllocation.objects.filter(transaction=transaction).delete()
+                    if transaction.income_sale_id:
+                        transaction.income_sale = None
+                    transaction.is_processed = False
+                    transaction.save(update_fields=['income_sale', 'is_processed'])
+                    messages.success(request, 'Борлуулалттай холболт амжилттай цуцлагдлаа.')
+                    return redirect(_back_url)
+            except Exception as e:
+                messages.error(request, f'Цуцлах явцад алдаа гарлаа: {e}')
+                return redirect(_back_url)
+
         offset_account_id = request.POST.get('offset_account')
-        
+
         if not offset_account_id:
             messages.error(request, 'Эсрэг данс сонгоно уу.')
             return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
-        
+
         try:
             offset_account = ChartOfAccounts.objects.get(id=offset_account_id)
             
@@ -4218,16 +4808,22 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
                         # Борлуулалтад урьдчилан зааж өгсөн нэмэлт хуваарилалтуудыг
                         # BankTransactionSplit-д автоматаар шилжүүлэх
-                        from .models import SaleExtraSplit
-                        sale_extra_splits = sale_obj.extra_splits.all()
-                        if sale_extra_splits.exists():
-                            transaction.extra_splits.all().delete()
-                            for ses in sale_extra_splits:
-                                BankTransactionSplit.objects.get_or_create(
-                                    transaction=transaction,
-                                    account=ses.account,
-                                    defaults={'amount': ses.amount, 'description': ses.description or ''}
-                                )
+                        # (модель устгагдсан байж болно — тиймээс хамгаалалттай)
+                        try:
+                            from .models import BankTransactionSplit, SaleExtraSplit
+                        except Exception:
+                            BankTransactionSplit = None
+                            SaleExtraSplit = None
+                        if BankTransactionSplit and SaleExtraSplit:
+                            sale_extra_splits = sale_obj.extra_splits.all()
+                            if sale_extra_splits.exists():
+                                transaction.extra_splits.all().delete()
+                                for ses in sale_extra_splits:
+                                    BankTransactionSplit.objects.get_or_create(
+                                        transaction=transaction,
+                                        account=ses.account,
+                                        defaults={'amount': ses.amount, 'description': ses.description or ''}
+                                    )
                     
                     # Бусад төрөл
                     else:
@@ -4239,12 +4835,16 @@ def link_bank_transaction_to_journal(request, transaction_id):
             transaction.save()
             
             # Нэмэлт хуваарилалт (extra splits) хадгалах
-            from .models import BankTransactionSplit
-            transaction.extra_splits.all().delete()
+            try:
+                from .models import BankTransactionSplit
+            except Exception:
+                BankTransactionSplit = None
+            if BankTransactionSplit:
+                transaction.extra_splits.all().delete()
             total_split = Decimal('0')
             split_errors = []
             split_index = 0
-            while True:
+            while BankTransactionSplit:
                 acct_id = request.POST.get(f'splits[{split_index}][account]', '').strip()
                 amt_raw = request.POST.get(f'splits[{split_index}][amount]', '').replace(',', '').strip()
                 desc = request.POST.get(f'splits[{split_index}][description]', '').strip()
@@ -4285,10 +4885,10 @@ def link_bank_transaction_to_journal(request, transaction_id):
                 return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
 
             # Журналын бичилт үүсгэх
-            from .import_bank_transactions import regenerate_accounting_entries
-            
+            from .import_bank_transactions import regenerate_accounting_entries, create_accounting_entry_safe
+
             # Борлуулалттай холбогдсон бол (offset_account байхгүй ч) splits-д журнал үүсгэнэ
-            sale_linked = (transaction.income_sale_id or 
+            sale_linked = (transaction.income_sale_id or
                           transaction.sale_allocations.exists())
             if sale_linked:
                 # Банкны данс тодорхойлох
@@ -4299,48 +4899,90 @@ def link_bank_transaction_to_journal(request, transaction_id):
                 # Борлуулалтын SaleExtraSplit → BankTransactionSplit + AccountingEntry шилжүүлэх
                 linked_sale = transaction.income_sale
                 if linked_sale and bt_bank_acct:
-                    for ses in linked_sale.extra_splits.all():
-                        bts, created = BankTransactionSplit.objects.get_or_create(
-                            transaction=transaction,
-                            account=ses.account,
-                            defaults={'amount': ses.amount, 'description': ses.description or ''}
-                        )
-                        if not bts.accounting_entry:
-                            if bts.accounting_entry:
-                                old = bts.accounting_entry
-                                bts.accounting_entry = None
-                                bts.save(update_fields=['accounting_entry'])
-                                old.delete()
-                            existing_count = AccountingEntry.objects.filter(
-                                entry_number__startswith=f'{prefix}{date_key}'
-                            ).count()
-                            split_desc = ses.description or transaction.description
-                            split_entry = AccountingEntry.objects.create(
-                                entry_date=transaction.transaction_date,
-                                entry_number=f'{prefix}{date_key}{existing_count + 1:04d}',
-                                description=split_desc,
-                                debit_account=bt_bank_acct,
-                                debit_amount=bts.amount,
-                                credit_account=ses.account,
-                                credit_amount=bts.amount,
-                                created_by=request.user,
+                    try:
+                        from .models import BankTransactionSplit
+                    except Exception:
+                        BankTransactionSplit = None
+                    if BankTransactionSplit:
+                        for ses in linked_sale.extra_splits.all():
+                            bts, created = BankTransactionSplit.objects.get_or_create(
+                                transaction=transaction,
+                                account=ses.account,
+                                defaults={'amount': ses.amount, 'description': ses.description or ''}
                             )
-                            bts.accounting_entry = split_entry
-                            bts.save(update_fields=['accounting_entry'])
+                            if not bts.accounting_entry:
+                                seq = AccountingEntry.objects.filter(
+                                    entry_number__startswith=f'{prefix}{date_key}'
+                                ).count() + 1
+                                split_desc = ses.description or transaction.description
+                                split_entry = create_accounting_entry_safe(
+                                    entry_date=transaction.transaction_date,
+                                    entry_number=f'{prefix}{date_key}{seq:04d}',
+                                    description=split_desc,
+                                    debit_account=bt_bank_acct,
+                                    debit_amount=bts.amount,
+                                    credit_account=ses.account,
+                                    credit_amount=bts.amount,
+                                    created_by=request.user,
+                                )
+                                bts.accounting_entry = split_entry
+                                bts.save(update_fields=['accounting_entry'])
+
+                    # If there's no offset_account but the transaction links a Sale,
+                    # create a main journal entry debiting the bank and crediting
+                    # the standard revenue account so the sale appears in journal.
+                    if not transaction.offset_account and not transaction.accounting_entry:
+                        try:
+                            # total of extra_splits on transaction (if model exists)
+                            if hasattr(transaction, 'extra_splits'):
+                                try:
+                                    main_splits_total = sum(s.amount for s in transaction.extra_splits.all())
+                                except Exception:
+                                    main_splits_total = Decimal('0')
+                            else:
+                                main_splits_total = Decimal('0')
+
+                            main_amount = (transaction.income_amount or Decimal('0')) - main_splits_total
+                            if main_amount > 0:
+                                revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
+                                if revenue_account:
+                                    seq = AccountingEntry.objects.filter(
+                                        entry_number__startswith=f'{prefix}{date_key}'
+                                    ).count() + 1
+                                    main_entry = create_accounting_entry_safe(
+                                        entry_date=transaction.transaction_date,
+                                        entry_number=f'{prefix}{date_key}{seq:04d}',
+                                        description=transaction.description,
+                                        debit_account=bt_bank_acct,
+                                        debit_amount=main_amount,
+                                        credit_account=revenue_account,
+                                        credit_amount=main_amount,
+                                        created_by=request.user,
+                                    )
+                                    transaction.accounting_entry = main_entry
+                                    transaction.is_processed = True
+                                    transaction.save(update_fields=['accounting_entry', 'is_processed'])
+                        except Exception:
+                            # Don't block the overall flow on this best-effort create
+                            pass
 
                 # Үндсэн борлуулалтын орлогын журнал (offset_account байгаа бол)
                 if transaction.offset_account and not transaction.accounting_entry:
-                    main_splits_total = sum(
-                        s.amount for s in transaction.extra_splits.all()
-                    )
+                    if hasattr(transaction, 'extra_splits'):
+                        try:
+                            main_splits_total = sum(s.amount for s in transaction.extra_splits.all())
+                        except Exception:
+                            main_splits_total = Decimal('0')
+                    else:
+                        main_splits_total = Decimal('0')
                     main_amount = transaction.income_amount - main_splits_total
                     if main_amount > 0 and bt_bank_acct:
-                        existing_count = AccountingEntry.objects.filter(
+                        seq = AccountingEntry.objects.filter(
                             entry_number__startswith=f'{prefix}{date_key}'
-                        ).count()
-                        main_entry = AccountingEntry.objects.create(
+                        ).count() + 1
+                        main_entry = create_accounting_entry_safe(
                             entry_date=transaction.transaction_date,
-                            entry_number=f'{prefix}{date_key}{existing_count + 1:04d}',
+                            entry_number=f'{prefix}{date_key}{seq:04d}',
                             description=transaction.description,
                             debit_account=bt_bank_acct,
                             debit_amount=main_amount,
@@ -4354,36 +4996,43 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
                 # Мануал splits (form-оос оруулсан) бүрт журнал үүсгэнэ
                 if bt_bank_acct:
-                    for split in transaction.extra_splits.filter(accounting_entry__isnull=True):
-                        existing_count = AccountingEntry.objects.filter(
-                            entry_number__startswith=f'{prefix}{date_key}'
-                        ).count()
-                        split_desc = split.description or transaction.description
-                        split_entry = AccountingEntry.objects.create(
-                            entry_date=transaction.transaction_date,
-                            entry_number=f'{prefix}{date_key}{existing_count + 1:04d}',
-                            description=split_desc,
-                            debit_account=bt_bank_acct,
-                            debit_amount=split.amount,
-                            credit_account=split.account,
-                            credit_amount=split.amount,
-                            created_by=request.user,
-                        )
-                        split.accounting_entry = split_entry
-                        split.save(update_fields=['accounting_entry'])
+                    if hasattr(transaction, 'extra_splits'):
+                        for split in transaction.extra_splits.filter(accounting_entry__isnull=True):
+                            seq = AccountingEntry.objects.filter(
+                                entry_number__startswith=f'{prefix}{date_key}'
+                            ).count() + 1
+                            split_desc = split.description or transaction.description
+                            split_entry = create_accounting_entry_safe(
+                                entry_date=transaction.transaction_date,
+                                entry_number=f'{prefix}{date_key}{seq:04d}',
+                                description=split_desc,
+                                debit_account=bt_bank_acct,
+                                debit_amount=split.amount,
+                                credit_account=split.account,
+                                credit_amount=split.amount,
+                                created_by=request.user,
+                            )
+                            split.accounting_entry = split_entry
+                            split.save(update_fields=['accounting_entry'])
+
+                # Эсрэг данс касс бол кассын эсрэг мөрийг синк хийх
+                from .import_bank_transactions import sync_cash_transfer_mirrors
+                sync_cash_transfer_mirrors(transaction, request.user)
 
                 messages.success(
                     request,
                     f'✓ Борлуулалт холбогдож, журналын бичилт үүслээ!'
                 )
+                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
+                    return redirect(return_to)
                 if transaction.account_type == 'CASH':
                     return redirect('main:cash_transaction_list')
                 else:
                     return redirect('main:bank_transaction_list')
-            
+
             # Энэ нэг гүйлгээний журнал үүсгэх (offset_account аргаар)
             result = regenerate_accounting_entries([transaction], request.user)
-            
+
             if result > 0:
                 messages.success(
                     request, 
@@ -4391,6 +5040,8 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     f'журналын бичилт үүслээ!'
                 )
                 # Банк эсвэл кассын жагсаалт руу буцах
+                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
+                    return redirect(return_to)
                 if transaction.account_type == 'CASH':
                     return redirect('main:cash_transaction_list')
                 else:
@@ -4402,6 +5053,8 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     'Admin хэсгээс "Журналын бичилт үүсгэх" үйлдлийг ашиглана уу.'
                 )
                 # Банк эсвэл кассын жагсаалт руу буцах
+                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
+                    return redirect(return_to)
                 if transaction.account_type == 'CASH':
                     return redirect('main:cash_transaction_list')
                 else:
@@ -4481,6 +5134,12 @@ def link_bank_transaction_to_journal(request, transaction_id):
     if initial_income_type not in income_type_codes:
         initial_income_type = ''
 
+    # Нэмэлт хуваарилалтууд (модель устгагдсан байж болно)
+    if hasattr(transaction, 'extra_splits'):
+        existing_splits = transaction.extra_splits.select_related('account').all()
+    else:
+        existing_splits = []
+
     context = {
         'transaction': transaction,
         'all_accounts': all_accounts,
@@ -4498,9 +5157,10 @@ def link_bank_transaction_to_journal(request, transaction_id):
         'existing_allocations': existing_allocations,
         'existing_sale_allocation': existing_sale_allocation,
         'initial_income_type': initial_income_type,
-        'existing_splits': transaction.extra_splits.select_related('account').all(),
+        'existing_splits': existing_splits,
+        'return_to': request.GET.get('return_to', ''),
     }
-    
+
     return render(request, 'main/link_bank_transaction.html', context)
 
 
@@ -4958,11 +5618,11 @@ def cash_transaction_list(request):
     transactions = BankTransaction.objects.filter(
         account_type='CASH'
     ).select_related(
-        'bank_account', 'offset_account'
+        'bank_account', 'offset_account', 'income_sale', 'accounting_entry'
     ).prefetch_related(
-        'allocations__student', 'allocations__course'
+        'allocations__student', 'allocations__course', 'sale_allocations__sale'
     ).order_by('-transaction_date', '-id')
-    
+
     # Кассын дансаар шүүх
     cash_account_id = request.GET.get('cash_account')
     if cash_account_id:
@@ -4986,14 +5646,63 @@ def cash_transaction_list(request):
     paginator = Paginator(transactions, 50)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
+    # Annotate each transaction on the current page with linked/unlinked document counts
+    for tx in page_obj.object_list:
+        try:
+            alloc_count = tx.allocations.count()
+        except Exception:
+            alloc_count = 0
+        try:
+            sale_alloc_count = tx.sale_allocations.count()
+        except Exception:
+            sale_alloc_count = 0
+        income_sale_flag = 1 if getattr(tx, 'income_sale_id', None) else 0
+        accounting_flag = 1 if getattr(tx, 'accounting_entry_id', None) else 0
+
+        tx.linked_docs_count = alloc_count + sale_alloc_count + income_sale_flag + accounting_flag
+
+        # Determine if there's unlinked amount that could be allocated/linked
+        try:
+            available = tx.available_income_amount if getattr(tx, 'income_amount', 0) > 0 else 0
+        except Exception:
+            available = 0
+        tx.unlinked_docs_count = 1 if available and available > 0 else 0
+
+    # Aggregate counts: number of transactions that have any linked document, and number without
+    from django.db.models import Q
+    linked_tx_q = Q(allocations__isnull=False) | Q(sale_allocations__isnull=False) | Q(income_sale__isnull=False) | Q(accounting_entry__isnull=False)
+    # distinct because joins may duplicate
+    linked_tx_count = transactions.filter(linked_tx_q).distinct().count()
+    unlinked_tx_count = total_count - linked_tx_count
+
+    # Also keep earlier document-level aggregates if needed
+    total_allocations = PaymentAllocation.objects.filter(transaction__in=transactions).count()
+    total_sale_allocations = SalePaymentAllocation.objects.filter(transaction__in=transactions).count()
+    total_income_sales = transactions.filter(income_sale__isnull=False).count()
+    total_accounting = transactions.filter(accounting_entry__isnull=False).count()
+    total_linked_docs = total_allocations + total_sale_allocations + total_income_sales + total_accounting
+
+    # Count transactions that still have available income amount (unlinked potential per transaction)
+    total_unlinked_docs = 0
+    for t in transactions:
+        try:
+            if getattr(t, 'available_income_amount', 0) and t.available_income_amount > 0:
+                total_unlinked_docs += 1
+        except Exception:
+            continue
+
+    # Count transactions that are income vs expense
+    income_tx_count = transactions.filter(income_amount__gt=0).count()
+    expense_tx_count = transactions.filter(expense_amount__gt=0).count()
+
     # Кассын дансууд (100x, 101x код)
     from django.db.models import Q
     cash_accounts = ChartOfAccounts.objects.filter(
         Q(code__startswith='100') | Q(code__startswith='101'),
         is_active=True
     ).order_by('code')
-    
+
     context = {
         'transactions': page_obj,
         'cash_accounts': cash_accounts,
@@ -5002,8 +5711,14 @@ def cash_transaction_list(request):
         'total_expense': total_expense,
         'cash_balance': cash_balance,
         'page_obj': page_obj,
+        'total_linked_docs': total_linked_docs,
+        'total_unlinked_docs': total_unlinked_docs,
+        'linked_tx_count': linked_tx_count,
+        'unlinked_tx_count': unlinked_tx_count,
+        'income_tx_count': income_tx_count,
+        'expense_tx_count': expense_tx_count,
     }
-    
+
     return render(request, 'main/cash_transaction_list.html', context)
 
 
@@ -5028,10 +5743,26 @@ def cash_transaction_edit(request, transaction_id):
     
     # Гүйлгээг авах
     transaction = get_object_or_404(BankTransaction, id=transaction_id, account_type='CASH')
-    
+    # Preserve return_to so we can redirect back to the same list page (pagination)
+    return_to = request.GET.get('return_to', request.POST.get('return_to', '')).strip()
+
+    # Автоматаар үүссэн эсрэг мөрийг эндээс засахыг хориглоно (эх гүйлгээнээс удирдана)
+    if transaction.transfer_source_id:
+        messages.error(
+            request,
+            'Энэ кассын гүйлгээ харилцахын гүйлгээний холболтоос автоматаар үүссэн тул '
+            'эндээс засах боломжгүй. Эх банкны гүйлгээн дээрээ засна уу.'
+        )
+        return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction.transfer_source_id)
+
     # Одоо байгаа хуваарилалтууд
     existing_allocations = PaymentAllocation.objects.filter(transaction=transaction).select_related('student', 'course')
-    
+
+    # Prevent editing here if transaction is linked (journal, allocations, sale link)
+    if transaction.accounting_entry or transaction.allocations.exists() or transaction.sale_allocations.exists() or transaction.income_sale_id:
+        messages.error(request, 'Энэ кассын гүйлгээ ямар нэгэн баримт/журналтай холбогдсон тул эндээс засах боломжгүй. Холболтыг цуцалсны дараа засна уу.')
+        return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+
     if request.method == 'POST':
         try:
             # Мэдээлэл цуглуулах
@@ -5218,21 +5949,40 @@ def cash_transaction_delete(request, transaction_id):
     transaction = get_object_or_404(BankTransaction, id=transaction_id, account_type='CASH')
     
     if request.method == 'POST':
+        # Автоматаар үүссэн эсрэг мөрийг шууд устгахыг хориглоно
+        if transaction.transfer_source_id:
+            messages.error(
+                request,
+                'Энэ кассын гүйлгээ харилцахын гүйлгээний холболтоос автоматаар үүссэн. '
+                'Устгахын тулд эх банкны гүйлгээний холболтыг цуцлана уу.'
+            )
+            return redirect('main:cash_transaction_list')
+
+        # Журналын бичилттэй холбогдсон бол устгахыг хориглоно
+        if transaction.accounting_entry_id:
+            messages.error(
+                request,
+                'Кассын гүйлгээ журналын бичилттэй холбогдсон байна. '
+                'Эхлээд журналын холболтыг салгаж устга.'
+            )
+            return redirect('main:cash_transaction_list')
+
+        if transaction.allocations.exists() or transaction.sale_allocations.exists():
+            messages.error(
+                request,
+                'Кассын гүйлгээ хуваарилалттай холбогдсон байна. '
+                'Эхлээд хуваарилалтыг устгаж устга.'
+            )
+            return redirect('main:cash_transaction_list')
+
         try:
-            # Журналыг устгах (байвал)
-            if transaction.accounting_entry:
-                transaction.accounting_entry.delete()
-            
-            # Хуваарилалтууд автоматаар устана (CASCADE)
             transaction.delete()
-            
             messages.success(request, 'Кассын гүйлгээ амжилттай устгагдлаа.')
             return redirect('main:cash_transaction_list')
-            
         except Exception as e:
             messages.error(request, f'Устгахад алдаа гарлаа: {str(e)}')
             return redirect('main:cash_transaction_list')
-    
+
     # GET request - баталгаажуулах хуудас харуулах
     return render(request, 'main/cash_transaction_delete.html', {'transaction': transaction})
 
@@ -6200,9 +6950,14 @@ def sale_create_multi(request):
                         )
 
                 # Нэмэлт хуваарилалт (SaleExtraSplit) хадгалах + журнал үүсгэх
-                from .models import SaleExtraSplit, BankTransactionSplit
+                # (модель устгагдсан байж болно — тиймээс хамгаалалттай)
+                try:
+                    from .models import SaleExtraSplit, BankTransactionSplit
+                except Exception:
+                    SaleExtraSplit = None
+                    BankTransactionSplit = None
                 split_index = 0
-                while True:
+                while SaleExtraSplit:
                     acct_id = request.POST.get(f'sale_splits[{split_index}][account]', '').strip()
                     amt_raw = request.POST.get(f'sale_splits[{split_index}][amount]', '').replace(',', '').strip()
                     desc = request.POST.get(f'sale_splits[{split_index}][description]', '').strip()

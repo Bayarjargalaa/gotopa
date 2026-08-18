@@ -47,14 +47,19 @@ def student_payments(request):
     courses = Course.objects.filter(is_active=True).order_by('level', 'name')
     
     # Он, сарын жагсаалт (dropdown-д харуулах)
-    # Банкны гүйлгээнээс он-уудыг авах, хоосон бол өнөөгийн он харуулах
-    payment_years = BankTransaction.objects.filter(
-        income_type='STUDENT_PAYMENT'
-    ).dates('transaction_date', 'year')
-    
-    if payment_years:
-        min_year = payment_years[0].year
-        max_year = max(current_year, payment_years[len(payment_years)-1].year)
+    # Төлбөрийн мэдээлэл аль нэг таблаас ирж болно: PaymentAllocation.year, BankTransaction.income_year
+    from .models import PaymentAllocation
+
+    alloc_years_qs = PaymentAllocation.objects.values_list('year', flat=True).distinct()
+    alloc_years = [int(y) for y in alloc_years_qs if y]
+
+    tx_years_qs = BankTransaction.objects.filter(income_year__isnull=False).values_list('income_year', flat=True).distinct()
+    tx_years = [int(y) for y in tx_years_qs if y]
+
+    year_set = set(alloc_years) | set(tx_years)
+    if year_set:
+        min_year = min(year_set)
+        max_year = max(max(year_set), current_year)
         years = list(range(min_year, max_year + 2))
     else:
         years = list(range(2024, current_year + 2))

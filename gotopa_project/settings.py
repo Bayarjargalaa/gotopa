@@ -26,12 +26,6 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cmz#-4n==as*cg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-# 1. Тухайн IP болон портыг итгэмжлэгдсэн жагсаалтад оруулна (http:// заавал байх ёстой)
-CSRF_TRUSTED_ORIGINS = [
-    'http://202.179.22.189:8002',
-    'http://202.179.22.189',
-]
-
 _allowed = os.environ.get('DJANGO_ALLOWED_HOSTS', '202.179.22.189,localhost,127.0.0.1')
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
 
@@ -60,13 +54,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Production-д (DEBUG=False) whitenoise ашиглана
-if not DEBUG:
-    try:
-        MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-    except ImportError:
-        pass
-
 ROOT_URLCONF = 'gotopa_project.urls'
 
 TEMPLATES = [
@@ -94,7 +81,7 @@ WSGI_APPLICATION = 'gotopa_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.environ.get('DATABASE_PATH', str(BASE_DIR / 'data' / 'db.sqlite3')),
+        'NAME': os.environ.get('DATABASE_PATH', str(BASE_DIR / 'db.sqlite3')),
     }
 }
 
@@ -181,3 +168,19 @@ CKEDITOR_BROWSE_SHOW_DIRS = True
 
 # Django admin параметрын хязгаар (банкны гүйлгээ олон байхад)
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # Default: 1000
+
+# SQLite-д Кирилл үсгийн том/жижиг ялгаагүй хайлт (icontains)
+from django.db.backends.signals import connection_created
+
+def _sqlite_lower(s):
+    return s.lower() if isinstance(s, str) else s
+
+def _sqlite_upper(s):
+    return s.upper() if isinstance(s, str) else s
+
+def _register_unicode_functions(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        connection.connection.create_function('LOWER', 1, _sqlite_lower)
+        connection.connection.create_function('UPPER', 1, _sqlite_upper)
+
+connection_created.connect(_register_unicode_functions)

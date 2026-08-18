@@ -7,7 +7,7 @@
     <div class="max-w-6xl mx-auto">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold text-secondary">Борлуулалт бүртгэх (Олон бараа)</h1>
-            <a href="{% url 'main:stock_movement_list' %}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+            <a href="{% url 'main:sale_list' %}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
                 ← Буцах
             </a>
         </div>
@@ -69,19 +69,26 @@
                 </div>
             </div>
 
-            <!-- Банкны гүйлгээ холбох хэсэг -->
+            <!-- Гүйлгээ холбох хэсэг (Банк / Касс) -->
             <div id="bankTransactionField" style="display: none;" class="mb-6 pb-6 border-b">
                 <label class="block text-sm font-medium text-gray-700 mb-2">
-                    <i class="fas fa-link"></i> Банкны орлогын гүйлгээтэй холбох
+                    <i class="fas fa-link"></i> Гүйлгээтэй холбох
                     <span class="text-gray-500 text-xs">(заавал биш)</span>
                 </label>
                 <select name="bank_transaction" id="bankTransactionSelect"
                         onchange="checkTxnMatch()"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <option value="">-- Гүйлгээ сонгоно уу --</option>
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent mb-2">
+                    <option value="">-- Банкны гүйлгээ сонгоно уу --</option>
                 </select>
+
+                <select name="cash_transaction" id="cashTransactionSelect" style="display:none;"
+                        onchange="checkTxnMatch()"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">-- Кассын гүйлгээ сонгоно уу --</option>
+                </select>
+
                 <p class="text-xs text-gray-500 mt-1">
-                    <i class="fas fa-info-circle"></i> Банк сонгосон тохиолдолд тухайн банкны холбогдоогүй орлогын гүйлгээнүүд харагдана
+                    <i class="fas fa-info-circle"></i> Банк/Касс сонгосон тохиолдолд тухайн дансны холбогдоогүй орлогын гүйлгээнүүд харагдана
                 </p>
             </div>
 
@@ -223,7 +230,7 @@
                 <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-semibold">
                     ✓ Хадгалах
                 </button>
-                <a href="{% url 'main:stock_movement_list' %}" class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
+                <a href="{% url 'main:sale_list' %}" class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
                     Цуцлах
                 </a>
             </div>
@@ -379,11 +386,23 @@ function checkTxnMatch() {
     var box = document.getElementById('txnMatchBox');
     if (!box) return;
     var sel = document.getElementById('bankTransactionSelect');
-    if (!sel || !sel.value) { box.classList.add('hidden'); return; }
-    var txnId = parseInt(sel.value);
-    var txn = bankTransactions.find(function(t) { return t.id === txnId; });
-    if (!txn) { box.classList.add('hidden'); return; }
-    var txnAmt = txn.income_amount;
+    var bankSel = document.getElementById('bankTransactionSelect');
+    var cashSel = document.getElementById('cashTransactionSelect');
+    if ((!bankSel || !bankSel.value) && (!cashSel || !cashSel.value)) { box.classList.add('hidden'); return; }
+
+    var txnAmt = 0;
+    var selectedTxns = [];
+    if (bankSel && bankSel.value) {
+        var txnId = parseInt(bankSel.value);
+        var txn = bankTransactions.find(function(t) { return t.id === txnId; });
+        if (txn) { txnAmt += txn.income_amount; selectedTxns.push(txn); }
+    }
+    if (cashSel && cashSel.value) {
+        var ctxId = parseInt(cashSel.value);
+        var ctx = bankTransactions.find(function(t) { return t.id === ctxId; });
+        if (ctx) { txnAmt += ctx.income_amount; selectedTxns.push(ctx); }
+    }
+    if (selectedTxns.length === 0) { box.classList.add('hidden'); return; }
     var saleTotal = getSaleTotal();
     var splitTotal = getSplitTotal();
     var combined = saleTotal + splitTotal;
@@ -403,16 +422,26 @@ function checkTxnMatch() {
 
 function validateSaleForm() {
     var sel = document.getElementById('bankTransactionSelect');
-    if (!sel || !sel.value) return true;  // гүйлгээ сонгоогүй бол шалгахгүй
-    var txnId = parseInt(sel.value);
-    var txn = bankTransactions.find(function(t) { return t.id === txnId; });
-    if (!txn) return true;
+    var bankSel = document.getElementById('bankTransactionSelect');
+    var cashSel = document.getElementById('cashTransactionSelect');
+    if ((!bankSel || !bankSel.value) && (!cashSel || !cashSel.value)) return true;
+    var txnAmt = 0;
+    if (bankSel && bankSel.value) {
+        var txnId = parseInt(bankSel.value);
+        var txn = bankTransactions.find(function(t) { return t.id === txnId; });
+        if (txn) txnAmt += txn.income_amount;
+    }
+    if (cashSel && cashSel.value) {
+        var ctxId = parseInt(cashSel.value);
+        var ctx = bankTransactions.find(function(t) { return t.id === ctxId; });
+        if (ctx) txnAmt += ctx.income_amount;
+    }
     var combined = getSaleTotal() + getSplitTotal();
-    var diff = txn.income_amount - combined;
+    var diff = txnAmt - combined;
     if (Math.abs(diff) >= 1) {
         return confirm(
             'Анхааруулга: Дүн тэнцэхгүй байна!\n\n' +
-            'Гүйлгээний дүн: ' + txn.income_amount.toLocaleString() + '₮\n' +
+            'Гүйлгээний дүн: ' + txnAmt.toLocaleString() + '₮\n' +
             'Борлуулалт + нэмэлт: ' + combined.toLocaleString() + '₮\n' +
             'Зөрүү: ' + Math.abs(diff).toLocaleString() + '₮\n\n' +
             'Гэсэн хэдий ч үргэлжлүүлэх үү?'
@@ -608,6 +637,7 @@ function initPaymentMethod() {
     var bankAccountSelect = document.getElementById('bankAccountSelect');
     var bankTransactionField = document.getElementById('bankTransactionField');
     var bankTransactionSelect = document.getElementById('bankTransactionSelect');
+    var cashTransactionSelect = document.getElementById('cashTransactionSelect');
     var customerSelect = document.getElementById('customerSelect');
     var customerRequired = document.getElementById('customerRequired');
     
@@ -640,7 +670,10 @@ function initPaymentMethod() {
             console.log('Showing cash account field...');
             cashAccountField.style.display = 'block';
             bankAccountField.style.display = 'none';
-            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'block';
+            // Show only cash transaction select
+            if (bankTransactionSelect) bankTransactionSelect.style.display = 'none';
+            if (cashTransactionSelect) cashTransactionSelect.style.display = 'block';
             if (cashAccountSelect) cashAccountSelect.required = true;
             if (bankAccountSelect) bankAccountSelect.required = false;
             if (customerSelect) customerSelect.required = false;
@@ -650,7 +683,21 @@ function initPaymentMethod() {
             cashAccountField.style.display = 'none';
             bankAccountField.style.display = 'block';
             if (bankTransactionField) bankTransactionField.style.display = 'block';
+            // Show only bank transaction select
+            if (bankTransactionSelect) bankTransactionSelect.style.display = 'block';
+            if (cashTransactionSelect) cashTransactionSelect.style.display = 'none';
             if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = true;
+            if (customerSelect) customerSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
+        } else if (value === 'BOTH') {
+            // Both cash and bank parts
+            cashAccountField.style.display = 'block';
+            bankAccountField.style.display = 'block';
+            if (bankTransactionField) bankTransactionField.style.display = 'block';
+            if (bankTransactionSelect) bankTransactionSelect.style.display = 'block';
+            if (cashTransactionSelect) cashTransactionSelect.style.display = 'block';
+            if (cashAccountSelect) cashAccountSelect.required = true;
             if (bankAccountSelect) bankAccountSelect.required = true;
             if (customerSelect) customerSelect.required = false;
             if (customerRequired) customerRequired.style.display = 'none';
@@ -664,6 +711,14 @@ function initPaymentMethod() {
             if (customerSelect) customerSelect.required = false;
             if (customerRequired) customerRequired.style.display = 'none';
             var splitSection = document.getElementById('saleSplitSection');
+        } else if (value === 'INTERNAL') {
+            cashAccountField.style.display = 'none';
+            bankAccountField.style.display = 'none';
+            if (bankTransactionField) bankTransactionField.style.display = 'none';
+            if (cashAccountSelect) cashAccountSelect.required = false;
+            if (bankAccountSelect) bankAccountSelect.required = false;
+            if (customerSelect) customerSelect.required = false;
+            if (customerRequired) customerRequired.style.display = 'none';
         } else if (value === 'CREDIT') {
             console.log('Hiding account fields, showing customer...');
             cashAccountField.style.display = 'none';
@@ -706,7 +761,7 @@ function initPaymentMethod() {
             if (accountId) {
                 // Тухайн банкны гүйлгээнүүдийг filter хийж нэмэх
                 var filtered = bankTransactions.filter(function(t) {
-                    return t.bank_account_id === accountId;
+                    return t.bank_account_id === accountId && t.account_type === 'BANK';
                 });
                 
                 console.log('Filtered transactions:', filtered.length);
@@ -727,6 +782,39 @@ function initPaymentMethod() {
                     option.textContent = '-- Холбогдоогүй гүйлгээ байхгүй --';
                     option.disabled = true;
                     bankTransactionSelect.appendChild(option);
+                }
+            }
+        });
+    }
+
+    // Кассын данс сонгоход гүйлгээнүүдийг харуулах
+    var cashAccountSelect = document.getElementById('cashAccountSelect');
+    var cashTransactionSelect = document.getElementById('cashTransactionSelect');
+    if (cashAccountSelect && cashTransactionSelect) {
+        cashAccountSelect.addEventListener('change', function() {
+            var accountId = parseInt(this.value);
+            console.log('Cash account selected:', accountId);
+            cashTransactionSelect.innerHTML = '<option value="">-- Кассын гүйлгээ сонгоно уу --</option>';
+            if (accountId) {
+                var filtered = bankTransactions.filter(function(t) {
+                    return t.bank_account_id === accountId && t.account_type === 'CASH';
+                });
+                console.log('Filtered cash transactions:', filtered.length);
+                filtered.forEach(function(t) {
+                    var option = document.createElement('option');
+                    option.value = t.id;
+                    option.textContent = t.transaction_date + ' - ' + t.description.substring(0, 50) + ' - ' + t.income_amount.toLocaleString('en-US') + '₮';
+                    if (t.counterparty_name) {
+                        option.textContent += ' (' + t.counterparty_name + ')';
+                    }
+                    cashTransactionSelect.appendChild(option);
+                });
+                if (filtered.length === 0) {
+                    var option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '-- Холбогдоогүй гүйлгээ байхгүй --';
+                    option.disabled = true;
+                    cashTransactionSelect.appendChild(option);
                 }
             }
         });

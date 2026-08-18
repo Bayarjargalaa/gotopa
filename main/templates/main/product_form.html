@@ -114,7 +114,7 @@
                         <select name="supplier_fk" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
                             <option value="">-- Сонгох --</option>
                             {% for supplier in suppliers %}
-                            <option value="{{ supplier.id }}" 
+                            <option value="{{ supplier.id|stringformat:'d' }}"
                                 {% if product.supplier_fk.id == supplier.id %}selected{% endif %}>
                                 {{ supplier.name }}
                                 {% if supplier.phone %}({{ supplier.phone }}){% endif %}

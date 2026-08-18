@@ -66,6 +66,12 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <div class="mt-2 text-sm text-gray-600">
+                        <label class="block">Эсвэл шинэ төрөл оруулах:</label>
+                        <input type="text" name="new_income_type" placeholder="Шинэ орлогын төрөл (жишээ: Тэтгэлэг)" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1 text-sm" />
+                        <div class="text-xs text-gray-400 mt-1">Шинэ төрөл оруулбал систем тухайн нэрээр шинэ төрөл үүсгэж, код автоматаар үүснэ.</div>
+                    </div>
                 </div>
 
                 <!-- Сурагчийн төлбөр (харагдах/далдлах) -->
@@ -145,9 +151,9 @@
                             </li>
                             {% for sale in sales %}
                             <li class="px-3 py-2 text-sm cursor-pointer hover:bg-primary hover:text-white sale-option transition-colors {% if transaction.income_sale_id == sale.id %}bg-primary text-white{% endif %}"
-                                data-value="{{ sale.id }}"
+                                data-value="{{ sale.id|stringformat:'d' }}"
                                 data-text="{{ sale.sale_date|date:'Y-m-d' }} | {{ sale.customer|default:'-' }} | {{ sale.sale_number }} | {{ sale.total_amount|floatformat:0 }}₮"
-                                onclick="selectSale('{{ sale.id }}', '{{ sale.sale_date }} - {{ sale.customer|default:"-"|escapejs }} - {{ sale.sale_number }} - {{ sale.total_amount|floatformat:0 }}₮')">
+                                onclick="selectSale('{{ sale.id|stringformat:'d' }}','{{ sale.sale_date }} - {{ sale.customer|default:"-"|escapejs }} - {{ sale.sale_number }} - {{ sale.total_amount|floatformat:0 }}₮')">
                                 <div class="flex justify-between items-center gap-2">
                                     <span>
                                         <span class="font-medium">{{ sale.sale_number }}</span>
@@ -205,11 +211,11 @@ const transactionAmount = {{ transaction.income_amount }};
 let allocationIndex = 0;
 
 // Сурагчийн мэдээллийг JSON-руу хувиргах
-const studentsData = [
+    const studentsData = [
     {% for student in students %}
         {
             id: {{ student.id }},
-            name: '{{ student.display_name_short|default:student.user.username|escapejs }}'
+            name: '{{ student.full_name|default:student.user.username|escapejs }}'{% if student.phone %} + ' ({{ student.phone }})'{% endif %}
         },
     {% endfor %}
 ];

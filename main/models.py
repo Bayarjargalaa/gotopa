@@ -565,7 +565,15 @@ class AccountingEntry(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 
                                    verbose_name='Үүсгэсэн хэрэглэгч')
     created_at = models.DateTimeField('Үүссэн огноо', auto_now_add=True)
-    
+    related_sale = models.ForeignKey(
+        'Sale',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='accounting_entries',
+        verbose_name='Борлуулалт',
+    )
+
     class Meta:
         ordering = ['-entry_date', '-entry_number']
         verbose_name = 'Гүйлгээний бичилт'
@@ -799,6 +807,21 @@ class Product(models.Model):
             return self.current_stock * self.purchase_price
         return 0
 
+    @property
+    def average_cost(self):
+        """Дундаж өртгийн арга: (эхний үлдэгдэл × эхний үнэ + орлогын нийт дүн) / нийт тоо"""
+        from django.db.models import Sum as _Sum
+        agg = self.movements.filter(movement_type='IN').aggregate(
+            total_qty=_Sum('quantity'), total_value=_Sum('total_amount')
+        )
+        in_qty = agg['total_qty'] or 0
+        in_value = agg['total_value'] or 0
+        total_qty = (self.initial_stock or 0) + in_qty
+        total_value = (self.initial_stock or 0) * (self.purchase_price or 0) + in_value
+        if total_qty > 0:
+            return total_value / total_qty
+        return self.purchase_price or 0
+
 
 class StockMovement(models.Model):
     """Агуулахын хөдөлгөөн (орлого/зарлага)"""
@@ -813,6 +836,7 @@ class StockMovement(models.Model):
         ('CASH', 'Бэлэн'),
         ('BANK', 'Данс'),
         ('CREDIT', 'Зээлээр'),
+        ('INTERNAL', 'Дотоод хэрэгцээ'),
     ]
     
     product = models.ForeignKey(
@@ -888,6 +912,16 @@ class StockMovement(models.Model):
         related_name='sales_made',
         verbose_name='Борлуулагч',
         help_text='Борлуулалт хийсэн менежер/ажилтан'
+    )
+
+    # Борлуулалтын баримтын холбоос (SET_NULL — Sale устгасан ч движение хэвээр үлдэнэ)
+    sale = models.ForeignKey(
+        'Sale',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='stock_movements',
+        verbose_name='Борлуулалтын баримт'
     )
     
     notes = models.TextField(blank=True, verbose_name='Тэмдэглэл')
@@ -1167,6 +1201,9 @@ class BankTransaction(models.Model):
         ('DONATION', 'Хандив'),
         ('OTHER', 'Бусад орлого'),
     ]
+
+
+
     
     EXPENSE_TYPE_CHOICES = [
         ('PRODUCT_PURCHASE', 'Бараа материалын худалдан авалт'),
@@ -1278,6 +1315,18 @@ class BankTransaction(models.Model):
                                         verbose_name='Гүйлгээний бичилт',
                                         help_text='Үүссэн журналын бичилт')
     is_processed = models.BooleanField('Боловсруулсан эсэх', default=False)
+
+    # Мөнгө хооронд шилжүүлэлт: эсрэг данс нь касс байх үед автоматаар үүсэх эсрэг талын мөр
+    transfer_source = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='transfer_mirrors',
+        verbose_name='Эх гүйлгээ',
+        help_text='Автоматаар үүссэн кассын эсрэг мөр бол үүсгэсэн банк/кассын гүйлгээ'
+    )
+
     imported_at = models.DateTimeField('Импортолсон огноо', auto_now_add=True)
     imported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 
                                    verbose_name='Импортолсон хэрэглэгч')
@@ -1302,6 +1351,11 @@ class BankTransaction(models.Model):
         return self.income_amount - self.expense_amount
 
     @property
+    def is_transfer_mirror(self):
+        """Автоматаар үүссэн эсрэг талын (касс) мөр эсэх"""
+        return self.transfer_source_id is not None
+
+    @property
     def student_allocated_amount(self):
         """Сурагчийн төлбөрт хуваарилсан нийт дүн"""
         return self.allocations.aggregate(total=Sum('amount'))['total'] or 0
@@ -1317,6 +1371,20 @@ class BankTransaction(models.Model):
         reserved = self.student_allocated_amount + self.sale_allocated_amount
         remaining = self.income_amount - reserved
         return remaining if remaining > 0 else 0
+
+
+class IncomeCategory(models.Model):
+    """Орлогын төрөл - админд нэмэлтээр нэмэх боломжтой"""
+    code = models.CharField('Код', max_length=50, unique=True)
+    name = models.CharField('Нэр', max_length=200)
+
+    class Meta:
+        verbose_name = 'Орлогын төрөл'
+        verbose_name_plural = 'Орлогын төрөлүүд'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
 
 
 class PaymentAllocation(models.Model):
@@ -1728,6 +1796,16 @@ class Sale(models.Model):
         blank=True,
         verbose_name='Импортын лавлагаа',
         help_text='Excel импортын давхардлаас сэргийлэх лавлагаа'
+    )
+
+    # Дотоод хэрэгцээний зардлын журналын бичилт
+    expense_accounting_entry = models.ForeignKey(
+        'AccountingEntry',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expense_sales',
+        verbose_name='Зардлын журналын бичилт'
     )
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Үүсгэсэн огноо')

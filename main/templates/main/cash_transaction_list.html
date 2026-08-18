@@ -1,5 +1,5 @@
 {% extends 'main/base.html' %}
-{% load static %}
+{% load static humanize %}
 
 {% block title %}Кассын бүртгэл - Готопа{% endblock %}
 
@@ -18,23 +18,46 @@
             </a>
         </div>
 
-        <!-- Статистик -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-4">
+        <!-- Статистик: нийт/холбогдсон/холбогдоогүй -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow p-6 flex flex-col">
                 <div class="text-sm text-gray-600">Нийт гүйлгээ</div>
-                <div class="text-2xl font-bold text-secondary">{{ total_count }}</div>
+                <div class="text-3xl font-extrabold text-indigo-700">{{ total_count|intcomma }}</div>
             </div>
-            <div class="bg-green-50 rounded-lg shadow p-4">
-                <div class="text-sm text-green-700">Нийт орлого</div>
-                <div class="text-2xl font-bold text-green-600">{{ total_income|floatformat:0 }}₮</div>
+            <div class="bg-yellow-50 rounded-lg shadow p-6 flex flex-col">
+                <div class="text-sm text-yellow-700">Холбогдсон гүйлгээ</div>
+                <div class="text-3xl font-extrabold text-yellow-800">{{ linked_tx_count|intcomma }}</div>
             </div>
-            <div class="bg-red-50 rounded-lg shadow p-4">
-                <div class="text-sm text-red-700">Нийт зарлага</div>
-                <div class="text-2xl font-bold text-red-600">{{ total_expense|floatformat:0 }}₮</div>
+            <div class="bg-green-50 rounded-lg shadow p-6 flex flex-col">
+                <div class="text-sm text-green-700">Холбогдоогүй гүйлгээ</div>
+                <div class="text-3xl font-extrabold text-green-800">{{ unlinked_tx_count|intcomma }}</div>
             </div>
-            <div class="bg-blue-50 rounded-lg shadow p-4">
-                <div class="text-sm text-blue-700">Үлдэгдэл (орлого-зарлага)</div>
-                <div class="text-2xl font-bold text-blue-600">{{ cash_balance|floatformat:0 }}₮</div>
+        </div>
+
+        <!-- Торын дунд: Нийт орлого / Нийт зарлага том картууд -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow p-6 flex items-center gap-4">
+                <div class="p-3 bg-green-100 rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 2a1 1 0 00-1 1v2H7a1 1 0 000 2h2v6H7a1 1 0 100 2h3a1 1 0 001-1V7h2a1 1 0 100-2h-2V3a1 1 0 00-1-1z" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-600">Нийт орлого</div>
+                    <div class="text-2xl font-bold text-green-700">{{ total_income|floatformat:0 }}₮</div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6 flex items-center gap-4">
+                <div class="p-3 bg-red-100 rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M3 3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3z" />
+                      <path d="M12 5h4a1 1 0 011 1v8a1 1 0 01-1 1h-4V5z" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-600">Нийт зарлага</div>
+                    <div class="text-2xl font-bold text-red-700">{{ total_expense|floatformat:0 }}₮</div>
+                </div>
             </div>
         </div>
 
@@ -79,11 +102,35 @@
 
         <!-- Жагсаалт -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <!-- Баримтын статистик жижиг картууд -->
+            <div class="p-4 border-b border-gray-100 flex gap-4 items-center">
+                <div class="bg-white rounded p-3 shadow-sm w-48">
+                    <div class="text-xs text-gray-600">Нийт холбогдсон баримт</div>
+                    <div class="text-lg font-bold text-secondary">{{ total_linked_docs|intcomma }}</div>
+                </div>
+                <div class="bg-white rounded p-3 shadow-sm w-48">
+                    <div class="text-xs text-gray-600">Холбогдоогүй боломжит баримт</div>
+                    <div class="text-lg font-bold text-secondary">{{ total_unlinked_docs|intcomma }}</div>
+                </div>
+                <div class="bg-white rounded p-3 shadow-sm w-48">
+                    <div class="text-xs text-gray-600">Орлогын баримт</div>
+                    <div class="text-lg font-bold text-secondary">{{ income_tx_count|intcomma }}</div>
+                </div>
+                <div class="bg-white rounded p-3 shadow-sm w-48">
+                    <div class="text-xs text-gray-600">Зарлагын баримт</div>
+                    <div class="text-lg font-bold text-secondary">{{ expense_tx_count|intcomma }}</div>
+                </div>
+                <div class="ml-auto flex gap-4">
+                    <div class="text-sm text-gray-600">Нийт орлого: <span class="font-bold">{{ total_income|floatformat:0 }}₮</span></div>
+                    <div class="text-sm text-gray-600">Нийт зарлага: <span class="font-bold">{{ total_expense|floatformat:0 }}₮</span></div>
+                </div>
+            </div>
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Огноо</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Кассын данс</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Баримтын дугаар</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тайлбар</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Эсрэг данс</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Орлого</th>
@@ -93,7 +140,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for transaction in transactions %}
-                    <tr id="tx-{{ transaction.id }}" class="hover:bg-gray-50 {% if highlight_tx == transaction.id|stringformat:'s' %}bg-yellow-50 ring-2 ring-yellow-300{% endif %}">
+                    <tr id="tx-{{ transaction.id|stringformat:'d' }}" class="hover:bg-gray-50 {% if highlight_tx == transaction.id|stringformat:'s' %}bg-yellow-50 ring-2 ring-yellow-300{% endif %}">
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             {{ transaction.transaction_date|date:"Y-m-d" }}
                         </td>
@@ -102,8 +149,29 @@
                             <span class="text-gray-600 text-xs">{{ transaction.bank_account.name }}</span>
                         </td>
                         <td class="px-6 py-4 text-sm">
-                            {{ transaction.description|truncatewords:10 }}
-                            
+                            {# Document number: prefer linked sale -> accounting entry -> sale_allocations -> counterparty_account #}
+                            {% if transaction.income_sale %}
+                                <div class="text-sm font-mono text-primary">{{ transaction.income_sale.sale_number }}</div>
+                            {% elif transaction.accounting_entry %}
+                                <div class="text-sm font-mono text-secondary">{{ transaction.accounting_entry.entry_number }}</div>
+                            {% elif transaction.sale_allocations.exists %}
+                                <div class="text-sm">
+                                    {% for sa in transaction.sale_allocations.all %}
+                                        <div class="text-xs text-gray-700">{{ sa.sale.sale_number }} ({{ sa.amount|floatformat:0 }}₮)</div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="text-xs text-gray-500">{{ transaction.counterparty_account }}</div>
+                            {% endif %}
+
+                            <div class="mt-2 text-gray-700">{{ transaction.description|truncatewords:10 }}</div>
+
+                            {% if transaction.transfer_source_id %}
+                                <div class="mt-2 text-xs bg-purple-50 text-purple-800 px-2 py-1 rounded inline-block">
+                                    ⇄ Авто: харилцахын гүйлгээний холболтоос үүссэн
+                                </div>
+                            {% endif %}
+
                             {% if transaction.income_type == 'STUDENT_PAYMENT' and transaction.allocations.exists %}
                                 <div class="mt-2 space-y-1">
                                     {% for allocation in transaction.allocations.all %}
@@ -139,31 +207,46 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
                             <div class="flex gap-2 justify-center">
+                                {% if transaction.transfer_source_id %}
+                                <a href="{% url 'main:link_bank_transaction_to_journal' transaction.transfer_source_id %}"
+                                   class="bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 text-xs">
+                                    Эх гүйлгээ харах
+                                </a>
+                                {% else %}
                                 {% if not transaction.is_processed %}
-                                    <a href="{% url 'main:link_bank_transaction_to_journal' transaction.id %}" 
+                                    <a href="{% url 'main:link_bank_transaction_to_journal' transaction.id %}?return_to={{ request.get_full_path|urlencode }}" 
                                        class="bg-primary text-white px-3 py-1 rounded hover:bg-opacity-90 text-xs">
                                         Журналд холбох
                                     </a>
                                 {% else %}
                                     <span class="text-green-600 text-xs">✓ Холбогдсон</span>
                                 {% endif %}
-                                
-                                <a href="{% url 'main:cash_transaction_edit' transaction.id %}" 
+
+                                <a href="{% url 'main:cash_transaction_edit' transaction.id %}?return_to={{ request.get_full_path|urlencode }}" 
                                    class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-xs">
                                     ✏️ Засах
                                 </a>
-                                
-                                <a href="{% url 'main:cash_transaction_delete' transaction.id %}" 
+
+                                {% if transaction.accounting_entry or transaction.allocations.exists or transaction.sale_allocations.exists or transaction.income_sale_id %}
+                                <form method="post" action="{% url 'main:unlink_bank_transaction' transaction.id %}" onsubmit="return confirm('Энэ гүйлгээтэй холбогдсон баримтыг таслах уу?')">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                                    <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-xs">Таслах</button>
+                                </form>
+                                {% endif %}
+
+                                <a href="{% url 'main:cash_transaction_delete' transaction.id %}"
                                    class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-xs"
                                    onclick="return confirm('Энэ гүйлгээг устгах уу?')">
                                     🗑️ Устгах
                                 </a>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                        <td colspan="8" class="px-6 py-8 text-center text-gray-500">
                             Кассын гүйлгээ олдсонгүй. <a href="{% url 'main:cash_transaction_create' %}" class="text-primary hover:underline">Шинээр үүсгэх</a>
                         </td>
                     </tr>
