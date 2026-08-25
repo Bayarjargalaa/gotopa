@@ -13,7 +13,7 @@ from .models import (
     Product, ProductCategory, StockMovement,
     Account, Counterparty, Transaction, Purchase, PurchaseItem, Sale, SaleItem,
     ChartOfAccounts, AccountingEntry, BankTransaction, CashFlowIndicator, PaymentAllocation,
-    SalePaymentAllocation
+    SalePaymentAllocation, BankTransferLink
 )
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -2979,9 +2979,9 @@ def sale_detail(request, sale_id):
     tx_filter_params = request.GET.copy()
     tx_filter_params.pop('tx_page', None)
 
-    # Дотоод хэрэгцээний зардлын данс сонгох dropdown-д (5xxx)
+    # Дотоод хэрэгцээний зардлын данс сонгох dropdown-д (7xxx - үйл ажиллагааны зардал)
     expense_accounts = ChartOfAccounts.objects.filter(
-        code__startswith='5', is_active=True
+        code__startswith='7', is_active=True
     ).order_by('code')
 
     context = {
@@ -4729,9 +4729,64 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     transaction.save(update_fields=['income_sale', 'is_processed'])
                     messages.success(request, 'Борлуулалттай холболт амжилттай цуцлагдлаа.')
                     return redirect(_back_url)
+
+                # Unlink a bank-to-bank transfer link
+                if unlink_type == 'transfer':
+                    from .import_bank_transactions import unlink_bank_transfer
+                    if unlink_bank_transfer(transaction):
+                        messages.success(request, 'Харилцах хоорондын шилжүүлгийн холболт цуцлагдлаа.')
+                    else:
+                        messages.error(request, 'Энэ гүйлгээнд холбогдсон шилжүүлэг олдсонгүй.')
+                    return redirect(_back_url)
             except Exception as e:
                 messages.error(request, f'Цуцлах явцад алдаа гарлаа: {e}')
                 return redirect(_back_url)
+
+        # Хоёр харилцахын гүйлгээг дотоод шилжүүлэг болгон холбох (тусдаа мини-форм)
+        transfer_target_id = request.POST.get('link_transfer_target', '').replace(',', '').strip()
+        if transfer_target_id:
+            _post_return = request.POST.get('return_to', '').strip()
+            _effective_return = _post_return if (_post_return and _post_return.startswith('/') and not _post_return.startswith('//')) else return_to
+            _link_url = reverse('main:link_bank_transaction_to_journal', args=[transaction_id])
+            _back_url = _effective_return if _effective_return else _link_url
+
+            target = BankTransaction.objects.select_related('bank_account').filter(id=transfer_target_id).first()
+            if not target:
+                messages.error(request, 'Сонгосон гүйлгээ олдсонгүй.')
+                return redirect(_back_url)
+
+            if transaction.account_type != 'BANK' or target.account_type != 'BANK':
+                messages.error(request, 'Зөвхөн харилцахын (банкны) гүйлгээг холбож болно.')
+                return redirect(_back_url)
+            if transaction.bank_account_id == target.bank_account_id:
+                messages.error(request, 'Ижил дансны гүйлгээг хооронд нь холбож болохгүй.')
+                return redirect(_back_url)
+            if transaction.accounting_entry_id or target.accounting_entry_id:
+                messages.error(request, 'Аль нэг гүйлгээ аль хэдийн журналд холбогдсон байна. Эхлээд холболтыг тасална уу.')
+                return redirect(_back_url)
+
+            if transaction.expense_amount > 0 and target.income_amount > 0:
+                expense_tx, income_tx = transaction, target
+            elif transaction.income_amount > 0 and target.expense_amount > 0:
+                expense_tx, income_tx = target, transaction
+            else:
+                messages.error(request, 'Нэг тал зарлага, нөгөө тал орлоготой гүйлгээ байх ёстой.')
+                return redirect(_back_url)
+
+            if expense_tx.expense_amount != income_tx.income_amount:
+                messages.error(
+                    request,
+                    f'Дүн таарахгүй байна: зарлага {expense_tx.expense_amount:,.0f}₮, орлого {income_tx.income_amount:,.0f}₮.'
+                )
+                return redirect(_back_url)
+
+            try:
+                from .import_bank_transactions import link_bank_transfer
+                link_bank_transfer(expense_tx, income_tx, request.user)
+                messages.success(request, 'Хоёр харилцахын гүйлгээ дотоод шилжүүлэг болгон амжилттай холбогдлоо.')
+            except Exception as e:
+                messages.error(request, f'Холбох явцад алдаа гарлаа: {e}')
+            return redirect(_back_url)
 
         offset_account_id = request.POST.get('offset_account')
 
@@ -4752,7 +4807,10 @@ def link_bank_transaction_to_journal(request, transaction_id):
             
             # Орлогын ангилал хадгалах (орлого бол)
             if transaction.income_amount > 0:
-                income_type = request.POST.get('income_type')
+                income_type = request.POST.get('income_type', '').strip()
+                new_income_type = request.POST.get('new_income_type', '').strip()
+                if new_income_type:
+                    income_type = new_income_type[:50]
                 if income_type:
                     transaction.income_type = income_type
                     
@@ -5265,11 +5323,67 @@ def link_bank_transaction_to_journal(request, transaction_id):
     if initial_income_type not in income_type_codes:
         initial_income_type = ''
 
+    # Өмнө нь "Шинэ орлогын төрөл" талбараар нэмэгдсэн, стандарт жагсаалтад ороогүй
+    # төрлүүдийг сонголтод харагдуулах (жишээ: Тэтгэлэг)
+    custom_income_types = (
+        BankTransaction.objects
+        .exclude(income_type__isnull=True)
+        .exclude(income_type='')
+        .exclude(income_type__in=income_type_codes)
+        .order_by('income_type')
+        .values_list('income_type', flat=True)
+        .distinct()
+    )
+    income_types = list(BankTransaction.INCOME_TYPE_CHOICES) + [(t, t) for t in custom_income_types]
+
     # Нэмэлт хуваарилалтууд (модель устгагдсан байж болно)
     if hasattr(transaction, 'extra_splits'):
         existing_splits = transaction.extra_splits.select_related('account').all()
     else:
         existing_splits = []
+
+    # Харилцах хоорондын шилжүүлэг холбох — эсрэг талын нээлттэй (журналгүй) гүйлгээг хайх
+    transfer_link = transaction.transfer_link
+    transfer_candidates = []
+    tf_desc = request.GET.get('tf_desc', '').strip()
+    tf_date_from = request.GET.get('tf_date_from', '').strip()
+    tf_date_to = request.GET.get('tf_date_to', '').strip()
+    tf_search_active = bool(tf_desc or tf_date_from or tf_date_to)
+
+    can_search_transfer = (
+        transaction.account_type == 'BANK' and not transfer_link and
+        not transaction.accounting_entry_id and
+        (transaction.income_amount > 0 or transaction.expense_amount > 0)
+    )
+    if can_search_transfer:
+        if transaction.expense_amount > 0:
+            candidates_qs = BankTransaction.objects.filter(account_type='BANK', income_amount__gt=0)
+        else:
+            candidates_qs = BankTransaction.objects.filter(account_type='BANK', expense_amount__gt=0)
+
+        candidates_qs = candidates_qs.exclude(
+            bank_account_id=transaction.bank_account_id
+        ).filter(
+            accounting_entry__isnull=True
+        ).select_related('bank_account')
+
+        if tf_desc:
+            candidates_qs = candidates_qs.filter(
+                Q(description__icontains=tf_desc) | Q(counterparty_name__icontains=tf_desc)
+            )
+        if tf_date_from:
+            candidates_qs = candidates_qs.filter(transaction_date__gte=tf_date_from)
+        if tf_date_to:
+            candidates_qs = candidates_qs.filter(transaction_date__lte=tf_date_to)
+
+        if not tf_search_active:
+            from datetime import timedelta
+            candidates_qs = candidates_qs.filter(
+                transaction_date__gte=transaction.transaction_date - timedelta(days=14),
+                transaction_date__lte=transaction.transaction_date + timedelta(days=14),
+            )
+
+        transfer_candidates = list(candidates_qs.order_by('-transaction_date')[:30])
 
     context = {
         'transaction': transaction,
@@ -5283,12 +5397,17 @@ def link_bank_transaction_to_journal(request, transaction_id):
         'courses': courses,
         'sales': sales,
         'months': months,
-        'income_types': BankTransaction.INCOME_TYPE_CHOICES,
+        'income_types': income_types,
         'cash_flow_indicators': cash_flow_indicators,
         'existing_allocations': existing_allocations,
         'existing_sale_allocation': existing_sale_allocation,
         'initial_income_type': initial_income_type,
         'existing_splits': existing_splits,
+        'transfer_link': transfer_link,
+        'transfer_candidates': transfer_candidates,
+        'tf_desc': tf_desc,
+        'tf_date_from': tf_date_from,
+        'tf_date_to': tf_date_to,
         'return_to': request.GET.get('return_to', ''),
     }
 

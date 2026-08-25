@@ -1,29 +1,18 @@
+version: '3.8'
+
 services:
   web:
     build: .
-    container_name: gotopa_web
-    restart: unless-stopped
+    command: gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000
     ports:
-      - "8000:8000"
+      - "8002:8000"
     volumes:
-      # өгөгдлийн сан хадгалах (SQLite)
-      - gotopa_db:/app/db_data
-      # медиа файлууд хадгалах (зураг, бичиг баримт)
-      - gotopa_media:/app/media
+      # Төслийн кодоо холбох
+      - .:/app
+      # SQLite файл байрлах хавтасыг тусгаарлаж Named Volume-д хадгалах
+      - sqlite_data:/app/sqlite_db
     environment:
-      - DJANGO_SETTINGS_MODULE=gotopa_project.settings
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-me-in-production}
-      - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
-      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - DEBUG=1
 
 volumes:
-  gotopa_db:
-    driver: local
-  gotopa_media:
-    driver: local
+  sqlite_data:  # Windows дээрх SQLite-ийн түгжээний алдаанаас сэргийлнэ

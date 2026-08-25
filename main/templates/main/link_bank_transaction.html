@@ -54,11 +54,76 @@
                 </div>
             </div>
 
+            <!-- Харилцах хоорондын шилжүүлэг -->
+            {% if transaction.account_type == 'BANK' %}
+            <div class="mb-6 p-4 border-2 border-purple-300 rounded-lg bg-purple-50">
+                <h3 class="font-bold text-purple-900 mb-3">🔁 Харилцах хоорондын шилжүүлэг</h3>
+
+                {% if transfer_link %}
+                <div class="p-3 bg-white rounded border border-purple-200">
+                    <div class="text-sm text-gray-700">
+                        <strong>{{ transfer_link.expense_transaction.bank_account.name }}</strong>
+                        →
+                        <strong>{{ transfer_link.income_transaction.bank_account.name }}</strong>
+                    </div>
+                    <div class="text-sm text-gray-500 mt-1">
+                        Дүн: {{ transfer_link.amount|floatformat:0 }}₮
+                        {% if transfer_link.accounting_entry %} · Журнал №{{ transfer_link.accounting_entry.entry_number }}{% endif %}
+                    </div>
+                    <form method="post" class="mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                        <input type="hidden" name="unlink_type" value="transfer">
+                        <button type="submit" class="text-sm text-red-600 bg-red-100 px-3 py-1 rounded hover:bg-red-200">Шилжүүлгийн холболт таслах</button>
+                    </form>
+                </div>
+                {% elif transaction.accounting_entry %}
+                <p class="text-sm text-gray-600">Энэ гүйлгээ өөр журналын бичилттэй холбогдсон тул шилжүүлэг холбох боломжгүй. Эхлээд журналыг цуцлана уу.</p>
+                {% elif transaction.income_amount > 0 or transaction.expense_amount > 0 %}
+                <p class="text-sm text-purple-800 mb-3">
+                    Хэрэв энэ гүйлгээ өөр харилцах руу/-аас хийсэн дотоод шилжүүлэг бол, эсрэг талын (өөр банкны) тохирох гүйлгээг доороос сонгож холбоно уу. Нэг талын зарлага нөгөө талын орлоготой ижил дүнтэй байх ёстой.
+                </p>
+
+                <!-- Хайлт -->
+                <form method="get" class="flex flex-wrap gap-2 mb-3">
+                    <input type="hidden" name="return_to" value="{{ return_to }}">
+                    <input type="text" name="tf_desc" value="{{ tf_desc }}" placeholder="Тайлбар/харилцагчаар хайх..."
+                           class="px-3 py-1.5 border border-gray-300 rounded text-sm flex-1 min-w-[160px]">
+                    <input type="date" name="tf_date_from" value="{{ tf_date_from }}" class="px-3 py-1.5 border border-gray-300 rounded text-sm">
+                    <input type="date" name="tf_date_to" value="{{ tf_date_to }}" class="px-3 py-1.5 border border-gray-300 rounded text-sm">
+                    <button type="submit" class="px-3 py-1.5 bg-purple-600 text-white rounded text-sm hover:bg-purple-700">Хайх</button>
+                </form>
+
+                <div class="max-h-72 overflow-y-auto space-y-2">
+                    {% for cand in transfer_candidates %}
+                    <div class="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                        <div class="text-sm">
+                            <div class="font-medium">{{ cand.bank_account.code }} - {{ cand.bank_account.name }}</div>
+                            <div class="text-gray-500">{{ cand.transaction_date|date:"Y-m-d" }} · {{ cand.description|truncatechars:60 }}</div>
+                            <div class="{% if cand.income_amount > 0 %}text-green-600{% else %}text-red-600{% endif %} font-semibold">
+                                {% if cand.income_amount > 0 %}+{{ cand.income_amount|floatformat:0 }}₮{% else %}-{{ cand.expense_amount|floatformat:0 }}₮{% endif %}
+                            </div>
+                        </div>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="return_to" value="{{ return_to }}">
+                            <input type="hidden" name="link_transfer_target" value="{{ cand.id|stringformat:'d' }}">
+                            <button type="submit" class="px-3 py-1.5 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 whitespace-nowrap">Холбох</button>
+                        </form>
+                    </div>
+                    {% empty %}
+                    <p class="text-sm text-gray-500">Тохирох гүйлгээ олдсонгүй. Дээрх хайлтаар өргөтгөж үзнэ үү.</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <!-- Форм -->
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="return_to" value="{{ return_to }}">
-                
+
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         Эсрэг данс <span class="text-red-500">*</span>

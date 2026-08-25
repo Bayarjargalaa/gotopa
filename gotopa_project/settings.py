@@ -26,8 +26,13 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cmz#-4n==as*cg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-_allowed = os.environ.get('DJANGO_ALLOWED_HOSTS', '202.179.22.189,localhost,127.0.0.1')
-ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
+_allowed = os.environ.get(
+    'DJANGO_ALLOWED_HOSTS', 
+    '202.179.22.189,localhost,127.0.0.1,www.gotopa.com,gotopa.com'
+)
+ALLOWED_HOSTS = [host.strip() for host in _allowed.split(',') if host.strip()]
+
+
 
 
 # Application definition

@@ -314,6 +314,77 @@ def delete_cash_transfer_mirrors(bt):
     return deleted
 
 
+def link_bank_transfer(expense_tx, income_tx, user):
+    """Хоёр өөр харилцахын бодит гүйлгээг (зарлага ба орлого) дотоод шилжүүлэг
+    болгон холбож, ганц журналын бичилт үүсгэнэ: Дт хүлээн авагч харилцах / Кт эх харилцах.
+
+    Хоёр тал хоёулаа өөрсдийн банкны хуулгаас аль хэдийн импортлогдсон бодит мөр тул
+    `sync_cash_transfer_mirrors`-ийн адил шинэ мөр үүсгэдэггүй — зөвхөн холбоно.
+    """
+    from .models import BankTransferLink
+
+    amount = expense_tx.expense_amount
+    date_key = expense_tx.transaction_date.strftime('%Y%m%d')
+    _, entry_number = next_entry_number(f'XFR{date_key}')
+
+    entry = create_accounting_entry_safe(
+        entry_date=expense_tx.transaction_date,
+        entry_number=entry_number,
+        description=f'Харилцах хоорондын шилжүүлэг: {expense_tx.bank_account.name} → {income_tx.bank_account.name}',
+        debit_account=income_tx.bank_account,
+        debit_amount=amount,
+        credit_account=expense_tx.bank_account,
+        credit_amount=amount,
+        created_by=user,
+    )
+
+    expense_tx.accounting_entry = entry
+    expense_tx.offset_account = income_tx.bank_account
+    expense_tx.is_processed = True
+    expense_tx.save(update_fields=['accounting_entry', 'offset_account', 'is_processed'])
+
+    income_tx.accounting_entry = entry
+    income_tx.offset_account = expense_tx.bank_account
+    income_tx.is_processed = True
+    income_tx.save(update_fields=['accounting_entry', 'offset_account', 'is_processed'])
+
+    return BankTransferLink.objects.create(
+        expense_transaction=expense_tx,
+        income_transaction=income_tx,
+        accounting_entry=entry,
+        amount=amount,
+        created_by=user,
+    )
+
+
+def unlink_bank_transfer(bt):
+    """Шилжүүлгийн холбоосыг тасалж, түүний журналын бичилтийг устгана.
+
+    Returns:
+        bool: холбоос олдож цуцлагдсан бол True
+    """
+    from .models import BankTransferLink
+    from django.db.models import Q as _Q
+
+    link = BankTransferLink.objects.filter(
+        _Q(expense_transaction=bt) | _Q(income_transaction=bt)
+    ).select_related('expense_transaction', 'income_transaction', 'accounting_entry').first()
+    if not link:
+        return False
+
+    entry = link.accounting_entry
+    for side in (link.expense_transaction, link.income_transaction):
+        side.accounting_entry = None
+        side.offset_account = None
+        side.is_processed = False
+        side.save(update_fields=['accounting_entry', 'offset_account', 'is_processed'])
+
+    link.delete()
+    if entry:
+        entry.delete()
+    return True
+
+
 def detect_bank_format(df):
     """Банкны хуулгын форматыг баганын нэрээс таних"""
     columns = [col.strip() for col in df.columns]

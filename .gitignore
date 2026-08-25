@@ -26,6 +26,12 @@ static/
 /static/
 staticfiles/
 
+staticfiles/
+media/
+.venv/
+*.pyc
+__pycache__/
+
 # Бүх төрлийн зургийн файлууд
 *.jpg
 *.jpeg

@@ -1404,6 +1404,47 @@ class BankTransaction(models.Model):
                 return account
         return None
 
+    @property
+    def transfer_link(self):
+        """Энэ гүйлгээг өөр харилцахын гүйлгээтэй холбосон шилжүүлгийн бичлэг (хэрэв байвал)"""
+        return getattr(self, 'transfer_link_as_expense', None) or getattr(self, 'transfer_link_as_income', None)
+
+
+class BankTransferLink(models.Model):
+    """Хоёр өөр харилцахын дансны гүйлгээг (зарлага ба орлого) дотоод шилжүүлэг
+    болгон холбосон бичлэг.
+
+    Хоёр тал хоёулаа тус тусдаа банкны хуулгаас импортлогдсон бодит гүйлгээ тул
+    шинэ мөр үүсгэдэггүй — зөвхөн хоёрыг холбож, ганц журналын бичилт үүсгэнэ
+    (Дт хүлээн авагч харилцах / Кт эх харилцах).
+    """
+    expense_transaction = models.OneToOneField(
+        BankTransaction, on_delete=models.CASCADE,
+        related_name='transfer_link_as_expense',
+        verbose_name='Зарлагын гүйлгээ'
+    )
+    income_transaction = models.OneToOneField(
+        BankTransaction, on_delete=models.CASCADE,
+        related_name='transfer_link_as_income',
+        verbose_name='Орлогын гүйлгээ'
+    )
+    accounting_entry = models.OneToOneField(
+        AccountingEntry, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='bank_transfer_link',
+        verbose_name='Журналын бичилт'
+    )
+    amount = models.DecimalField('Дүн', max_digits=15, decimal_places=2)
+    created_at = models.DateTimeField('Үүсгэсэн огноо', auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   verbose_name='Үүсгэсэн хэрэглэгч')
+
+    class Meta:
+        verbose_name = 'Харилцах хоорондын шилжүүлэг'
+        verbose_name_plural = 'Харилцах хоорондын шилжүүлгүүд'
+
+    def __str__(self):
+        return f'{self.expense_transaction.bank_account} → {self.income_transaction.bank_account}: {self.amount:,.0f}₮'
+
 
 class IncomeCategory(models.Model):
     """Орлогын төрөл - админд нэмэлтээр нэмэх боломжтой"""
