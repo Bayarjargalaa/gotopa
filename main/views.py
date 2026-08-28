@@ -22,7 +22,7 @@ from django.db.models import Q, Sum, Count, F, Exists, OuterRef
 from django.db import transaction
 from django.utils import timezone
 from django.core.paginator import Paginator
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, date
 import re
 import os
@@ -4493,37 +4493,61 @@ def bank_transaction_list(request):
     if bank_name:
         transactions = transactions.filter(bank_name=bank_name)
 
-    # Дүнгийн хязгаараар шүүх
+    # Дүнгийн хязгаараар шүүх (гүйлгээ бүр зөвхөн орлого эсвэл зарлагатай тул
+    # тэг биш талыг нь харгалзан шүүнэ)
     amount_min = request.GET.get('amount_min')
     amount_max = request.GET.get('amount_max')
     if amount_min:
         try:
+            amount_min_val = Decimal(amount_min)
             transactions = transactions.filter(
-                Q(income_amount__gte=amount_min) | Q(expense_amount__gte=amount_min)
+                Q(income_amount__gte=amount_min_val) | Q(expense_amount__gte=amount_min_val)
             )
-        except (ValueError, TypeError):
+        except (InvalidOperation, ValueError, TypeError):
             pass
     if amount_max:
         try:
+            amount_max_val = Decimal(amount_max)
             transactions = transactions.filter(
-                Q(income_amount__lte=amount_max) | Q(expense_amount__lte=amount_max)
-            ).exclude(income_amount=0, expense_amount=0)
-        except (ValueError, TypeError):
+                Q(income_amount__gt=0, income_amount__lte=amount_max_val) |
+                Q(expense_amount__gt=0, expense_amount__lte=amount_max_val)
+            )
+        except (InvalidOperation, ValueError, TypeError):
             pass
 
     # Сараар шүүх (сурагчийн төлбөрийн сар)
+    # Тайлбар: USE_THOUSAND_SEPARATOR тохиргоо идэвхтэй тул template дээр {{ он }}
+    # мэт бүхэл тоог таслалтай ("2,026") гаргаж болох тул цэвэрлэж авна.
     filter_month = request.GET.get('filter_month')
     filter_year = request.GET.get('filter_year')
     if filter_month:
-        transactions = transactions.filter(income_month=filter_month)
+        filter_month = filter_month.replace(',', '').strip()
     if filter_year:
-        transactions = transactions.filter(income_year=filter_year)
+        filter_year = filter_year.replace(',', '').strip()
+    if filter_month:
+        try:
+            transactions = transactions.filter(income_month=int(filter_month))
+        except (ValueError, TypeError):
+            pass
+    if filter_year:
+        try:
+            transactions = transactions.filter(income_year=int(filter_year))
+        except (ValueError, TypeError):
+            pass
 
     # Статистик тооцоолох
     total_count = transactions.count()
     unprocessed_count = transactions.filter(is_processed=False).count()
     processed_count = transactions.filter(is_processed=True).count()
-    
+
+    # Шүүлтэд тохирсон бүх гүйлгээний нийт дүн (хөл мөрөнд харуулах)
+    amount_totals = transactions.aggregate(
+        total_income=Sum('income_amount'),
+        total_expense=Sum('expense_amount'),
+    )
+    total_income = amount_totals['total_income'] or Decimal('0')
+    total_expense = amount_totals['total_expense'] or Decimal('0')
+
     # Pagination
     paginator = Paginator(transactions, 50)  # 50 гүйлгээ нэг хуудсанд
     page_number = request.GET.get('page')
@@ -4550,6 +4574,9 @@ def bank_transaction_list(request):
         'total_count': total_count,
         'unprocessed_count': unprocessed_count,
         'processed_count': processed_count,
+        'total_income': total_income,
+        'total_expense': total_expense,
+        'net_total': total_income - total_expense,
         'page_obj': page_obj,
         'is_paginated': page_obj.has_other_pages(),
         # Dropdown сонголтууд
@@ -4875,42 +4902,44 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
                         target_student_amount = transaction.income_amount - mixed_sale_amount
 
-                        # Хуучин хуваарилалтуудыг устгах
-                        PaymentAllocation.objects.filter(transaction=transaction).delete()
-                        transaction.sale_allocations.all().delete()
-                        
-                        # Шинэ хуваарилалтуудыг үүсгэх
-                        allocations_saved = 0
+                        # Эхлээд POST-оос ирсэн хуваарилалтуудыг зөвхөн задлан уншиж,
+                        # дүнг шалгана — өгөгдлийн санд ЮУ Ч бичихгүй. Хэрэв дүн
+                        # гүйлгээний дүнгээс их бол алдаа гарган, хуучин
+                        # хуваарилалтад хүрэлгүй, шинийг ч үүсгэхгүйгээр зогсоно.
+                        parsed_allocations = []
                         total_allocated = Decimal(0)
-                        
+                        allocation_parse_error = False
+
                         for key, value in request.POST.items():
                             if key.startswith('allocations[') and '[student]' in key:
                                 # allocations[1][student] -> 1 гэж parse хийх
                                 allocation_id = key.split('[')[1].split(']')[0]
-                                
+
                                 student_id = request.POST.get(f'allocations[{allocation_id}][student]')
                                 course_id = request.POST.get(f'allocations[{allocation_id}][course]')
                                 month_year = request.POST.get(f'allocations[{allocation_id}][month_year]')
                                 amount = request.POST.get(f'allocations[{allocation_id}][amount]')
-                                
+
                                 if student_id and course_id and month_year and amount:
                                     try:
                                         # Он/сар задлах (2026-02 -> year=2026, month=2)
                                         year_str, month_str = month_year.split('-')
-                                        alloc = PaymentAllocation.objects.create(
-                                            transaction=transaction,
-                                            student_id=student_id,
-                                            course_id=course_id,
-                                            month=int(month_str),
-                                            year=int(year_str),
-                                            amount=Decimal(amount)
-                                        )
-                                        allocations_saved += 1
-                                        total_allocated += Decimal(amount)
+                                        alloc_amount = Decimal(amount)
+                                        parsed_allocations.append({
+                                            'student_id': student_id,
+                                            'course_id': course_id,
+                                            'month': int(month_str),
+                                            'year': int(year_str),
+                                            'amount': alloc_amount,
+                                        })
+                                        total_allocated += alloc_amount
                                     except Exception as e:
-                                        print(f"Allocation save error: {e}")
-                                        import traceback
-                                        traceback.print_exc()
+                                        print(f"Allocation parse error: {e}")
+                                        allocation_parse_error = True
+
+                        if allocation_parse_error:
+                            messages.error(request, 'Хуваарилалтын мэдээлэл буруу байна. Дахин шалгаад оруулна уу.')
+                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
 
                         if total_allocated > target_student_amount:
                             messages.error(
@@ -4919,23 +4948,9 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                 f'зөвшөөрөгдөх дүнгээс ({target_student_amount:,.0f}₮) их байна.'
                             )
                             return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
-                        
-                        # Хуучин fields-үүдийг цэвэрлэх
-                        transaction.income_student = None
-                        transaction.income_course = None
-                        transaction.income_month = None
-                        transaction.income_year = None
-                        transaction.income_sale = None
 
-                        affected_sale_ids = set(old_sale_ids)
-                        if mixed_sale_enabled and mixed_sale_id and mixed_sale_amount > 0:
-                            SalePaymentAllocation.objects.update_or_create(
-                                transaction=transaction,
-                                sale_id=int(mixed_sale_id),
-                                defaults={'amount': mixed_sale_amount}
-                            )
-                            affected_sale_ids.add(int(mixed_sale_id))
-                        
+                        allocations_saved = len(parsed_allocations)
+
                         if allocations_saved == 0:
                             if target_student_amount > 0:
                                 messages.error(
@@ -4952,6 +4967,29 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                     f'сургалтын төлбөрийн дүнтэй ({target_student_amount:,.0f}₮) тэнцүү байх ёстой.'
                                 )
                                 return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+
+                        # Бүх шалгалтыг давсны дараа л хуучныг устгаж, шинийг үүсгэнэ
+                        PaymentAllocation.objects.filter(transaction=transaction).delete()
+                        transaction.sale_allocations.all().delete()
+
+                        for alloc_data in parsed_allocations:
+                            PaymentAllocation.objects.create(transaction=transaction, **alloc_data)
+
+                        # Хуучин fields-үүдийг цэвэрлэх
+                        transaction.income_student = None
+                        transaction.income_course = None
+                        transaction.income_month = None
+                        transaction.income_year = None
+                        transaction.income_sale = None
+
+                        affected_sale_ids = set(old_sale_ids)
+                        if mixed_sale_enabled and mixed_sale_id and mixed_sale_amount > 0:
+                            SalePaymentAllocation.objects.update_or_create(
+                                transaction=transaction,
+                                sale_id=int(mixed_sale_id),
+                                defaults={'amount': mixed_sale_amount}
+                            )
+                            affected_sale_ids.add(int(mixed_sale_id))
 
                         for sale_id in affected_sale_ids:
                             sale_obj = Sale.objects.filter(id=sale_id).first()
@@ -5356,10 +5394,12 @@ def link_bank_transaction_to_journal(request, transaction_id):
         (transaction.income_amount > 0 or transaction.expense_amount > 0)
     )
     if can_search_transfer:
+        # Зөвхөн тухайн гүйлгээтэй яг ижил дүнтэй эсрэг талын гүйлгээг санал болгоно
+        # (өөр дүнтэй бол ямар ч тохиолдолд холбогдож чадахгүй тул).
         if transaction.expense_amount > 0:
-            candidates_qs = BankTransaction.objects.filter(account_type='BANK', income_amount__gt=0)
+            candidates_qs = BankTransaction.objects.filter(account_type='BANK', income_amount=transaction.expense_amount)
         else:
-            candidates_qs = BankTransaction.objects.filter(account_type='BANK', expense_amount__gt=0)
+            candidates_qs = BankTransaction.objects.filter(account_type='BANK', expense_amount=transaction.income_amount)
 
         candidates_qs = candidates_qs.exclude(
             bank_account_id=transaction.bank_account_id

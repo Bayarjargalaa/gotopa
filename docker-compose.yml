@@ -3,7 +3,7 @@ version: '3.8'
 services:
   web:
     build: .
-    command: gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000
+    command: sh -c "python manage.py collectstatic --noinput && gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 90 --max-requests 300 --max-requests-jitter 30"
     ports:
       - "8002:8000"
     volumes:
@@ -12,7 +12,7 @@ services:
       # SQLite файл байрлах хавтасыг тусгаарлаж Named Volume-д хадгалах
       - sqlite_data:/app/sqlite_db
     environment:
-      - DEBUG=1
+      - DJANGO_DEBUG=False
 
 volumes:
   sqlite_data:  # Windows дээрх SQLite-ийн түгжээний алдаанаас сэргийлнэ

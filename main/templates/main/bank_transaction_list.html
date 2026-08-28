@@ -30,7 +30,7 @@
                     <select name="bank_account" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         <option value="">-- Бүгд --</option>
                         {% for account in bank_accounts %}
-                            <option value="{{ account.id }}" {% if request.GET.bank_account == account.id|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.bank_account == account.id|stringformat:"s" %}selected{% endif %}>
                                 {{ account.code }} - {{ account.name }}
                             </option>
                         {% endfor %}
@@ -43,7 +43,7 @@
                     <select name="offset_account" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         <option value="">-- Бүгд --</option>
                         {% for account in all_accounts %}
-                            <option value="{{ account.id }}" {% if request.GET.offset_account == account.id|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.offset_account == account.id|stringformat:"s" %}selected{% endif %}>
                                 {{ account.code }} - {{ account.name }}
                             </option>
                         {% endfor %}
@@ -171,7 +171,7 @@
                     <select name="filter_year" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         <option value="">-- Он --</option>
                         {% for yr in year_choices %}
-                            <option value="{{ yr }}" {% if filter_year == yr|stringformat:"s" %}selected{% endif %}>{{ yr }}</option>
+                            <option value="{{ yr|stringformat:"d" }}" {% if filter_year == yr|stringformat:"s" %}selected{% endif %}>{{ yr|stringformat:"d" }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -368,6 +368,18 @@
                         </tr>
                         {% endfor %}
                     </tbody>
+                    {% if transactions %}
+                    <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+                        <tr>
+                            <td colspan="3" class="px-4 py-3 text-sm font-bold text-gray-700 text-right">Нийт дүн (шүүлтэд тохирсон бүх гүйлгээ):</td>
+                            <td class="px-4 py-3 text-sm text-right font-bold text-green-600">+{{ total_income|floatformat:0 }}₮</td>
+                            <td class="px-4 py-3 text-sm text-right font-bold text-red-600">-{{ total_expense|floatformat:0 }}₮</td>
+                            <td colspan="3" class="px-4 py-3 text-sm font-bold {% if net_total >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
+                                Цэвэр: {{ net_total|floatformat:0 }}₮
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
                 </table>
             </div>
 

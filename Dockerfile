@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["gunicorn", "gotopa_project.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 90 --max-requests 300 --max-requests-jitter 30"]

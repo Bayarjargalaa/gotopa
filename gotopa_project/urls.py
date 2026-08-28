@@ -24,6 +24,13 @@ urlpatterns = [
     path('', include('main.urls')),
 ]
 
+
+# Static файлыг WhiteNoise дунд програм хангамж (middleware) DEBUG-с үл хамааран
+# өгдөг тул энд дахин зарлах шаардлагагүй. Харин media (хэрэглэгчийн
+# байршуулсан файл)-ыг WhiteNoise хариуцдаггүй тул энд DEBUG-с үл хамааран
+# өөрөө үйлчилнэ (жижиг дотоод серверт nginx зэрэг тусдаа reverse proxy
+# байхгүй тул ингэж хийж байна).
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
