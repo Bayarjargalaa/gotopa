@@ -1,18 +1,32 @@
-version: '3.8'
-
 services:
   web:
     build: .
-    command: sh -c "python manage.py collectstatic --noinput && gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 90 --max-requests 300 --max-requests-jitter 30"
+    container_name: gotopa_web
+    restart: unless-stopped
     ports:
       - "8002:8000"
     volumes:
-      # Төслийн кодоо холбох
-      - .:/app
-      # SQLite файл байрлах хавтасыг тусгаарлаж Named Volume-д хадгалах
-      - sqlite_data:/app/sqlite_db
+      # өгөгдлийн сан хадгалах (SQLite)
+      - gotopa_db:/app/db_data
+      # медиа файлууд хадгалах (зураг, бичиг баримт)
+      - gotopa_media:/app/media
     environment:
-      - DJANGO_DEBUG=False
+      - DJANGO_SETTINGS_MODULE=gotopa_project.settings
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-change-me-in-production}
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
+      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-gotopa.com,www.gotopa.com,202.179.22.189,localhost,127.0.0.1}
+      - DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-http://gotopa.com,http://www.gotopa.com}
+      - DATABASE_PATH=${DATABASE_PATH:-/app/db_data/db.sqlite3}
+    command: gunicorn --bind 0.0.0.0:8000 gotopa_project.wsgi:application
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
-  sqlite_data:  # Windows дээрх SQLite-ийн түгжээний алдаанаас сэргийлнэ
+  gotopa_db:
+    driver: local
+  gotopa_media:
+    driver: local

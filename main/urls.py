@@ -22,6 +22,7 @@ urlpatterns = [
     
     # Management
     path('students/', views.student_list, name='student_list'),
+    path('students/bulk-edit/', views.student_bulk_edit, name='student_bulk_edit'),
     path('students/create/', views.student_create, name='student_create'),
     path('students/<int:student_id>/edit/', views.student_update, name='student_update'),
     path('students/<int:student_id>/delete/', views.student_delete, name='student_delete'),

@@ -8,23 +8,23 @@
 
 {% block content %}
 <!-- ЗАГВАРЫН ДАГУУХ БҮТЭН НЭГЭН ДЭЛГЭЦИЙН ХУУДАС -->
-<div class="h-[calc(100vh-56px)] grid grid-rows-[42fr_9fr_27fr_22fr] overflow-hidden">
+<div class="home-page min-h-[calc(100vh-56px)] md:h-[calc(100vh-56px)] grid md:grid-rows-[42fr_9fr_27fr_22fr] overflow-visible md:overflow-hidden">
 
   <!-- ══ МӨР 1: HERO SLIDER ══ -->
-  <div class="relative overflow-hidden">
-    <img class="hero-slide absolute inset-0 w-full h-full object-fill opacity-0 transition-opacity duration-1000"
+  <div class="home-hero relative min-h-[480px] md:min-h-0 overflow-hidden">
+    <img class="hero-slide absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-1000"
          src="{% static 'images/web_undsenzureg.png' %}" alt="">    
 
     <div class="absolute inset-0"
          style="background:linear-gradient(to right,rgba(255,255,255,0.55) 45%,rgba(255,255,255,0) 75%);"></div>
 
-    <div class="absolute inset-0 flex flex-col justify-center px-16">      
+    <div class="absolute inset-0 flex flex-col justify-center px-5 sm:px-8 md:px-16">
       <h1 class="leading-none mb-3.5 text-primary"
-          style="font-size:clamp(4.2rem,5.5vw,4.0rem);letter-spacing:0.02em;font-family:'Playfair Display',Georgia,serif;font-weight:500;">
+          style="font-size:clamp(2.35rem,5.5vw,4rem);letter-spacing:0.02em;font-family:'Playfair Display',Georgia,serif;font-weight:500;">
         ГОТОПА АКАДЕМИ
       </h1>
       <p class="text-primary/70 leading-relaxed mb-5 max-w-[440px]"
-         style="font-size:clamp(1.9rem,1.4vw,1.1rem);">
+        style="font-size:clamp(1.15rem,1.4vw,1.5rem);">
         Өндөр давтамжийг мэдэрч<br>Өөртөө итгэе
       </p>
       <div class="flex gap-3 flex-wrap">
@@ -49,44 +49,44 @@
   </div>
 
   <!-- ══ МӨР 2: STATS BAR ══ -->
-  <div class="grid grid-cols-4 bg-white shadow-md border-t-[3px] border-primary z-10">
+  <div class="home-stats grid grid-cols-2 md:grid-cols-4 bg-white shadow-md border-t-[3px] border-primary z-10">
 
-    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+    <div class="flex items-center gap-3 px-4 py-3 md:gap-3.5 md:px-6 border-r border-b md:border-b-0 border-gray-200">
       <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342"/>
       </svg>
       <div>
-        <p class="text-[1.35rem] font-black text-secondary leading-none">15 жил</p>
+        <p class="text-base md:text-[1.35rem] font-black text-secondary leading-none">15 жил</p>
         <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Тасралтгүй үйл ажиллагаа</p>
       </div>
     </div>
 
-    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+    <div class="flex items-center gap-3 px-4 py-3 md:gap-3.5 md:px-6 border-b md:border-b-0 md:border-r border-gray-200">
       <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
       </svg>
       <div>
-        <p class="text-[1.35rem] font-black text-secondary leading-none">3000+</p>
+        <p class="text-base md:text-[1.35rem] font-black text-secondary leading-none">3000+</p>
         <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Төгсөгчид</p>
       </div>
     </div>
 
-    <div class="flex items-center gap-3.5 px-6 border-r border-gray-200">
+    <div class="flex items-center gap-3 px-4 py-3 md:gap-3.5 md:px-6 border-r border-gray-200">
       <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
       </svg>
       <div>
-        <p class="text-[1.35rem] font-black text-secondary leading-none">30+</p>
+        <p class="text-base md:text-[1.35rem] font-black text-secondary leading-none">30+</p>
         <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Сургалтын хөтөлбөр</p>
       </div>
     </div>
 
-    <div class="flex items-center gap-3.5 px-6">
+    <div class="flex items-center gap-3 px-4 py-3 md:gap-3.5 md:px-6">
       <svg class="w-7 h-7 flex-shrink-0 stroke-primary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
       </svg>
       <div>
-        <p class="text-[1.35rem] font-black text-secondary leading-none">Өдөр бүр</p>
+        <p class="text-base md:text-[1.35rem] font-black text-secondary leading-none">Өдөр бүр</p>
         <p class="text-[0.62rem] text-gray-500 mt-[3px] leading-tight">Бясалгалын хөтөлбөр</p>
       </div>
     </div>
@@ -94,10 +94,10 @@
   </div>
 
   <!-- ══ МӨР 3: MISSION + 4 COURSE КАРТ ══ -->
-  <div class="grid grid-cols-[300px_1fr] overflow-hidden bg-gray-100 border-t border-gray-200">
+  <div class="home-programs grid grid-cols-1 md:grid-cols-[300px_1fr] overflow-hidden bg-gray-100 border-t border-gray-200">
 
     <!-- Зүүн: улаан mission карт -->
-    <div class="bg-primary p-7 flex flex-col overflow-hidden m-3 rounded-xl">
+    <div class="bg-primary p-6 md:p-7 flex flex-col overflow-hidden m-3 rounded-xl min-h-[190px] md:min-h-0">
       <h3 class="text-white text-[0.62rem] font-black uppercase tracking-[0.14em] mb-3">
         БИДНИЙ ЭРХЭМ ЗОРИЛГО
       </h3>
@@ -126,11 +126,11 @@
         </a>
       </div>
 
-      <div class="flex-1 grid grid-cols-4 gap-3 overflow-hidden">
+      <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 overflow-hidden">
 
         <!-- Card 1 -->
         <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
-          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+          <div class="relative h-44 md:flex-1 md:min-h-0 overflow-hidden rounded-t-lg">
             <img src="{% static 'images/1.jpg' %}" alt="Анхан шатны бясалгал"
                  class="absolute inset-0 w-full h-full object-cover">
           </div>
@@ -143,7 +143,7 @@
 
         <!-- Card 2 -->
         <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
-          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+          <div class="relative h-44 md:flex-1 md:min-h-0 overflow-hidden rounded-t-lg">
             <img src="{% static 'images/6.jpg' %}" alt="Дунд шатны бясалгал"
                  class="absolute inset-0 w-full h-full object-cover">
           </div>
@@ -156,7 +156,7 @@
 
         <!-- Card 3 -->
         <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
-          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+          <div class="relative h-44 md:flex-1 md:min-h-0 overflow-hidden rounded-t-lg">
             <img src="{% static 'images/4.jpg' %}" alt="Багшийн анги"
                  class="absolute inset-0 w-full h-full object-cover">
           </div>
@@ -169,7 +169,7 @@
 
         <!-- Card 4 -->
         <div class="bg-white rounded-lg flex flex-col overflow-hidden shadow-sm">
-          <div class="flex-1 relative overflow-hidden min-h-0 rounded-t-lg">
+          <div class="relative h-44 md:flex-1 md:min-h-0 overflow-hidden rounded-t-lg">
             <img src="{% static 'images/3.jpg' %}" alt="Тусгай сургалтууд"
                  class="absolute inset-0 w-full h-full object-cover">
           </div>
@@ -185,12 +185,12 @@
   </div>
 
   <!-- ══ МӨР 4: TIMELINE + БАРИЛГЫН ТӨСӨЛ ══ -->
-  <div class="grid grid-cols-2 overflow-hidden bg-white border-t border-gray-200">
+  <div class="home-timeline grid grid-cols-1 md:grid-cols-2 overflow-hidden bg-white border-t border-gray-200">
 
     <!-- Зүүн: Timeline -->
-    <div class="px-8 py-4 flex flex-col justify-center border-r border-gray-200">
+    <div class="px-5 py-8 md:px-8 md:py-4 flex flex-col justify-center md:border-r border-gray-200">
 
-      <div class="flex items-center gap-4 mb-5">
+      <div class="flex flex-wrap items-center gap-3 md:gap-4 mb-5">
         <h2 class="text-[0.78rem] font-black uppercase tracking-[0.1em] text-secondary">
           15 ЖИЛИЙН ЗАМНАЛ
         </h2>
@@ -200,10 +200,10 @@
       </div>
 
       <div class="relative">
-        <div class="absolute top-[5px] left-0 right-0 h-0.5 bg-gray-200"></div>
-        <div class="absolute top-[5px] left-0 h-0.5 bg-primary" style="width:82%;"></div>
+        <div class="home-timeline-line absolute top-[5px] left-0 right-0 h-0.5 bg-gray-200"></div>
+        <div class="home-timeline-line absolute top-[5px] left-0 h-0.5 bg-primary" style="width:82%;"></div>
 
-        <div class="grid grid-cols-6 relative">
+        <div class="home-timeline-list grid grid-cols-2 md:grid-cols-6 relative gap-y-5 md:gap-y-0">
 
           <div class="flex flex-col items-center text-center">
             <div class="w-3 h-3 rounded-full border-2 border-primary bg-white relative z-10 mb-2 flex-shrink-0"></div>
@@ -246,7 +246,7 @@
            class="absolute inset-0 w-full h-full object-cover">
       <div class="absolute inset-0"
            style="background:linear-gradient(to left,rgba(0,0,0,0.65) 0%,rgba(0,0,0,0.1) 100%);"></div>
-      <div class="absolute inset-0 flex flex-col justify-center items-end text-right px-8 py-5">
+      <div class="absolute inset-0 flex flex-col justify-center items-end text-right px-5 py-8 md:px-8 md:py-5">
         <h3 class="text-white text-[0.9rem] font-black uppercase tracking-[0.08em] mb-2"
             style="text-shadow:0 1px 6px rgba(0,0,0,0.4);">
           ШИНЭ БАРИЛГЫН ТӨСӨЛ

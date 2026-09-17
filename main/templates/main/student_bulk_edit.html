@@ -1,0 +1,156 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Сурагчдын мэдээлэл олноор засах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="mb-4">
+            <a href="{% url 'main:student_list' %}" class="text-primary hover:underline">← Сурагчдын жагсаалт руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-2">
+                <div>
+                    <h1 class="text-2xl font-bold text-secondary">Сурагчдын мэдээлэл олноор засах</h1>
+                    <p class="text-sm text-gray-500 mt-1">Анги бүрийн нэг төлөв, сурагч бүрийн нэг идэвхийн төлөв сонгоно.</p>
+                </div>
+                <button type="submit" form="bulk-edit-form" class="px-5 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90">
+                    <i class="fas fa-save mr-2"></i>Хадгалах
+                </button>
+            </div>
+
+            <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-5 p-4 bg-gray-50 rounded-lg">
+                <div>
+                    <label for="bulk-first-name" class="block text-sm font-medium text-gray-700 mb-1">Нэрээр хайх</label>
+                    <input id="bulk-first-name" type="search" name="first_name" value="{{ first_name }}"
+                           placeholder="Нэр"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-last-name" class="block text-sm font-medium text-gray-700 mb-1">Овгоор хайх</label>
+                    <input id="bulk-last-name" type="search" name="last_name" value="{{ last_name }}"
+                           placeholder="Овог"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-phone" class="block text-sm font-medium text-gray-700 mb-1">Утасны дугаараар хайх</label>
+                    <input id="bulk-phone" type="search" name="phone" value="{{ phone }}"
+                           placeholder="Утасны дугаар"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-course-name" class="block text-sm font-medium text-gray-700 mb-1">Элссэн ангиар шүүх</label>
+                    <input id="bulk-course-name" type="search" name="course_name" value="{{ course_name }}"
+                           placeholder="Анги"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-enrollment-date-from" class="block text-sm font-medium text-gray-700 mb-1">Элссэн огноо эхлэх</label>
+                    <input id="bulk-enrollment-date-from" type="date" name="enrollment_date_from" value="{{ enrollment_date_from }}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-enrollment-date-to" class="block text-sm font-medium text-gray-700 mb-1">Элссэн огноо дуусах</label>
+                    <input id="bulk-enrollment-date-to" type="date" name="enrollment_date_to" value="{{ enrollment_date_to }}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                </div>
+                <div>
+                    <label for="bulk-sort-field" class="block text-sm font-medium text-gray-700 mb-1">Эрэмбэлэх багана</label>
+                    <select id="bulk-sort-field" name="sort_field" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                        {% for value, label in sort_fields.items %}
+                        <option value="{{ value }}" {% if sort_field == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="bulk-sort-direction" class="block text-sm font-medium text-gray-700 mb-1">Эрэмбийн чиглэл</label>
+                    <select id="bulk-sort-direction" name="sort_direction" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:border-primary focus:ring-primary">
+                        <option value="asc" {% if sort_direction == 'asc' %}selected{% endif %}>Өсөх</option>
+                        <option value="desc" {% if sort_direction == 'desc' %}selected{% endif %}>Буурах</option>
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90">
+                        <i class="fas fa-search mr-1"></i>Шүүх
+                    </button>
+                    <a href="{% url 'main:student_bulk_edit' %}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Цэвэрлэх</a>
+                </div>
+            </form>
+
+            <form id="bulk-edit-form" method="post">
+                {% csrf_token %}
+                <div class="overflow-x-auto mt-6">
+                    <table class="min-w-[980px] w-full border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+                                <th rowspan="2" class="border px-3 py-3 text-left">№</th>
+                                <th rowspan="2" class="border px-3 py-3 text-left">Нэр</th>
+                                <th rowspan="2" class="border px-3 py-3 text-left">Овог</th>
+                                <th rowspan="2" class="border px-3 py-3 text-left">Утасны дугаар</th>
+                                <th rowspan="2" class="border px-3 py-3 text-left">Элссэн анги</th>
+                                <th rowspan="2" class="border px-3 py-3 text-left">Элссэн огноо</th>
+                                <th colspan="4" class="border px-3 py-3 text-center">Элссэн ангийн төлөв</th>
+                                <th colspan="2" class="border px-3 py-3 text-center">Сурагчийн төлөв</th>
+                            </tr>
+                            <tr class="bg-gray-50 text-xs text-gray-600">
+                                {% for value, label in status_choices %}
+                                <th class="border px-3 py-2 text-center whitespace-nowrap">{{ label }}</th>
+                                {% endfor %}
+                                <th class="border px-3 py-2 text-center">Идэвхтэй</th>
+                                <th class="border px-3 py-2 text-center">Идэвхгүй</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                                {% for enrollment in student.enrollments.all %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ forloop.parentloop.counter }}</td>
+                                    <td class="border px-3 py-3 text-sm font-medium text-gray-900">{{ student.first_name|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ student.last_name|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700 whitespace-nowrap">{{ student.phone|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ enrollment.course.name }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700 whitespace-nowrap">{{ enrollment.enrolled_date|date:"Y-m-d" }}</td>
+                                    {% for value, label in status_choices %}
+                                    <td class="border px-3 py-3 text-center">
+                                        <input type="radio" name="enrollment_status_{{ enrollment.id }}" value="{{ value }}"
+                                            {% if enrollment.status == value %}checked{% endif %}
+                                            class="w-4 h-4 text-primary focus:ring-primary"
+                                            aria-label="{{ enrollment.course.name }} - {{ label }}">
+                                    </td>
+                                    {% endfor %}
+                                    <td class="border px-3 py-3 text-center">
+                                        <input type="radio" name="student_active_{{ student.id }}" value="1"
+                                            {% if student.is_active_student %}checked{% endif %}
+                                            class="w-4 h-4 text-primary focus:ring-primary" aria-label="Идэвхтэй">
+                                    </td>
+                                    <td class="border px-3 py-3 text-center">
+                                        <input type="radio" name="student_active_{{ student.id }}" value="0"
+                                            {% if not student.is_active_student %}checked{% endif %}
+                                            class="w-4 h-4 text-primary focus:ring-primary" aria-label="Идэвхгүй">
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ forloop.parentloop.counter }}</td>
+                                    <td class="border px-3 py-3 text-sm font-medium text-gray-900">{{ student.first_name|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ student.last_name|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-sm text-gray-700">{{ student.phone|default:"-" }}</td>
+                                    <td class="border px-3 py-3 text-center text-sm text-gray-400">Элссэн анги байхгүй</td>
+                                    <td class="border px-3 py-3 text-center text-sm text-gray-400">-</td>
+                                    <td colspan="4" class="border px-3 py-3 text-center text-sm text-gray-400">-</td>
+                                    <td class="border px-3 py-3 text-center"><input type="radio" name="student_active_{{ student.id }}" value="1" {% if student.is_active_student %}checked{% endif %} class="w-4 h-4 text-primary focus:ring-primary"></td>
+                                    <td class="border px-3 py-3 text-center"><input type="radio" name="student_active_{{ student.id }}" value="0" {% if not student.is_active_student %}checked{% endif %} class="w-4 h-4 text-primary focus:ring-primary"></td>
+                                </tr>
+                                {% endfor %}
+                            {% empty %}
+                            <tr><td colspan="12" class="px-4 py-8 text-center text-gray-500">Сурагч бүртгэгдээгүй байна.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

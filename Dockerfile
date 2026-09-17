@@ -1,16 +1,36 @@
-FROM python:3.11-slim
+# Готопа бясалгалын төв - Django Application
+FROM python:3.13-slim
+
+# Системийн орчин тохируулах
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=gotopa_project.settings
 
 WORKDIR /app
 
-# Шаардлагатай сангуудыг суулгах
+# Системийн хамаарлууд суулгах (Pillow-д хэрэгтэй)
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python хамаарлууд суулгах
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir django-ckeditor gunicorn
 
-# SQLite өгөгдлийн сан байрлах хавтасыг бэлдэж эрх өгөх
-RUN mkdir -p /app/sqlite_db && chmod 777 /app/sqlite_db
-
+# Апп-ын кодыг хуулах
 COPY . .
+
+# entrypoint скрипт ажиллах эрх олгох
+RUN chmod +x /app/entrypoint.sh
+
+# Media болон staticfiles директор үүсгэх
+RUN mkdir -p /app/media /app/staticfiles
+
+# Static файлуудыг цуглуулах
+RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn gotopa_project.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 90 --max-requests 300 --max-requests-jitter 30"]
+ENTRYPOINT ["/app/entrypoint.sh"]

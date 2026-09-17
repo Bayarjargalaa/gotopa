@@ -53,3 +53,133 @@ button, a {
 .transition-transform {
     transition: transform 0.3s ease;
 }
+
+/* Keep the homepage timeline readable when it changes from a row to a grid. */
+@media (max-width: 767px) {
+    .home-timeline-line {
+        display: none;
+    }
+
+    .home-timeline-list > div {
+        min-width: 0;
+        padding: 0 0.25rem;
+    }
+
+    .home-timeline-list > div p:last-child {
+        max-width: 9rem;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* The homepage must remain fluid on phones and tablets, including devices
+   whose CSS viewport is wide enough to trigger Tailwind's md breakpoint. */
+@media (max-width: 1023px) {
+    #main-header nav {
+        display: none !important;
+    }
+
+    #main-header .header-actions > :not(#mobile-menu-button) {
+        display: none !important;
+    }
+
+    #main-header #mobile-menu-button {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .home-page {
+        display: block !important;
+        min-height: 0 !important;
+        height: auto !important;
+        overflow-x: hidden !important;
+    }
+
+    .home-hero {
+        min-height: 430px !important;
+        height: 58vw !important;
+        max-height: 560px;
+    }
+
+    .home-hero > div.flex {
+        padding-left: clamp(1.25rem, 8vw, 4rem) !important;
+        padding-right: clamp(1.25rem, 8vw, 4rem) !important;
+    }
+
+    .home-hero h1 {
+        font-size: clamp(2.5rem, 8vw, 4rem) !important;
+    }
+
+    .home-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .home-programs {
+        display: block !important;
+        overflow: visible !important;
+        padding-bottom: 1rem;
+    }
+
+    .home-programs > div:first-child {
+        min-height: 190px;
+    }
+
+    .home-programs > div:last-child {
+        padding: 1rem;
+        overflow: visible !important;
+    }
+
+    .home-programs > div:last-child > div:last-child {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        overflow: visible !important;
+    }
+
+    .home-programs > div:last-child .relative.h-44 {
+        height: 180px !important;
+    }
+
+    .home-timeline {
+        display: block !important;
+        overflow: visible !important;
+    }
+
+    .home-timeline > div:first-child {
+        border-right: 0 !important;
+        padding: 2rem 1.25rem !important;
+    }
+
+    .home-timeline > div:last-child {
+        min-height: 320px;
+    }
+}
+
+@media (max-width: 520px) {
+    .home-hero {
+        min-height: 420px !important;
+        height: 112vw !important;
+    }
+
+    .home-stats > div {
+        min-width: 0;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .home-stats svg {
+        width: 1.75rem;
+        height: 1.75rem;
+    }
+
+    .home-stats p {
+        overflow-wrap: anywhere;
+    }
+
+    .home-programs > div:last-child > div:last-child {
+        grid-template-columns: 1fr !important;
+    }
+
+    .home-programs > div:last-child .relative.h-44 {
+        height: 200px !important;
+    }
+}

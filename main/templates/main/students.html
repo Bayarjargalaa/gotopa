@@ -21,7 +21,7 @@
             </div>
 
             <form method="get" class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Бүх төрлөөр хайх</label>
                         <input
@@ -41,6 +41,30 @@
                             <option value="" {% if not active %}selected{% endif %}>Бүгд</option>
                             <option value="1" {% if active == '1' %}selected{% endif %}>Идэвхтэй</option>
                             <option value="0" {% if active == '0' %}selected{% endif %}>Идэвхгүй</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ангийн төлөв</label>
+                        <select
+                            name="enrollment_status"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                        >
+                            <option value="" {% if not enrollment_status %}selected{% endif %}>Бүгд</option>
+                            {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if enrollment_status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Анги</label>
+                        <select
+                            name="course"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                        >
+                            <option value="" {% if not course_id %}selected{% endif %}>Бүгд</option>
+                            {% for course in courses %}
+                            <option value="{{ course.id }}" {% if course_id == course.id|stringformat:'s' %}selected{% endif %}>{{ course.name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div>
@@ -79,6 +103,13 @@
                     <div class="p-4">
                         <div class="text-2xl font-bold text-secondary">{{ stat.value }}</div>
                         <div class="text-sm text-gray-600 mt-1">{{ stat.label }}</div>
+                        {% if stat.breakdown %}
+                        <div class="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-x-2 gap-y-0.5">
+                            {% for item in stat.breakdown %}
+                            <span class="text-[11px] leading-tight text-gray-500 whitespace-nowrap">{{ item.label }}: <span class="font-semibold text-gray-700">{{ item.value }}</span></span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}

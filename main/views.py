@@ -18,7 +18,7 @@ from .models import (
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Sum, Count, F, Exists, OuterRef
+from django.db.models import Q, Sum, Count, F, Exists, OuterRef, Prefetch
 from django.db import transaction
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -335,6 +335,8 @@ def student_list(request):
 
     q = request.GET.get('q', '').strip()
     active = request.GET.get('active', '').strip()
+    enrollment_status = request.GET.get('enrollment_status', '').strip()
+    course_id = request.GET.get('course', '').strip()
     sort = request.GET.get('sort', 'name_asc').strip()
 
     if q:
@@ -366,6 +368,13 @@ def student_list(request):
     elif active == '0':
         students = students.filter(is_active_student=False)
 
+    allowed_enrollment_statuses = {choice[0] for choice in Enrollment.STATUS_CHOICES}
+    if enrollment_status in allowed_enrollment_statuses:
+        students = students.filter(enrollments__status=enrollment_status)
+
+    if course_id.isdigit():
+        students = students.filter(enrollments__course_id=course_id)
+
     students = students.distinct()
 
     sort_options = {
@@ -386,6 +395,8 @@ def student_list(request):
         'INTERMEDIATE': 0,
         'ADVANCED': 0,
     }
+    status_labels = dict(Enrollment.STATUS_CHOICES)
+    class_status_counts = {level: {status: 0 for status in status_labels} for level in class_counts}
 
     enrollment_counts = (
         Enrollment.objects
@@ -399,25 +410,205 @@ def student_list(request):
         if level in class_counts:
             class_counts[level] = row['student_count']
 
+    level_status_rows = (
+        Enrollment.objects
+        .filter(student__in=students)
+        .values('course__level', 'status')
+        .annotate(student_count=Count('student', distinct=True))
+    )
+    for row in level_status_rows:
+        level = row['course__level']
+        status = row['status']
+        if level in class_status_counts and status in class_status_counts[level]:
+            class_status_counts[level][status] = row['student_count']
+
+    status_counts = {choice[0]: 0 for choice in Enrollment.STATUS_CHOICES}
+    status_count_rows = (
+        Enrollment.objects
+        .filter(student__in=students)
+        .values('status')
+        .annotate(student_count=Count('student', distinct=True))
+    )
+    for row in status_count_rows:
+        status = row['status']
+        if status in status_counts:
+            status_counts[status] = row['student_count']
+
+    status_short_labels = {
+        'PENDING': 'Хүлээгдэж буй',
+        'APPROVED': 'Баталсан',
+        'COMPLETED': 'Төгссөн',
+        'CANCELLED': 'Цуцалсан',
+    }
+
+    def status_breakdown(counts_by_status):
+        return [
+            {'label': status_short_labels.get(status, status), 'value': count}
+            for status, count in counts_by_status.items()
+            if count
+        ]
+
     stats = [
-        {'label': 'Нийт сурагч', 'value': total_students, 'accent': 'bg-secondary'},
-        {'label': 'Харагдаж буй', 'value': filtered_count, 'accent': 'bg-primary'},
-        {'label': 'Анхан 1', 'value': class_counts['BEGINNER_1'], 'accent': 'bg-green-500'},
-        {'label': 'Анхан 2', 'value': class_counts['BEGINNER_2'], 'accent': 'bg-emerald-500'},
-        {'label': 'Дунд', 'value': class_counts['INTERMEDIATE'], 'accent': 'bg-blue-500'},
-        {'label': 'Ахисан', 'value': class_counts['ADVANCED'], 'accent': 'bg-purple-500'},
+        {'label': 'Нийт сурагч', 'value': total_students, 'accent': 'bg-secondary', 'breakdown': status_breakdown(status_counts)},
+        {'label': 'Харагдаж буй', 'value': filtered_count, 'accent': 'bg-primary', 'breakdown': status_breakdown(status_counts)},
+        {'label': 'Анхан 1', 'value': class_counts['BEGINNER_1'], 'accent': 'bg-green-500', 'breakdown': status_breakdown(class_status_counts['BEGINNER_1'])},
+        {'label': 'Анхан 2', 'value': class_counts['BEGINNER_2'], 'accent': 'bg-emerald-500', 'breakdown': status_breakdown(class_status_counts['BEGINNER_2'])},
+        {'label': 'Дунд', 'value': class_counts['INTERMEDIATE'], 'accent': 'bg-blue-500', 'breakdown': status_breakdown(class_status_counts['INTERMEDIATE'])},
+        {'label': 'Ахисан', 'value': class_counts['ADVANCED'], 'accent': 'bg-purple-500', 'breakdown': status_breakdown(class_status_counts['ADVANCED'])},
     ]
 
     context = {
         'students': students,
         'q': q,
         'active': active,
+        'enrollment_status': enrollment_status,
+        'status_choices': Enrollment.STATUS_CHOICES,
+        'course_id': course_id,
+        'courses': Course.objects.filter(is_active=True).order_by('name'),
         'sort': sort,
         'total_students': total_students,
         'filtered_count': filtered_count,
         'stats': stats,
     }
     return render(request, 'main/students.html', context)
+
+
+@login_required
+def student_bulk_edit(request):
+    """Сурагчийн анги бүртгэлийн болон идэвхийн төлөвийг бөөнөөр шинэчлэх."""
+    profile = request.user.profile
+    if not (profile.is_admin or profile.is_manager):
+        messages.error(request, 'Хандах эрхгүй байна.')
+        return redirect('main:dashboard')
+
+    first_name = request.GET.get('first_name', '').strip()
+    last_name = request.GET.get('last_name', '').strip()
+    phone = request.GET.get('phone', '').strip()
+    course_name = request.GET.get('course_name', '').strip()
+    enrollment_date_from = request.GET.get('enrollment_date_from', '').strip()
+    enrollment_date_to = request.GET.get('enrollment_date_to', '').strip()
+    sort_field = request.GET.get('sort_field', 'first_name').strip()
+    sort_direction = request.GET.get('sort_direction', 'asc').strip()
+
+    sort_fields = {
+        'first_name': 'Нэр',
+        'last_name': 'Овог',
+        'phone': 'Утасны дугаар',
+        'course_name': 'Элссэн анги',
+        'enrollment_date': 'Элссэн огноо',
+    }
+    if sort_field not in sort_fields:
+        sort_field = 'first_name'
+    if sort_direction not in {'asc', 'desc'}:
+        sort_direction = 'asc'
+
+    student_queryset = UserProfile.objects.filter(role=UserRole.STUDENT)
+    if first_name:
+        student_queryset = student_queryset.filter(first_name__iucontains=first_name)
+    if last_name:
+        student_queryset = student_queryset.filter(last_name__iucontains=last_name)
+    if phone:
+        student_queryset = student_queryset.filter(phone__icontains=phone)
+    if course_name:
+        student_queryset = student_queryset.filter(
+            enrollments__course__name__iucontains=course_name
+        )
+    if enrollment_date_from:
+        student_queryset = student_queryset.filter(
+            enrollments__enrolled_date__gte=enrollment_date_from
+        )
+    if enrollment_date_to:
+        student_queryset = student_queryset.filter(
+            enrollments__enrolled_date__lte=enrollment_date_to
+        )
+
+    enrollment_queryset = Enrollment.objects.select_related('course')
+    if course_name:
+        enrollment_queryset = enrollment_queryset.filter(
+            course__name__iucontains=course_name
+        )
+    if enrollment_date_from:
+        enrollment_queryset = enrollment_queryset.filter(
+            enrolled_date__gte=enrollment_date_from
+        )
+    if enrollment_date_to:
+        enrollment_queryset = enrollment_queryset.filter(
+            enrolled_date__lte=enrollment_date_to
+        )
+
+    students = list(
+        student_queryset
+        .select_related('user')
+        .prefetch_related(Prefetch('enrollments', queryset=enrollment_queryset))
+    )
+
+    def student_sort_key(student):
+        if sort_field == 'first_name':
+            return (student.first_name or student.mongolian_name or student.user.username).casefold()
+        if sort_field == 'last_name':
+            return (student.last_name or student.mongolian_name or student.user.username).casefold()
+        if sort_field == 'phone':
+            return student.phone or ''
+
+        enrollments = list(student.enrollments.all())
+        if sort_field == 'course_name':
+            return min(
+                (enrollment.course.name.casefold() for enrollment in enrollments),
+                default='',
+            )
+        return min(
+            (enrollment.enrolled_date for enrollment in enrollments),
+            default=date.min,
+        )
+
+    students.sort(key=student_sort_key, reverse=sort_direction == 'desc')
+
+    if request.method == 'POST':
+        allowed_statuses = {choice[0] for choice in Enrollment.STATUS_CHOICES}
+        enrollment_ids = {
+            enrollment.id
+            for student in students
+            for enrollment in student.enrollments.all()
+        }
+        changed_enrollments = 0
+
+        with transaction.atomic():
+            for student in students:
+                active_value = request.POST.get(f'student_active_{student.id}')
+                if active_value in {'1', '0'}:
+                    new_active = active_value == '1'
+                    if student.is_active_student != new_active:
+                        student.is_active_student = new_active
+                        student.save(update_fields=['is_active_student', 'updated_at'])
+
+                for enrollment in student.enrollments.all():
+                    if enrollment.id not in enrollment_ids:
+                        continue
+                    selected_status = request.POST.get(f'enrollment_status_{enrollment.id}')
+                    if selected_status in allowed_statuses and selected_status != enrollment.status:
+                        enrollment.status = selected_status
+                        enrollment.is_active = selected_status != 'CANCELLED'
+                        enrollment.save(update_fields=['status', 'is_active'])
+                        changed_enrollments += 1
+
+        messages.success(request, f'{len(students)} сурагчийн мэдээлэл хадгалагдлаа. {changed_enrollments} ангийн төлөв шинэчлэгдэв.')
+        query_params = request.GET.urlencode()
+        redirect_url = f"{reverse('main:student_bulk_edit')}?{query_params}" if query_params else reverse('main:student_bulk_edit')
+        return redirect(redirect_url)
+
+    return render(request, 'main/student_bulk_edit.html', {
+        'students': students,
+        'status_choices': Enrollment.STATUS_CHOICES,
+        'first_name': first_name,
+        'last_name': last_name,
+        'phone': phone,
+        'course_name': course_name,
+        'enrollment_date_from': enrollment_date_from,
+        'enrollment_date_to': enrollment_date_to,
+        'sort_field': sort_field,
+        'sort_direction': sort_direction,
+        'sort_fields': sort_fields,
+    })
 
 @login_required
 def student_create(request):
@@ -648,15 +839,43 @@ def student_update(request, student_id):
             
             # Сургалт бүртгэл шинэчлэх
             status_changed_count = 0
+            enrollment_date_changed_count = 0
             allowed_statuses = {'PENDING', 'APPROVED', 'COMPLETED', 'CANCELLED'}
             for enrollment in enrollments:
                 selected_status = request.POST.get(f'enrollment_status_{enrollment.id}', '').strip()
+                selected_enrollment_date = request.POST.get(
+                    f'enrollment_date_{enrollment.id}', ''
+                ).strip()
+                enrollment_changed = False
+
                 if selected_status in allowed_statuses and selected_status != enrollment.status:
                     enrollment.status = selected_status
                     # Цуцалсан төлөвт идэвхгүй, бусад үед идэвхтэй байлгана
                     enrollment.is_active = selected_status != 'CANCELLED'
-                    enrollment.save()
                     status_changed_count += 1
+                    enrollment_changed = True
+
+                if selected_enrollment_date:
+                    try:
+                        parsed_enrollment_date = date.fromisoformat(selected_enrollment_date)
+                        if parsed_enrollment_date != enrollment.enrolled_date:
+                            enrollment.enrolled_date = parsed_enrollment_date
+                            enrollment_date_changed_count += 1
+                            enrollment_changed = True
+                    except ValueError:
+                        messages.error(
+                            request,
+                            f'{enrollment.course.name} сургалтын элссэн огноо буруу байна.'
+                        )
+                        return render(request, 'main/student_update.html', {
+                            'student': student_profile,
+                            'courses': courses,
+                            'enrollments': enrollments,
+                            'enrolled_course_ids': enrolled_course_ids
+                        })
+
+                if enrollment_changed:
+                    enrollment.save()
 
             new_course_ids = request.POST.getlist('new_courses')
             added_courses = []
@@ -679,6 +898,8 @@ def student_update(request, student_id):
             success_msg = f'✓ Сурагч "{last_name} {first_name}" амжилттай шинэчлэгдлээ!'
             if status_changed_count:
                 success_msg += f'\nТөлөв шинэчлэгдсэн бүртгэл: {status_changed_count}'
+            if enrollment_date_changed_count:
+                success_msg += f'\nЭлссэн огноо шинэчлэгдсэн бүртгэл: {enrollment_date_changed_count}'
             if added_courses:
                 success_msg += f'\nШинээр нэмэгдсэн сургалтууд: {", ".join(added_courses)}'
             
@@ -1534,27 +1755,30 @@ def course_create(request):
         teacher_id = request.POST.get('teacher')
         is_active = request.POST.get('is_active') == 'on'
         
+        teachers = UserProfile.objects.filter(
+            role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
+        ).select_related('user')
+        
         # Validation
         if not name:
             messages.error(request, 'Хичээлийн нэр оруулна уу.')
-            teachers = UserProfile.objects.filter(
-                role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-            ).select_related('user')
             return render(request, 'main/course_form.html', {'teachers': teachers})
         
         if not level:
             messages.error(request, 'Түвшин сонгоно уу.')
-            teachers = UserProfile.objects.filter(
-                role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-            ).select_related('user')
             return render(request, 'main/course_form.html', {'teachers': teachers})
         
         try:
             teacher = UserProfile.objects.get(id=teacher_id) if teacher_id else None
+            today = timezone.now().date()
             
             course = Course.objects.create(
                 name=name,
                 level=level,
+                duration_weeks=0,
+                price=0,
+                start_date=today,
+                end_date=today,
                 teacher=teacher,
                 is_active=is_active
             )
@@ -1565,9 +1789,6 @@ def course_create(request):
             return redirect('main:course_list')
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
-            teachers = UserProfile.objects.filter(
-                role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-            ).select_related('user')
             return render(request, 'main/course_form.html', {'teachers': teachers})
     
     # Багш нарын жагсаалт
@@ -1594,6 +1815,10 @@ def course_edit(request, course_id):
     if request.method == 'POST':
         course.name = request.POST.get('name')
         course.level = request.POST.get('level')
+        course.duration_weeks = request.POST.get('duration_weeks') or course.duration_weeks
+        course.price = request.POST.get('price') or course.price
+        course.start_date = request.POST.get('start_date') or course.start_date
+        course.end_date = request.POST.get('end_date') or course.end_date
         course.is_active = request.POST.get('is_active') == 'on'
         
         teacher_id = request.POST.get('teacher')

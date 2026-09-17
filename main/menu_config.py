@@ -261,7 +261,7 @@ SIDEBAR_MENU = [
     {
         'section': 'Сургалт',
         'icon': 'fas fa-graduation-cap',
-        'permissions': ['is_admin', 'is_teacher', 'perm:main.view_course', 'perm:main.view_attendance'],  # Permission-басед шалгалт
+        'permissions': ['is_admin', 'is_manager', 'is_teacher', 'perm:main.view_course', 'perm:main.view_attendance'],  # Permission-басед шалгалт
         'items': [
             {
                 'label': 'Хичээлүүд',
@@ -293,6 +293,12 @@ SIDEBAR_MENU = [
                 'url_name': 'main:student_list',
                 'icon': 'fas fa-users',
                 'permissions': ['is_admin', 'perm:main.view_enrollment'],  # Permission-басед
+            },
+            {
+                'label': 'Сурагчдын мэдээлэл олноор засах',
+                'url_name': 'main:student_bulk_edit',
+                'icon': 'fas fa-user-edit',
+                'permissions': ['is_admin', 'is_manager'],
             },
             {
                 'label': 'Сурагч бүртгэх',

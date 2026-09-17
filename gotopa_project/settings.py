@@ -27,12 +27,22 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cmz#-4n==as*cg
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 _allowed = os.environ.get(
-    'DJANGO_ALLOWED_HOSTS', 
-    '202.179.22.189,localhost,127.0.0.1,www.gotopa.com,gotopa.com'
+    'DJANGO_ALLOWED_HOSTS',
+    'gotopa.com,www.gotopa.com,202.179.22.189,localhost,127.0.0.1'
 )
-ALLOWED_HOSTS = [host.strip() for host in _allowed.split(',') if host.strip()]
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
+for required_host in ('gotopa.com', 'www.gotopa.com'):
+    if required_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(required_host)
 
-
+_csrf_origins = os.environ.get(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    'http://gotopa.com,http://www.gotopa.com'
+)
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _csrf_origins.split(',') if origin.strip()]
+for required_origin in ('http://gotopa.com', 'http://www.gotopa.com'):
+    if required_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(required_origin)
 
 
 # Application definition
@@ -140,24 +150,12 @@ LOGOUT_REDIRECT_URL = 'main:home'
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-STORAGES = {
-    'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
-    },
-    'staticfiles': {
-        # Manifest хувилбар нь Tailwind-ийн үүсгэсэн CSS доторх боломжгүй
-        # url() лавлагаа дээр collectstatic-ийг эвдэрдэг тул compressed-only
-        # storage хэрэглэв.
-        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
-    },
-}
-
 # Media files
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # CKEditor Configuration
@@ -186,19 +184,3 @@ CKEDITOR_BROWSE_SHOW_DIRS = True
 
 # Django admin параметрын хязгаар (банкны гүйлгээ олон байхад)
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # Default: 1000
-
-# SQLite-д Кирилл үсгийн том/жижиг ялгаагүй хайлт (icontains)
-from django.db.backends.signals import connection_created
-
-def _sqlite_lower(s):
-    return s.lower() if isinstance(s, str) else s
-
-def _sqlite_upper(s):
-    return s.upper() if isinstance(s, str) else s
-
-def _register_unicode_functions(sender, connection, **kwargs):
-    if connection.vendor == 'sqlite':
-        connection.connection.create_function('LOWER', 1, _sqlite_lower)
-        connection.connection.create_function('UPPER', 1, _sqlite_upper)
-
-connection_created.connect(_register_unicode_functions)

@@ -142,10 +142,10 @@ class UserProfile(models.Model):
 class Course(models.Model):
     """Сургалтын хичээл"""
     LEVEL_CHOICES = [
-        ('BEGINNER_1', 'Анхан 1'),
-        ('BEGINNER_2', 'Анхан 2'),
-        ('INTERMEDIATE', 'Дунд'),
-        ('ADVANCED', 'Ахисан'),
+        ('BEGINNER_1', '1'),
+        ('BEGINNER_2', '2'),
+        ('INTERMEDIATE', '3'),
+        ('ADVANCED', '4'),
         ('VIP', 'VIP'),
     ]
     
@@ -189,6 +189,11 @@ class Course(models.Model):
     def enrolled_count(self):
         """Элссэн сурагчдын тоо"""
         return self.enrollments.filter(is_active=True).count()
+    
+    @property
+    def approved_count(self):
+        """Идэвхтэй бөгөөд баталсан төлөвтэй сурагчдын тоо"""
+        return self.enrollments.filter(is_active=True, status='APPROVED').count()
     
     @property
     def available_slots(self):
@@ -807,21 +812,6 @@ class Product(models.Model):
             return self.current_stock * self.purchase_price
         return 0
 
-    @property
-    def average_cost(self):
-        """Дундаж өртгийн арга: (эхний үлдэгдэл × эхний үнэ + орлогын нийт дүн) / нийт тоо"""
-        from django.db.models import Sum as _Sum
-        agg = self.movements.filter(movement_type='IN').aggregate(
-            total_qty=_Sum('quantity'), total_value=_Sum('total_amount')
-        )
-        in_qty = agg['total_qty'] or 0
-        in_value = agg['total_value'] or 0
-        total_qty = (self.initial_stock or 0) + in_qty
-        total_value = (self.initial_stock or 0) * (self.purchase_price or 0) + in_value
-        if total_qty > 0:
-            return total_value / total_qty
-        return self.purchase_price or 0
-
 
 class StockMovement(models.Model):
     """Агуулахын хөдөлгөөн (орлого/зарлага)"""
@@ -1241,6 +1231,15 @@ class BankTransaction(models.Model):
     counterparty_name = models.CharField('Харьцсан дансны нэр', max_length=255, blank=True)
     counterparty = models.ForeignKey(Counterparty, on_delete=models.SET_NULL, 
                                     null=True, blank=True, verbose_name='Харилцагч')
+    transfer_source = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='transfer_mirrors',
+        verbose_name='Эх гүйлгээ',
+        help_text='Автоматаар үүссэн кассын эсрэг мөр бол үүсгэсэн банк/кассын гүйлгээ',
+    )
     
     # Дүн (Хаан банк: Дебит/Кредит, Голомт банк: Орлого/Зарлага)
     income_amount = models.DecimalField('Орлого', max_digits=15, decimal_places=2, default=0,
@@ -1315,18 +1314,6 @@ class BankTransaction(models.Model):
                                         verbose_name='Гүйлгээний бичилт',
                                         help_text='Үүссэн журналын бичилт')
     is_processed = models.BooleanField('Боловсруулсан эсэх', default=False)
-
-    # Мөнгө хооронд шилжүүлэлт: эсрэг данс нь касс байх үед автоматаар үүсэх эсрэг талын мөр
-    transfer_source = models.ForeignKey(
-        'self',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='transfer_mirrors',
-        verbose_name='Эх гүйлгээ',
-        help_text='Автоматаар үүссэн кассын эсрэг мөр бол үүсгэсэн банк/кассын гүйлгээ'
-    )
-
     imported_at = models.DateTimeField('Импортолсон огноо', auto_now_add=True)
     imported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 
                                    verbose_name='Импортолсон хэрэглэгч')
@@ -1351,11 +1338,6 @@ class BankTransaction(models.Model):
         return self.income_amount - self.expense_amount
 
     @property
-    def is_transfer_mirror(self):
-        """Автоматаар үүссэн эсрэг талын (касс) мөр эсэх"""
-        return self.transfer_source_id is not None
-
-    @property
     def student_allocated_amount(self):
         """Сурагчийн төлбөрт хуваарилсан нийт дүн"""
         return self.allocations.aggregate(total=Sum('amount'))['total'] or 0
@@ -1371,79 +1353,6 @@ class BankTransaction(models.Model):
         reserved = self.student_allocated_amount + self.sale_allocated_amount
         remaining = self.income_amount - reserved
         return remaining if remaining > 0 else 0
-
-    @property
-    def is_sale_linked(self):
-        """Борлуулалттай (хэсэгчлэн эсвэл бүрэн) холбогдсон эсэх"""
-        if self.income_sale_id:
-            return True
-        return self.sale_allocations.exists()
-
-    @property
-    def effective_offset_account(self):
-        """Харагдацад зориулсан эсрэг данс
-
-        Борлуулалтад холбогдсон гүйлгээнд `offset_account` гараар тавигддаггүй ч
-        журналын бичилт үүссэн байдаг (жишээ нь Дт банк / Кт 510101 Борлуулалтын орлого).
-        Тиймээс гараар холбосон эсрэг данс байхгүй бол журналын бичилтээс тодорхойлно.
-        """
-        if self.offset_account_id:
-            return self.offset_account
-
-        entry = self.accounting_entry
-        if not entry:
-            return None
-
-        if self.income_amount and self.income_amount > 0:
-            candidates = [entry.credit_account, entry.debit_account]
-        else:
-            candidates = [entry.debit_account, entry.credit_account]
-
-        for account in candidates:
-            if account and account.id != self.bank_account_id:
-                return account
-        return None
-
-    @property
-    def transfer_link(self):
-        """Энэ гүйлгээг өөр харилцахын гүйлгээтэй холбосон шилжүүлгийн бичлэг (хэрэв байвал)"""
-        return getattr(self, 'transfer_link_as_expense', None) or getattr(self, 'transfer_link_as_income', None)
-
-
-class BankTransferLink(models.Model):
-    """Хоёр өөр харилцахын дансны гүйлгээг (зарлага ба орлого) дотоод шилжүүлэг
-    болгон холбосон бичлэг.
-
-    Хоёр тал хоёулаа тус тусдаа банкны хуулгаас импортлогдсон бодит гүйлгээ тул
-    шинэ мөр үүсгэдэггүй — зөвхөн хоёрыг холбож, ганц журналын бичилт үүсгэнэ
-    (Дт хүлээн авагч харилцах / Кт эх харилцах).
-    """
-    expense_transaction = models.OneToOneField(
-        BankTransaction, on_delete=models.CASCADE,
-        related_name='transfer_link_as_expense',
-        verbose_name='Зарлагын гүйлгээ'
-    )
-    income_transaction = models.OneToOneField(
-        BankTransaction, on_delete=models.CASCADE,
-        related_name='transfer_link_as_income',
-        verbose_name='Орлогын гүйлгээ'
-    )
-    accounting_entry = models.OneToOneField(
-        AccountingEntry, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='bank_transfer_link',
-        verbose_name='Журналын бичилт'
-    )
-    amount = models.DecimalField('Дүн', max_digits=15, decimal_places=2)
-    created_at = models.DateTimeField('Үүсгэсэн огноо', auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
-                                   verbose_name='Үүсгэсэн хэрэглэгч')
-
-    class Meta:
-        verbose_name = 'Харилцах хоорондын шилжүүлэг'
-        verbose_name_plural = 'Харилцах хоорондын шилжүүлгүүд'
-
-    def __str__(self):
-        return f'{self.expense_transaction.bank_account} → {self.income_transaction.bank_account}: {self.amount:,.0f}₮'
 
 
 class IncomeCategory(models.Model):
@@ -1508,6 +1417,46 @@ class PaymentAllocation(models.Model):
     
     def __str__(self):
         return f"{self.student.mongolian_name} - {self.course.name} - {self.year}/{self.month} - {self.amount:,.0f}₮"
+
+
+class BankTransferLink(models.Model):
+    """Хоёр банкны дансны хоорондын шилжүүлгийн хос холбоос."""
+    income_transaction = models.OneToOneField(
+        BankTransaction,
+        on_delete=models.CASCADE,
+        related_name='transfer_link_as_income',
+        verbose_name='Орлогын гүйлгээ'
+    )
+    expense_transaction = models.OneToOneField(
+        BankTransaction,
+        on_delete=models.CASCADE,
+        related_name='transfer_link_as_expense',
+        verbose_name='Зарлагын гүйлгээ'
+    )
+    amount = models.DecimalField('Дүн', max_digits=15, decimal_places=2)
+    accounting_entry = models.OneToOneField(
+        AccountingEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bank_transfer_link',
+        verbose_name='Журналын бичилт'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Үүсгэсэн хэрэглэгч'
+    )
+    created_at = models.DateTimeField('Үүсгэсэн огноо', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Харилцах хоорондын шилжүүлэг'
+        verbose_name_plural = 'Харилцах хоорондын шилжүүлгүүд'
+
+    def __str__(self):
+        return f"#{self.income_transaction_id} → #{self.expense_transaction_id} ({self.amount:,.0f}₮)"
 
 
 class SalePaymentAllocation(models.Model):
