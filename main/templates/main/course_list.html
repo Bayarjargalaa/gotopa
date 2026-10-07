@@ -41,9 +41,20 @@
                         </p>
                         
                         <p class="text-sm">
+                            <span class="text-gray-600">Сарын төлбөр:</span>
+                            {% if course.monthly_fee %}
+                            <span class="font-bold text-green-700">{{ course.monthly_fee|floatformat:0 }}₮</span>
+                            {% else %}
+                            <span class="text-gray-400">тохируулаагүй</span>
+                            {% endif %}
+                        </p>
+
+                        <p class="text-sm">
                             <span class="text-gray-600">Багш:</span>
                             <span class="font-bold">
-                                {% if course.teacher %}
+                                {% if course.teacher_assignments.all %}
+                                    {% for assignment in course.teacher_assignments.all %}{{ assignment.teacher.full_name|default:assignment.teacher.user.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                {% elif course.teacher %}
                                     {{ course.teacher.full_name|default:course.teacher.user.username }}
                                 {% else %}
                                     <span class="text-gray-400">Багш томилогдоогүй</span>

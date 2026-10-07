@@ -1,5 +1,7 @@
-from django.urls import path
+from django.contrib.auth import views as auth_views
+from django.urls import path, reverse_lazy
 from . import views
+from .forms import PhoneOrEmailPasswordResetForm
 from .views_permissions import (
     permission_group_list, 
     permission_group_create, 
@@ -17,6 +19,23 @@ urlpatterns = [
     path('login/', views.user_login, name='login'),
     path('register/', views.register, name='register'),
     path('logout/', views.user_logout, name='logout'),
+    path('password-reset/', views.PasswordResetRequestView.as_view(
+        form_class=PhoneOrEmailPasswordResetForm,
+        template_name='main/password_reset/form.html',
+        email_template_name='main/password_reset/email.txt',
+        subject_template_name='main/password_reset/subject.txt',
+        success_url=reverse_lazy('main:password_reset_done'),
+    ), name='password_reset'),
+    path('password-reset/sent/', views.PasswordResetSentView.as_view(
+        template_name='main/password_reset/done.html',
+    ), name='password_reset_done'),
+    path('password-reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(
+        template_name='main/password_reset/confirm.html',
+        success_url=reverse_lazy('main:password_reset_complete'),
+    ), name='password_reset_confirm'),
+    path('password-reset/complete/', auth_views.PasswordResetCompleteView.as_view(
+        template_name='main/password_reset/complete.html',
+    ), name='password_reset_complete'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('profile/', views.profile_view, name='profile'),
     
@@ -27,6 +46,9 @@ urlpatterns = [
     path('students/<int:student_id>/edit/', views.student_update, name='student_update'),
     path('students/<int:student_id>/delete/', views.student_delete, name='student_delete'),
     path('teachers/', views.teacher_list, name='teacher_list'),
+    path('teachers/manage/', views.teacher_manage_list, name='teacher_manage_list'),
+    path('teachers/levels/', views.teacher_level_manage, name='teacher_level_manage'),
+    path('teachers/levels/<int:level_id>/delete/', views.teacher_level_delete, name='teacher_level_delete'),
     path('teachers/create/', views.teacher_create, name='teacher_create'),
     path('teachers/<int:teacher_id>/edit/', views.teacher_update, name='teacher_update'),
     path('teachers/<int:teacher_id>/delete/', views.teacher_delete, name='teacher_delete'),
@@ -41,7 +63,10 @@ urlpatterns = [
     path('attendance/sheet/<int:course_id>/', views.attendance_sheet, name='attendance_sheet'),
     path('attendance/mark/<int:course_id>/', views.attendance_mark, name='attendance_mark'),
     path('student-payments/', views.student_payments, name='student_payments'),
-    path('payment-comment/<int:transaction_id>/', views.update_payment_comment, name='update_payment_comment'),
+    path('student-payments/pending/', views.pending_payment_create, name='pending_payment_create'),
+    path('student-payments/pending/<int:pending_id>/delete/', views.pending_payment_delete, name='pending_payment_delete'),
+    path('student-payments/note/', views.payment_cell_note_save, name='payment_cell_note_save'),
+    path('student-payments/discount/', views.payment_discount_save, name='payment_discount_save'),
     
     # Танилцуулга
     path('about/', views.about, name='about'),
@@ -83,6 +108,7 @@ urlpatterns = [
     # Бараа материалын удирдлага
     path('inventory/', views.inventory_list, name='inventory_list'),
     path('inventory/set-initial-stock/', views.product_set_initial_stock, name='product_set_initial_stock'),
+    path('inventory/opening-stock/', views.product_opening_stock, name='product_opening_stock'),
     path('inventory/cost-calculation/', views.inventory_cost_calculation, name='inventory_cost_calculation'),
     path('inventory/create/', views.product_create, name='product_create'),
     path('inventory/<int:product_id>/edit/', views.product_edit, name='product_edit'),
@@ -92,6 +118,7 @@ urlpatterns = [
     path('inventory/free-outgoing/', views.stock_free_outgoing, name='stock_free_outgoing'),
     path('inventory/purchase/', views.purchase_create, name='purchase_create'),
     path('inventory/purchase/multi/', views.purchase_create_multi, name='purchase_create_multi'),
+    path('inventory/category/create/', views.product_category_create, name='product_category_create'),
     path('inventory/purchase/<int:movement_id>/edit/', views.purchase_edit, name='purchase_edit'),
     path('inventory/purchase/<int:movement_id>/delete/', views.purchase_delete, name='purchase_delete'),
     path('inventory/sale/multi/', views.sale_create_multi, name='sale_create_multi'),
@@ -113,6 +140,9 @@ urlpatterns = [
     path('finance/import-bank-transactions/', views.import_bank_transactions_view, name='import_bank_transactions'),
     path('finance/bank-transactions/', views.bank_transaction_list, name='bank_transaction_list'),
     path('finance/bank-transactions/<int:transaction_id>/link-to-journal/', views.link_bank_transaction_to_journal, name='link_bank_transaction_to_journal'),
+    path('finance/pos-settlements/', views.pos_settlement_list, name='pos_settlement_list'),
+    path('finance/auto-link/rules/', views.auto_link_rules, name='auto_link_rules'),
+    path('finance/auto-link/', views.auto_link_review, name='auto_link_review'),
     path('api/bank-accounts/', views.get_bank_accounts_api, name='get_bank_accounts_api'),
     path('api/student-courses/<int:student_id>/', views.get_student_courses, name='get_student_courses'),
     
@@ -148,6 +178,8 @@ urlpatterns = [
     path('counterparties/create/', views.counterparty_create, name='counterparty_create'),
     path('counterparties/<int:counterparty_id>/edit/', views.counterparty_edit, name='counterparty_edit'),
     path('counterparties/<int:counterparty_id>/delete/', views.counterparty_delete, name='counterparty_delete'),
+    path('counterparties/<int:counterparty_id>/to-student/', views.counterparty_to_student, name='counterparty_to_student'),
+    path('profiles/<int:profile_id>/to-counterparty/', views.profile_to_counterparty, name='profile_to_counterparty'),
     
     # Хэрэглэгчийн удирдлага (HTML интерфэйс)
     path('users/', views.user_management, name='user_management'),

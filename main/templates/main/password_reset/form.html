@@ -1,0 +1,26 @@
+{% extends 'main/password_reset/base.html' %}
+
+{% block content %}
+<div class="bg-blue-50 rounded-lg p-3 mb-6 text-sm text-gray-700">
+    💡 Утасны дугаар эсвэл имэйл хаягаа оруулна уу. Бүртгэлтэй имэйл рүү тань нууц үг сэргээх линк илгээнэ.
+</div>
+
+<form method="POST" class="space-y-4">
+    {% csrf_token %}
+    <div>
+        <label for="id_email" class="block text-sm font-medium text-gray-700 mb-1.5">Утас / Имэйл</label>
+        <input id="id_email" name="email" type="text" required autofocus
+               value="{{ form.email.value|default:'' }}"
+               class="input-focus w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none transition"
+               placeholder="99001234">
+        {% for error in form.email.errors %}
+        <p class="mt-1 text-xs text-red-600">{{ error }}</p>
+        {% endfor %}
+    </div>
+
+    <button type="submit"
+            class="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition shadow-lg mt-2">
+        Линк илгээх
+    </button>
+</form>
+{% endblock %}

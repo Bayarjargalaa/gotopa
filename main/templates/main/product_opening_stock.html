@@ -1,0 +1,144 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Барааны эхний үлдэгдэл - Готопа{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 py-4 max-w-5xl">
+    <div class="mb-3">
+        <a href="{% url 'main:inventory_list' %}" class="text-sm text-primary hover:underline"><i class="fas fa-arrow-left mr-1"></i>Бараа материал руу</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h1 class="text-2xl font-bold text-secondary mb-1">📥 Барааны эхний үлдэгдэл</h1>
+        <p class="text-sm text-gray-600 mb-4">
+            {% if books_start_date %}<strong>{{ books_start_date|date:"Y-m-d" }}</strong>-ны өглөөний байдлаарх{% else %}Эхний{% endif %}
+            тоо ширхэг болон нэгжийн өртгийг оруулна. Одоогийн үлдэгдэл = эхний үлдэгдэл + энэ өдрөөс хойших орлого − зарлага.
+            Нэгжийн өртөг нь барааны "Худалдан авах үнэ" болж хадгалагдана.
+        </p>
+
+        <form method="post" id="openingForm">
+            {% csrf_token %}
+            <div class="flex flex-wrap items-center gap-3 mb-3">
+                <div class="relative flex-1 min-w-[220px]">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="search" id="osSearch" placeholder="Нэр, код, ангиллаар хайх..." autocomplete="off"
+                           class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm">
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" id="osOnlyActive" class="accent-primary" checked> Зөвхөн идэвхтэй
+                </label>
+            </div>
+
+            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-medium">Код</th>
+                            <th class="px-3 py-2 text-left font-medium">Нэр</th>
+                            <th class="px-3 py-2 text-left font-medium">Ангилал</th>
+                            <th class="px-3 py-2 text-right font-medium">Тоо ширхэг</th>
+                            <th class="px-3 py-2 text-right font-medium">Нэгжийн өртөг ₮</th>
+                            <th class="px-3 py-2 text-right font-medium">Дүн ₮</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in products %}
+                        <tr class="os-row hover:bg-gray-50 {% if not p.is_active %}opacity-60{% endif %}"
+                            data-search="{{ p.code }} {{ p.name }} {{ p.category.name|default:'' }}" data-active="{{ p.is_active|yesno:'1,0' }}">
+                            <td class="px-3 py-1.5 font-mono text-gray-600">{{ p.code }}</td>
+                            <td class="px-3 py-1.5 font-medium">{{ p.name }}{% if not p.is_active %} <span class="text-xs text-gray-400">(идэвхгүй)</span>{% endif %}</td>
+                            <td class="px-3 py-1.5 text-gray-600">{{ p.category.name|default:"—" }}</td>
+                            <td class="px-3 py-1.5 text-right">
+                                <input type="number" name="qty_{{ p.id|stringformat:'d' }}" min="0" step="1"
+                                       value="{{ p.initial_stock|stringformat:'d' }}"
+                                       class="os-qty w-24 px-2 py-1 border border-gray-300 rounded text-right">
+                            </td>
+                            <td class="px-3 py-1.5 text-right">
+                                <input type="number" name="cost_{{ p.id|stringformat:'d' }}" min="0" step="0.01"
+                                       value="{{ p.purchase_price|floatformat:'2u' }}"
+                                       class="os-cost w-32 px-2 py-1 border border-gray-300 rounded text-right">
+                            </td>
+                            <td class="px-3 py-1.5 text-right text-gray-700 os-value">0</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="sticky bottom-0 mt-4 bg-white border-t border-gray-200 pt-3 pb-1 flex flex-wrap items-center justify-between gap-3">
+                <div class="text-sm flex flex-wrap gap-x-5 gap-y-1">
+                    <span>Нийт: <strong id="osQty">0</strong> ш</span>
+                    <span>Нийт дүн: <strong id="osTotal" class="text-blue-700">0₮</strong></span>
+                    {% if inventory_account %}
+                    <span title="Дансны эхний үлдэгдэл (Эхний үлдэгдэл хуудаснаас)">
+                        {{ inventory_account.code }} {{ inventory_account.name }}:
+                        <strong>{{ inventory_account.opening_balance|floatformat:2 }}₮</strong>
+                        <span id="osDiff" class="ml-1"></span>
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="flex gap-2">
+                    <a href="{% url 'main:inventory_list' %}" class="px-4 py-2 rounded border border-gray-300 text-gray-700 text-sm hover:bg-gray-50">Болих</a>
+                    <button type="submit" class="px-5 py-2 rounded bg-primary text-white text-sm font-semibold hover:bg-opacity-90">
+                        <i class="fas fa-save mr-1"></i>Хадгалах
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const accountOpening = {% if inventory_account %}{{ inventory_account.opening_balance|floatformat:'2u' }}{% else %}null{% endif %};
+    const rows = Array.from(document.querySelectorAll('.os-row'));
+    const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+    function recalc() {
+        let qty = 0, total = 0;
+        rows.forEach(row => {
+            const q = parseFloat(row.querySelector('.os-qty').value) || 0;
+            const c = parseFloat(row.querySelector('.os-cost').value) || 0;
+            row.querySelector('.os-value').textContent = fmt(q * c);
+            qty += q; total += q * c;
+        });
+        document.getElementById('osQty').textContent = fmt(qty);
+        document.getElementById('osTotal').textContent = fmt(total) + '₮';
+        const diffEl = document.getElementById('osDiff');
+        if (diffEl && accountOpening !== null) {
+            const diff = Math.round((total - accountOpening) * 100) / 100;
+            diffEl.textContent = diff === 0 ? '✓ тэнцсэн' : `(зөрүү ${fmt(diff)}₮)`;
+            diffEl.className = 'ml-1 ' + (diff === 0 ? 'text-green-600' : 'text-red-600');
+        }
+    }
+
+    function filterRows() {
+        const terms = document.getElementById('osSearch').value.toLowerCase().split(/\s+/).filter(Boolean);
+        const onlyActive = document.getElementById('osOnlyActive').checked;
+        rows.forEach(row => {
+            const text = row.dataset.search.toLowerCase();
+            const ok = terms.every(t => text.includes(t)) && (!onlyActive || row.dataset.active === '1');
+            row.style.display = ok ? '' : 'none';
+        });
+    }
+
+    document.getElementById('openingForm').addEventListener('input', e => {
+        if (e.target.matches('.os-qty, .os-cost')) recalc();
+    });
+    document.getElementById('osSearch').addEventListener('input', filterRows);
+    document.getElementById('osOnlyActive').addEventListener('change', filterRows);
+    // Enter дарахад дараагийн талбар руу (санамсаргүй илгээхээс сэргийлнэ)
+    document.getElementById('openingForm').addEventListener('keydown', e => {
+        if (e.key !== 'Enter' || !e.target.matches('input[type="number"]')) return;
+        e.preventDefault();
+        const inputs = Array.from(document.querySelectorAll('.os-row:not([style*="none"]) input[type="number"]'));
+        const next = inputs[inputs.indexOf(e.target) + 1];
+        if (next) { next.focus(); next.select(); }
+    });
+    recalc();
+    filterRows();
+})();
+</script>
+{% endblock %}

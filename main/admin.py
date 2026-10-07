@@ -5,11 +5,18 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     UserProfile, Course, Enrollment, Attendance, AttendanceWeekdayTemplate,
     AttendanceTeacherSelection, TeacherAttendance, CourseTeacherAssignment,
-    UserRole, PageContent,
+    UserRole, TeacherLevel, PageContent,
     ProductCategory, Product, StockMovement,
     Account, Counterparty, Transaction, Purchase, PurchaseItem, Sale, SaleItem,
-    ChartOfAccounts, AccountingEntry, BankTransaction, CashFlowIndicator, PaymentAllocation
+    ChartOfAccounts, AccountingEntry, BankTransaction, CashFlowIndicator, PaymentAllocation,
+    FinanceSettings, AutoLinkRule, PendingPayment, PaymentCellNote, PaymentDiscount,
 )
+
+@admin.register(TeacherLevel)
+class TeacherLevelAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'sort_order', 'is_active')
+    list_editable = ('sort_order', 'is_active')
+    search_fields = ('name', 'slug')
 
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
@@ -317,7 +324,8 @@ class ProductAdmin(admin.ModelAdmin):
     )
     list_filter = ('category', 'is_active', 'unit', 'created_at')
     search_fields = ('code', 'name', 'supplier', 'description')
-    readonly_fields = ('created_at', 'updated_at', 'created_by', 'profit_margin', 'stock_value')
+    # current_stock нь модель дээрх тооцоолсон property тул зөвхөн уншигдана
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'profit_margin', 'stock_value', 'current_stock')
     date_hierarchy = 'created_at'
     
     fieldsets = (
@@ -328,10 +336,10 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('purchase_price', 'selling_price', 'profit_margin', 'unit')
         }),
         ('Агуулах', {
-            'fields': ('current_stock', 'min_stock', 'stock_value')
+            'fields': ('initial_stock', 'current_stock', 'min_stock', 'stock_value')
         }),
         ('Нийлүүлэгч', {
-            'fields': ('supplier', 'supplier_contact'),
+            'fields': ('supplier_fk', 'supplier', 'supplier_contact'),
             'classes': ('collapse',)
         }),
         ('Бусад', {
@@ -817,6 +825,32 @@ class CashFlowIndicatorAdmin(admin.ModelAdmin):
         }),
     )
 
+@admin.register(PendingPayment)
+class PendingPaymentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'year', 'month', 'amount', 'paid_date', 'method', 'is_matched', 'created_by')
+    list_filter = ('year', 'month', 'method', ('allocation', admin.EmptyFieldListFilter))
+    search_fields = ('student__mongolian_name', 'student__first_name', 'payer_name', 'comment')
+    raw_id_fields = ('allocation',)
+
+    @admin.display(boolean=True, description='Хуулгатай холбогдсон')
+    def is_matched(self, obj):
+        return obj.is_matched
+
+
+@admin.register(PaymentCellNote)
+class PaymentCellNoteAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'year', 'month', 'comment', 'color', 'updated_by', 'updated_at')
+    list_filter = ('year', 'month', 'course')
+    search_fields = ('student__mongolian_name', 'student__first_name', 'comment')
+
+
+@admin.register(PaymentDiscount)
+class PaymentDiscountAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'year', 'month', 'name', 'kind', 'value', 'created_by', 'created_at')
+    list_filter = ('year', 'month', 'course', 'kind')
+    search_fields = ('student__mongolian_name', 'student__first_name', 'name', 'comment')
+
+
 @admin.register(PaymentAllocation)
 class PaymentAllocationAdmin(admin.ModelAdmin):
     list_display = ('transaction', 'student_name', 'course', 'year', 'month', 'amount', 'created_at')
@@ -876,3 +910,27 @@ class CustomGroupAdmin(admin.ModelAdmin):
 # Unregister default Group admin and register custom one
 admin.site.unregister(Group)
 admin.site.register(Group, CustomGroupAdmin)
+
+@admin.register(FinanceSettings)
+class FinanceSettingsAdmin(admin.ModelAdmin):
+    list_display = ('books_start_date', 'updated_at', 'updated_by')
+    readonly_fields = ('legacy_opening_snapshot', 'updated_at', 'updated_by')
+
+    def has_add_permission(self, request):
+        return not FinanceSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        from .books_period import recalculate_account_balances
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+        recalculate_account_balances()
+
+
+@admin.register(AutoLinkRule)
+class AutoLinkRuleAdmin(admin.ModelAdmin):
+    list_display = ('name', 'keywords', 'direction', 'offset_account', 'cash_flow_indicator', 'auto_apply', 'priority', 'is_active')
+    list_editable = ('priority', 'is_active')
+    list_filter = ('direction', 'auto_apply', 'is_active')

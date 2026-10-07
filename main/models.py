@@ -1,7 +1,10 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import RegexValidator
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.db.models import Sum
 from django.dispatch import receiver
 from ckeditor.fields import RichTextField
@@ -16,6 +19,27 @@ class UserRole(models.TextChoices):
     TEACHER_INTERMEDIATE = 'TEACHER_INTERMEDIATE', 'Дунд шатны багш'
     TEACHER_ADVANCED = 'TEACHER_ADVANCED', 'Дээд шатны багш'
     STUDENT = 'STUDENT', 'Сурагч'
+
+
+# Django staff эрх автоматаар авах эрхүүд
+STAFF_ROLES = [UserRole.PRESIDENT, UserRole.DIRECTOR, UserRole.MANAGER, UserRole.ACCOUNTANT]
+TEACHER_ROLES = [UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
+
+
+class TeacherLevel(models.Model):
+    """Багшийн мэдээлэлд сонгож хадгалах түвшин."""
+    name = models.CharField(max_length=100, unique=True, verbose_name='Нэр')
+    slug = models.SlugField(max_length=100, unique=True, verbose_name='Код')
+    is_active = models.BooleanField(default=True, verbose_name='Идэвхтэй')
+    sort_order = models.PositiveIntegerField(default=0, verbose_name='Эрэмбэ')
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = 'Багшийн түвшин'
+        verbose_name_plural = 'Багшийн түвшнүүд'
+
+    def __str__(self):
+        return self.name
 
 class UserProfile(models.Model):
     """Хэрэглэгчийн дэлгэрэнгүй мэдээлэл"""
@@ -62,6 +86,9 @@ class UserProfile(models.Model):
     
     # Нэмэлт мэдээлэл
     photo = models.ImageField(upload_to='profiles/', verbose_name='Зураг', null=True, blank=True)
+    # Багшийн зураг static/images/багшнар/ фолдерт хадгалагдах файлын нэр
+    photo_filename = models.CharField(max_length=255, verbose_name='Зургийн файлын нэр', blank=True, default='')
+    teacher_display_order = models.PositiveIntegerField(default=9999, verbose_name='Багшийн жагсаалтын дараалал')
     notes = models.TextField(verbose_name='Тэмдэглэл', blank=True)
     
     # Багшийн зааж буй түвшин (олон утга, таслалаар тусгаарлагдсан, жишээ: "TEACHER_BEGINNER,TEACHER_INTERMEDIATE")
@@ -90,7 +117,14 @@ class UserProfile(models.Model):
             return self.mongolian_name  # Хуучин формат
         else:
             return self.user.get_full_name() or self.user.username
-    
+
+    @property
+    def name_first_display(self):
+        """Нэр эхэнд, овог ард нь (жишээ: Бат Дорж)"""
+        if self.first_name:
+            return f"{self.first_name} {self.last_name}".strip()
+        return self.full_name
+
     def __str__(self):
         return f"{self.full_name} ({self.get_role_display()})"
     
@@ -108,6 +142,12 @@ class UserProfile(models.Model):
         if not self.teacher_levels:
             return [self.role] if self.is_teacher else []
         return [lvl.strip() for lvl in self.teacher_levels.split(',') if lvl.strip()]
+
+    def get_teacher_level_names(self):
+        """Сонгосон багшийн түвшнүүдийн нэрийг буцаана."""
+        level_slugs = self.get_teacher_levels_list()
+        names = dict(TeacherLevel.objects.filter(slug__in=level_slugs).values_list('slug', 'name'))
+        return [names[slug] for slug in level_slugs if slug in names]
     
     @property
     def is_admin(self):
@@ -154,6 +194,10 @@ class Course(models.Model):
     description = models.TextField(verbose_name='Тайлбар', blank=True)
     duration_weeks = models.IntegerField(verbose_name='Үргэлжлэх хугацаа (долоо хоног)')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Үнэ (₮)')
+    monthly_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name='Сарын төлбөр (₮)',
+        help_text='Сурагчийн нэг сарын төлбөр — "Сурагчдын төлбөр" хуудсанд дутуу/бүрэн төлсөнийг тодорхойлно. 0 бол шалгахгүй.'
+    )
     
     teacher = models.ForeignKey(
         UserProfile,
@@ -578,6 +622,14 @@ class AccountingEntry(models.Model):
         related_name='accounting_entries',
         verbose_name='Борлуулалт',
     )
+    related_purchase = models.ForeignKey(
+        'Purchase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='accounting_entries',
+        verbose_name='Худалдан авалт',
+    )
 
     class Meta:
         ordering = ['-entry_date', '-entry_number']
@@ -588,35 +640,48 @@ class AccountingEntry(models.Model):
         return f"{self.entry_number} - {self.entry_date}"
     
     def save(self, *args, **kwargs):
-        """Хадгалах үед дансуудын үлдэгдэл шинэчлэх"""
+        """Хадгалах үед дансуудын үлдэгдэл шинэчлэх.
+
+        Систем эхлэх огнооноос өмнөх (архивын) бичилт дансны үлдэгдэлд нөлөөлөхгүй —
+        тэр хугацааны үлдэгдлийг эхний үлдэгдэл орлодог.
+        """
+        from .books_period import counts_in_balances
         is_new = self.pk is None
         
         if not is_new:
             # Хуучин утгыг буцаах
             old_entry = AccountingEntry.objects.get(pk=self.pk)
-            old_entry.debit_account.debit_balance -= old_entry.debit_amount
-            old_entry.debit_account.save()
-            old_entry.credit_account.credit_balance -= old_entry.credit_amount
-            old_entry.credit_account.save()
+            if counts_in_balances(old_entry.entry_date):
+                old_entry.debit_account.debit_balance -= old_entry.debit_amount
+                old_entry.debit_account.save()
+                old_entry.credit_account.credit_balance -= old_entry.credit_amount
+                old_entry.credit_account.save()
         
         super().save(*args, **kwargs)
         
         # Шинэ үлдэгдэл тооцох
-        self.debit_account.debit_balance += self.debit_amount
-        self.debit_account.save()
-        
-        self.credit_account.credit_balance += self.credit_amount
-        self.credit_account.save()
+        if counts_in_balances(self.entry_date):
+            self.debit_account.refresh_from_db(fields=['debit_balance'])
+            self.debit_account.debit_balance += self.debit_amount
+            self.debit_account.save()
+            
+            self.credit_account.refresh_from_db(fields=['credit_balance'])
+            self.credit_account.credit_balance += self.credit_amount
+            self.credit_account.save()
     
     def delete(self, *args, **kwargs):
         """Устгах үед дансуудын үлдэгдлээс дүн хасах"""
-        # Дебит дансны үлдэгдлээс хасах
-        self.debit_account.debit_balance -= self.debit_amount
-        self.debit_account.save()
-        
-        # Кредит дансны үлдэгдлээс хасах
-        self.credit_account.credit_balance -= self.credit_amount
-        self.credit_account.save()
+        from .books_period import counts_in_balances
+        if counts_in_balances(self.entry_date):
+            # Дебит дансны үлдэгдлээс хасах
+            self.debit_account.refresh_from_db(fields=['debit_balance'])
+            self.debit_account.debit_balance -= self.debit_amount
+            self.debit_account.save()
+            
+            # Кредит дансны үлдэгдлээс хасах
+            self.credit_account.refresh_from_db(fields=['credit_balance'])
+            self.credit_account.credit_balance -= self.credit_amount
+            self.credit_account.save()
         
         # Холбогдсон банкны гүйлгээний ангилал болон хуваарилалтыг цэвэрлэх
         bank_transactions = BankTransaction.objects.filter(accounting_entry=self)
@@ -775,19 +840,23 @@ class Product(models.Model):
         StockMovement-ээс автоматаар тооцогдоно
         """
         from django.db.models import Sum, Q
+        from .books_period import current_period_movements
+
+        # Систем эхлэх огнооноос хойших хөдөлгөөн л тооцогдоно (өмнөхийг эхний үлдэгдэл орлоно)
+        movements = current_period_movements(self.movements.all())
         
         # Орлого (IN, RETURN)
-        income = self.movements.filter(
+        income = movements.filter(
             movement_type__in=['IN', 'RETURN']
         ).aggregate(total=Sum('quantity'))['total'] or 0
         
         # Зарлага (OUT)
-        expense = self.movements.filter(
+        expense = movements.filter(
             movement_type='OUT'
         ).aggregate(total=Sum('quantity'))['total'] or 0
         
         # Тохируулга (ADJUSTMENT) - + эсвэл - байж болно
-        adjustment = self.movements.filter(
+        adjustment = movements.filter(
             movement_type='ADJUSTMENT'
         ).aggregate(total=Sum('quantity'))['total'] or 0
         
@@ -825,10 +894,13 @@ class StockMovement(models.Model):
     PAYMENT_METHOD_CHOICES = [
         ('CASH', 'Бэлэн'),
         ('BANK', 'Данс'),
+        ('MIXED', 'Бэлэн + Данс'),
         ('CREDIT', 'Зээлээр'),
         ('INTERNAL', 'Дотоод хэрэгцээ'),
+        ('POS', 'POS карт'),
+        ('CONVERSION', 'Бараа хувиргалт'),
     ]
-    
+
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
@@ -913,7 +985,17 @@ class StockMovement(models.Model):
         related_name='stock_movements',
         verbose_name='Борлуулалтын баримт'
     )
-    
+
+    # Худалдан авалт / бараа хувиргалтын баримт (засах, устгахад бүхэлд нь буцаахын тулд)
+    purchase = models.ForeignKey(
+        'Purchase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='stock_movements',
+        verbose_name='Худалдан авалтын баримт'
+    )
+
     notes = models.TextField(blank=True, verbose_name='Тэмдэглэл')
     
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Огноо')
@@ -980,24 +1062,56 @@ class StockMovement(models.Model):
 # SIGNALS
 # ========================================
 
+@receiver(pre_save, sender=UserProfile)
+def remember_previous_role(sender, instance, **kwargs):
+    """Хадгалахын өмнөх эрхийг санах (эрх солигдсоныг илрүүлэхэд)"""
+    instance._previous_role = None
+    if instance.pk:
+        instance._previous_role = (
+            sender.objects.filter(pk=instance.pk).values_list('role', flat=True).first()
+        )
+
+
 @receiver(post_save, sender=UserProfile)
 def update_user_staff_status(sender, instance, created, **kwargs):
     """
-    Менежер эсвэл нягтлан эрхтэй хэрэглэгчдэд автоматаар staff статус өгөх
+    Менежер, нягтлан, админ эрхтэй хэрэглэгчдэд автоматаар staff статус өгөх.
+    Эрх солигдоход (сурагч → менежер, менежер → сурагч г.м.) дагалдах
+    өөрчлөлтийг хийнэ. Түүхэн бичлэг (ирц, төлбөр) устгагдахгүй.
     """
     user = instance.user
-    
-    # Менежер, нягтлан нарт staff эрх өгөх (бараа материал удирдах эрхтэй)
-    if instance.role in [UserRole.MANAGER, UserRole.ACCOUNTANT]:
+    old_role = getattr(instance, '_previous_role', None)
+    new_role = instance.role
+
+    if new_role in STAFF_ROLES:
         if not user.is_staff:
             user.is_staff = True
-            user.save()
-    
-    # Админ эрхтэй бүх хүмүүст staff эрх өгөх
-    elif instance.is_admin:
-        if not user.is_staff:
-            user.is_staff = True
-            user.save()
+            user.save(update_fields=['is_staff'])
+
+    if created or not old_role or old_role == new_role:
+        return
+
+    # Staff эрхтэй байснаас энгийн эрх рүү шилжвэл staff эрхийг хасах
+    if old_role in STAFF_ROLES and new_role not in STAFF_ROLES and not user.is_superuser:
+        if user.is_staff:
+            user.is_staff = False
+            user.save(update_fields=['is_staff'])
+
+    # Сурагч биш болсон: идэвхтэй бүртгэлүүдийг идэвхгүй болгох (устгахгүй)
+    if old_role == UserRole.STUDENT:
+        Enrollment.objects.filter(student=instance, is_active=True).update(is_active=False)
+        UserProfile.objects.filter(pk=instance.pk).update(is_active_student=False)
+        instance.is_active_student = False
+
+    # Сурагч болсон: идэвхтэй сурагч гэж тэмдэглэх
+    if new_role == UserRole.STUDENT:
+        UserProfile.objects.filter(pk=instance.pk).update(is_active_student=True)
+        instance.is_active_student = True
+
+    # Багш биш болсон: идэвхтэй ангиудаас чөлөөлөх (дууссан ангийн түүх хэвээр)
+    if old_role in TEACHER_ROLES and new_role not in TEACHER_ROLES:
+        CourseTeacherAssignment.objects.filter(teacher=instance, course__is_active=True).delete()
+        Course.objects.filter(teacher=instance, is_active=True).update(teacher=None)
 
 
 # ========================================
@@ -1116,6 +1230,16 @@ class Counterparty(models.Model):
         limit_choices_to={'account_type': 'EXPENSE', 'is_active': True}
     )
     
+    # Сурагч/ажилтантай холбох (нэг хүн хоёр газар давхар бүртгэгдэхээс сэргийлнэ)
+    profile = models.OneToOneField(
+        'UserProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='counterparty',
+        verbose_name='Холбогдсон хэрэглэгч'
+    )
+
     is_active = models.BooleanField(default=True, verbose_name='Идэвхтэй эсэх')
     notes = models.TextField(blank=True, verbose_name='Тэмдэглэл')
     
@@ -1180,6 +1304,7 @@ class BankTransaction(models.Model):
         ('GOLOMT', 'Голомт банк'),
         ('TDB', 'Худалдаа хөгжлийн банк'),
         ('STATE', 'Төрийн банк'),
+        ('XAC', 'Хас банк'),
         ('CASH_REGISTER', 'Касс'),
         ('OTHER', 'Бусад'),
     ]
@@ -1294,6 +1419,8 @@ class BankTransaction(models.Model):
     
     # Бусад
     branch_code = models.CharField('Салбарын код', max_length=20, blank=True)
+    reference_number = models.CharField('Гүйлгээний дугаар', max_length=50, blank=True, db_index=True,
+                                        help_text='Банкны хуулгын гүйлгээний дугаар (давхардал шалгахад)')
     exchange_rate = models.DecimalField('Ханш', max_digits=10, decimal_places=4, 
                                        null=True, blank=True)
     
@@ -1353,6 +1480,16 @@ class BankTransaction(models.Model):
         reserved = self.student_allocated_amount + self.sale_allocated_amount
         remaining = self.income_amount - reserved
         return remaining if remaining > 0 else 0
+
+    @property
+    def transfer_link(self):
+        """Харилцах хоорондын шилжүүлгийн холбоос (орлого эсвэл зарлагын тал), байхгүй бол None"""
+        for attr in ('transfer_link_as_expense', 'transfer_link_as_income'):
+            try:
+                return getattr(self, attr)
+            except ObjectDoesNotExist:
+                continue
+        return None
 
 
 class IncomeCategory(models.Model):
@@ -1417,6 +1554,159 @@ class PaymentAllocation(models.Model):
     
     def __str__(self):
         return f"{self.student.mongolian_name} - {self.course.name} - {self.year}/{self.month} - {self.amount:,.0f}₮"
+
+
+class PendingPayment(models.Model):
+    """Хуулга импортлохоос өмнө "төлсөн" гэж тэмдэглэсэн сурагчийн төлбөр.
+
+    Банк/кассын гүйлгээнд ижил сурагч/анги/сарын PaymentAllocation үүсэхэд
+    автоматаар холбогдоно (allocation). Холболт цуцлагдвал дахин хүлээгдэнэ.
+    Баталгаажсан төлбөрийн дүн, журнал зөвхөн PaymentAllocation-аас тооцогдоно.
+    """
+    METHOD_CHOICES = [
+        ('BANK', 'Банкаар'),
+        ('CASH', 'Бэлнээр'),
+        ('POS', 'POS-оор'),
+        ('OTHER', 'Бусад'),
+    ]
+
+    student = models.ForeignKey(
+        'UserProfile',
+        on_delete=models.CASCADE,
+        related_name='pending_payments',
+        verbose_name='Сурагч',
+        limit_choices_to={'role': UserRole.STUDENT}
+    )
+    course = models.ForeignKey('Course', on_delete=models.CASCADE, verbose_name='Анги')
+    month = models.PositiveSmallIntegerField('Сар')
+    year = models.PositiveSmallIntegerField('Он')
+    amount = models.DecimalField('Дүн', max_digits=15, decimal_places=2)
+    paid_date = models.DateField('Төлсөн огноо')
+    method = models.CharField('Төлсөн хэлбэр', max_length=10, choices=METHOD_CHOICES, default='BANK')
+    payer_name = models.CharField('Төлөгчийн нэр/данс', max_length=255, blank=True,
+                                  help_text='Хуулгатай тааруулахад ашиглана')
+    comment = models.TextField('Тэмдэглэл', blank=True)
+    pre_start = models.BooleanField(
+        'Систем эхлэхээс өмнө төлсөн', default=False,
+        help_text='Кассын гүйлгээ, журналгүйгээр төлсөн гэж тооцно; хуулгатай холбогдохгүй'
+    )
+    allocation = models.OneToOneField(
+        PaymentAllocation,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='pending_payment',
+        verbose_name='Холбогдсон хуваарилалт'
+    )
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   verbose_name='Тэмдэглэсэн')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Хуулга хүлээж буй төлбөр'
+        verbose_name_plural = 'Хуулга хүлээж буй төлбөрүүд'
+        ordering = ['paid_date', 'id']
+
+    def __str__(self):
+        return f"{self.student} - {self.course.name} - {self.year}/{self.month} - {self.amount:,.0f}₮"
+
+    @property
+    def is_matched(self):
+        return self.allocation_id is not None
+
+
+class PaymentDiscount(models.Model):
+    """Сурагчийн тухайн анги/сарын төлбөрийн хөнгөлөлт (ж: "Эхний сар үнэгүй").
+
+    Сарын төлбөрөөс хасагдаж, төлөв, өрийг хөнгөлөлтийн дараах дүнгээр тооцно.
+    """
+    KIND_CHOICES = [
+        ('PERCENT', 'Хувь (%)'),
+        ('AMOUNT', 'Дүн (₮)'),
+    ]
+
+    student = models.ForeignKey(
+        'UserProfile',
+        on_delete=models.CASCADE,
+        related_name='payment_discounts',
+        verbose_name='Сурагч',
+        limit_choices_to={'role': UserRole.STUDENT}
+    )
+    course = models.ForeignKey('Course', on_delete=models.CASCADE, verbose_name='Анги')
+    year = models.PositiveSmallIntegerField('Он')
+    month = models.PositiveSmallIntegerField('Сар')
+    name = models.CharField('Хөнгөлөлтийн нэр', max_length=100)
+    kind = models.CharField('Төрөл', max_length=10, choices=KIND_CHOICES, default='PERCENT')
+    value = models.DecimalField('Хэмжээ', max_digits=15, decimal_places=2)
+    comment = models.TextField('Тайлбар', blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   verbose_name='Бүртгэсэн')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Төлбөрийн хөнгөлөлт'
+        verbose_name_plural = 'Төлбөрийн хөнгөлөлтүүд'
+        unique_together = ['student', 'course', 'year', 'month']
+        ordering = ['year', 'month']
+
+    def __str__(self):
+        return f"{self.student} - {self.course.name} - {self.year}/{self.month} - {self.name}"
+
+    def amount_for(self, fee):
+        """Сарын төлбөрөөс хасагдах дүн (төлбөрөөс хэтрэхгүй)."""
+        fee = fee or Decimal('0')
+        if self.kind == 'PERCENT':
+            amount = fee * self.value / Decimal('100')
+        else:
+            amount = self.value
+        return max(min(amount, fee), Decimal('0'))
+
+    @property
+    def label(self):
+        return f'{self.value:.0f}%' if self.kind == 'PERCENT' else f'{self.value:,.0f}₮'
+
+
+class PaymentCellNote(models.Model):
+    """Сурагчдын төлбөрийн хүснэгтийн нүдний (сурагч/анги/сар) тэмдэглэл, өнгө."""
+    student = models.ForeignKey(
+        'UserProfile',
+        on_delete=models.CASCADE,
+        related_name='payment_cell_notes',
+        verbose_name='Сурагч',
+        limit_choices_to={'role': UserRole.STUDENT}
+    )
+    course = models.ForeignKey('Course', on_delete=models.CASCADE, verbose_name='Анги')
+    month = models.PositiveSmallIntegerField('Сар')
+    year = models.PositiveSmallIntegerField('Он')
+    comment = models.TextField('Тэмдэглэл', blank=True)
+    color = models.CharField('Өнгө', max_length=7, blank=True, default='')
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   verbose_name='Засварласан')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Төлбөрийн нүдний тэмдэглэл'
+        verbose_name_plural = 'Төлбөрийн нүдний тэмдэглэлүүд'
+        constraints = [
+            models.UniqueConstraint(fields=['student', 'course', 'year', 'month'], name='unique_payment_cell_note'),
+        ]
+
+    def __str__(self):
+        return f"{self.student} - {self.course.name} - {self.year}/{self.month}"
+
+
+@receiver(post_save, sender=PaymentAllocation)
+def match_pending_payment(sender, instance, created, **kwargs):
+    """Шинэ хуваарилалтыг ижил сурагч/анги/сарын хүлээгдэж буй тэмдэглэлтэй холбоно."""
+    if not created:
+        return
+    pending = PendingPayment.objects.filter(
+        student_id=instance.student_id, course_id=instance.course_id,
+        year=instance.year, month=instance.month, allocation__isnull=True, pre_start=False,
+    ).first()
+    if pending:
+        pending.allocation = instance
+        pending.save(update_fields=['allocation'])
 
 
 class BankTransferLink(models.Model):
@@ -1595,7 +1885,15 @@ class Transaction(models.Model):
 
 
 class Purchase(models.Model):
-    """Худалдан авалт"""
+    """Худалдан авалт / бараа хувиргалтын баримт.
+
+    Бараанууд нь StockMovement (purchase=self): худалдан авалтад IN, хувиргалтад
+    гарц бараа IN + зарцуулсан бэлдэц OUT. Журнал нь AccountingEntry.related_purchase.
+    """
+    KIND_CHOICES = [
+        ('PURCHASE', 'Худалдан авалт'),
+        ('CONVERSION', 'Бараа хувиргалт'),
+    ]
     STATUS_CHOICES = [
         ('DRAFT', 'Ноорог'),
         ('ORDERED', 'Захиалсан'),
@@ -1611,14 +1909,18 @@ class Purchase(models.Model):
         blank=True,
         verbose_name='Худалдан авалтын дугаар'
     )
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='PURCHASE', verbose_name='Төрөл')
     supplier = models.ForeignKey(
         Counterparty,
-        on_delete=models.PROTECT,
-        limit_choices_to={'counterparty_type__in': ['SUPPLIER', 'BOTH']},
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='purchases',
         verbose_name='Нийлүүлэгч'
     )
     purchase_date = models.DateField(verbose_name='Огноо')
+    payment_method = models.CharField(max_length=20, blank=True, verbose_name='Төлбөрийн хэлбэр')
+    reference_number = models.CharField(max_length=100, blank=True, verbose_name='Баримтын дугаар')
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -1667,7 +1969,7 @@ class Purchase(models.Model):
         ordering = ['-purchase_date', '-created_at']
     
     def __str__(self):
-        return f"{self.purchase_number} - {self.supplier.name}"
+        return f"{self.purchase_number} - {self.supplier.name if self.supplier else self.get_kind_display()}"
     
     @property
     def remaining_amount(self):
@@ -1807,6 +2109,15 @@ class Sale(models.Model):
         verbose_name='Хүлээн авсан хүн',
         help_text='Борлуулалт буюу төлбөр хүлээн авсан ажилтны нэр'
     )
+    pos_bank_account = models.ForeignKey(
+        ChartOfAccounts,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pos_sales',
+        verbose_name='POS-ын банк',
+        help_text='POS картаар төлсөн бол аль банкны POS (сэттлмэнттэй тулгахад ашиглана)',
+    )
     expected_payment_method = models.CharField(
         max_length=20,
         blank=True,
@@ -1938,3 +2249,113 @@ def reset_bank_transaction_on_entry_delete(sender, instance, **kwargs):
             print(f"✓ Банкны гүйлгээ #{bank_trans.id} болон хуваарилалтууд нь устгагдах гэж байна (журнал устсан)")
     except Exception as e:
         print(f"⚠️ Signal алдаа: {str(e)}")
+
+
+# ========================================
+# САНХҮҮГИЙН ТОХИРГОО — Систем эхлэх огноо (эхний үлдэгдлийн огноо)
+# ========================================
+
+class FinanceSettings(models.Model):
+    """Санхүү, бараа материалын бүртгэл шинээр эхэлсэн огноо (ганц мөртэй).
+
+    books_start_date-ээс өмнөх гүйлгээ (банк, касс, журнал, борлуулалт, барааны
+    хөдөлгөөн) архивд орж, жагсаалт болон үлдэгдлийн тооцоонд орохгүй. Үлдэгдэл =
+    эхний үлдэгдэл (гараар оруулсан) + энэ огнооноос хойших гүйлгээ.
+    """
+    books_start_date = models.DateField(
+        'Систем эхлэх огноо', null=True, blank=True,
+        help_text='Энэ өдрөөс эхэлсэн гүйлгээ шинэ үед орно. Хоосон бол бүх гүйлгээ тооцогдоно.'
+    )
+    legacy_opening_snapshot = models.JSONField(
+        'Хуучин эхний үлдэгдэл (нөөц)', default=dict, blank=True,
+        help_text='Шинэ үе эхлэхэд тэглэсэн хуучин эхний үлдэгдлүүд'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Санхүүгийн тохиргоо'
+        verbose_name_plural = 'Санхүүгийн тохиргоо'
+
+    def __str__(self):
+        return f'Систем эхлэх огноо: {self.books_start_date or "—"}'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # ганц мөр
+        super().save(*args, **kwargs)
+        from .books_period import clear_start_date_cache
+        clear_start_date_cache()
+
+
+# ========================================
+# АВТОМАТ ХОЛБОЛТЫН ЗАГВАР — банкны гүйлгээг утгаар нь данс/үзүүлэлттэй холбох
+# ========================================
+
+class AutoLinkRule(models.Model):
+    """Утга нь заасан үгийг агуулсан банкны гүйлгээг автоматаар холбох загвар."""
+    DIRECTION_CHOICES = [
+        ('EXPENSE', 'Зарлага'),
+        ('INCOME', 'Орлого'),
+        ('ANY', 'Аль аль нь'),
+    ]
+
+    name = models.CharField('Загварын нэр', max_length=100)
+    keywords = models.TextField(
+        'Түлхүүр үгс',
+        help_text='Таслал эсвэл шинэ мөрөөр тусгаарлана. Аль нэг нь утга/харилцагчийн нэрэнд байвал таарна (том/жижиг үсэг ялгахгүй).'
+    )
+    direction = models.CharField('Чиглэл', max_length=10, choices=DIRECTION_CHOICES, default='EXPENSE')
+    bank_account = models.ForeignKey(
+        ChartOfAccounts, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name='Зөвхөн энэ банк', help_text='Хоосон бол бүх банк'
+    )
+    amount_min = models.DecimalField('Дүн (доод)', max_digits=15, decimal_places=2, null=True, blank=True)
+    amount_max = models.DecimalField('Дүн (дээд)', max_digits=15, decimal_places=2, null=True, blank=True)
+
+    offset_account = models.ForeignKey(
+        ChartOfAccounts, on_delete=models.PROTECT, related_name='+', verbose_name='Эсрэг данс'
+    )
+    cash_flow_indicator = models.ForeignKey(
+        'CashFlowIndicator', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name='Мөнгөн гүйлгээний үзүүлэлт'
+    )
+    income_type = models.CharField('Орлогын төрөл', max_length=50, blank=True)
+
+    auto_apply = models.BooleanField(
+        'Импортлох үед шууд холбох', default=False,
+        help_text='Асаалттай бол хуулга импортлоход шалгалтгүйгээр холбогдоно (банкны шимтгэл гэх мэт найдвартай загварт).'
+    )
+    priority = models.PositiveIntegerField('Эрэмбэ', default=100, help_text='Бага тоо нь түрүүлж шалгагдана')
+    is_active = models.BooleanField('Идэвхтэй', default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['priority', 'id']
+        verbose_name = 'Автомат холболтын загвар'
+        verbose_name_plural = 'Автомат холболтын загварууд'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def keyword_list(self):
+        import re
+        return [k.strip().lower() for k in re.split(r'[,\n;]+', self.keywords or '') if k.strip()]
+
+    def matches(self, tx):
+        """Гүйлгээ энэ загварт таарах эсэх."""
+        if self.direction == 'EXPENSE' and not tx.expense_amount > 0:
+            return False
+        if self.direction == 'INCOME' and not tx.income_amount > 0:
+            return False
+        if self.bank_account_id and tx.bank_account_id != self.bank_account_id:
+            return False
+        amount = tx.income_amount if tx.income_amount > 0 else tx.expense_amount
+        if self.amount_min is not None and amount < self.amount_min:
+            return False
+        if self.amount_max is not None and amount > self.amount_max:
+            return False
+        text = f'{tx.description or ""} {tx.counterparty_name or ""}'.lower()
+        return any(k in text for k in self.keyword_list)

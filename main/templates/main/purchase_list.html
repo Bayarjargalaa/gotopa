@@ -6,6 +6,7 @@
 {% block content %}
 <div class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4">
+        {% include 'main/includes/archive_toggle.html' %}
         <!-- Буцах товч -->
         <div class="mb-4">
             <a href="{% url 'main:finance_dashboard' %}" class="text-primary hover:underline">← Санхүү руу буцах</a>
@@ -15,10 +16,16 @@
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-3xl font-bold text-secondary">Худалдан авалтын жагсаалт</h2>
-                <a href="{% url 'main:purchase_create' %}" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                    <i class="fas fa-arrow-down"></i>
-                    Шинэ худалдан авалт
-                </a>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'main:purchase_create_multi' %}?mode=conversion" class="bg-amber-600 text-white px-5 py-3 rounded-lg hover:bg-amber-700 flex items-center gap-2">
+                        <i class="fas fa-sync-alt"></i>
+                        Бараа хувиргалт
+                    </a>
+                    <a href="{% url 'main:purchase_create_multi' %}" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                        <i class="fas fa-arrow-down"></i>
+                        Шинэ худалдан авалт
+                    </a>
+                </div>
             </div>
 
             <!-- Статистик -->
@@ -34,7 +41,7 @@
             </div>
 
             <!-- Шүүлтүүр -->
-            <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">{% if archive_mode %}<input type="hidden" name="archive" value="1">{% endif %}
                 <input type="text" name="supplier" value="{{ request.GET.supplier }}" placeholder="Нийлүүлэгч хайх" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary">
                 
                 <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="Эхлэх огноо">
@@ -81,11 +88,18 @@
                         {% for purchase in purchases %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3 text-sm font-medium">{{ purchase.id }}</td>
-                            <td class="px-4 py-3 text-sm">{{ purchase.created_at|date:"Y-m-d H:i" }}</td>
-                            <td class="px-4 py-3 text-sm font-medium">{{ purchase.product.name }}</td>
+                            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                                {% if purchase.purchase %}{{ purchase.purchase.purchase_date|date:"Y-m-d" }}{% else %}{{ purchase.created_at|date:"Y-m-d H:i" }}{% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm font-medium">
+                                {{ purchase.product.name }}
+                                {% if purchase.purchase %}<div class="text-xs font-normal text-gray-400 font-mono">{{ purchase.purchase.purchase_number }}</div>{% endif %}
+                            </td>
                             <td class="px-4 py-3 text-sm">
                                 {% if purchase.counterparty %}
                                     {{ purchase.counterparty.name }}
+                                {% elif purchase.payment_method == 'CONVERSION' %}
+                                    <span class="text-amber-700 text-xs">Өөрсдөө хийсэн</span>
                                 {% else %}
                                     <span class="text-gray-400">-</span>
                                 {% endif %}
@@ -106,9 +120,17 @@
                                 <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
                                     Зээлээр
                                 </span>
+                                {% elif purchase.payment_method == 'MIXED' %}
+                                <span class="inline-block bg-teal-100 text-teal-800 px-2 py-1 rounded text-xs font-medium">
+                                    Бэлэн + Данс
+                                </span>
+                                {% elif purchase.payment_method == 'CONVERSION' %}
+                                <span class="inline-block bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-medium" title="Бэлдэцээс хийсэн — нэгж үнэ нь өртөг">
+                                    🔄 Бараа хувиргалт
+                                </span>
                                 {% endif %}
                             </td>
-                            <td class="px-4 py-3 text-sm text-gray-600">{{ purchase.created_by.username }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600" title="{{ purchase.created_by.username }}">{{ purchase.creator_name }}</td>
                             <td class="px-4 py-3">
                                 <div class="flex items-center justify-center gap-2">
                                     <a href="{% url 'main:purchase_edit' purchase.id %}" class="text-blue-600 hover:text-blue-800" title="Засах">
@@ -128,7 +150,7 @@
                         <tr>
                             <td colspan="10" class="px-4 py-8 text-center text-gray-500">
                                 <p class="mb-4">Худалдан авалт олдсонгүй</p>
-                                <a href="{% url 'main:purchase_create' %}" class="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
+                                <a href="{% url 'main:purchase_create_multi' %}" class="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
                                     <i class="fas fa-arrow-down mr-2"></i>Шинэ худалдан авалт үүсгэх
                                 </a>
                             </td>
@@ -153,6 +175,8 @@
             <h3 class="font-bold text-blue-800 mb-2">💡 Санамж</h3>
             <ul class="text-sm text-blue-700 space-y-1">
                 <li>• Худалдан авалт үүсгэхдээ барааны тоо ширхэг автоматаар нэмэгдэнэ</li>
+                <li>• Олон бараатай худалдан авалт нэг баримт (PUR-...) болно — засах, устгахад бүх бараа, журнал, кассын бичлэг хамт өөрчлөгдөнө</li>
+                <li>• Бараа хувиргалт: бэлдэцээс (ж: лав, зулай) хийсэн бараа орлого болж, зарцуулсан бэлдэц үлдэгдлээс хасагдана. Нийт дүнд тооцохгүй</li>
                 <li>• Төлбөр төлөхдөө дансны үлдэгдэл шинэчлэгдэнэ</li>
                 <li>• Өр хэмжээ автоматаар тооцоологдоно</li>
             </ul>

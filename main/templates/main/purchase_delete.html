@@ -1,49 +1,56 @@
 {% extends 'main/base.html' %}
 {% load static %}
 
-{% block title %}Худалдан авалт устгах - Готопа{% endblock %}
+{% block title %}{{ purchase.get_kind_display }} устгах - Готопа{% endblock %}
 
 {% block content %}
 <div class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4 max-w-2xl">
-        <!-- Буцах товч -->
         <div class="mb-4">
             <a href="{% url 'main:purchase_list' %}" class="text-primary hover:underline">← Жагсаалт руу буцах</a>
         </div>
 
-        <!-- Гарчиг -->
         <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-3xl font-bold text-red-600 mb-6">🗑️ Худалдан авалт устгах</h2>
+            <h2 class="text-3xl font-bold text-red-600 mb-1">🗑️ {{ purchase.get_kind_display }} устгах</h2>
+            <p class="text-sm text-gray-500 mb-6 font-mono">{{ purchase.purchase_number }} · {{ purchase.purchase_date|date:"Y-m-d" }}</p>
 
-            <!-- Мэдээлэл -->
-            <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
-                <h3 class="font-bold text-red-800 mb-4">Та энэ худалдан авалтыг устгахдаа итгэлтэй байна уу?</h3>
-                
-                <div class="space-y-2 text-sm text-red-700">
-                    <p><strong>Бараа:</strong> {{ movement.product.name }}</p>
-                    <p><strong>Тоо ширхэг:</strong> {{ movement.quantity }}</p>
-                    <p><strong>Нэгж үнэ:</strong> {{ movement.price|floatformat:0 }}₮</p>
-                    <p><strong>Нийт дүн:</strong> {{ movement.total_amount|floatformat:0 }}₮</p>
-                    <p><strong>Огноо:</strong> {{ movement.created_at|date:"Y-m-d H:i" }}</p>
-                    {% if movement.counterparty %}
-                    <p><strong>Нийлүүлэгч:</strong> {{ movement.counterparty.name }}</p>
-                    {% endif %}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-5 mb-6">
+                <h3 class="font-bold text-red-800 mb-3">Энэ баримтыг бүхэлд нь устгахдаа итгэлтэй байна уу?</h3>
+                <div class="space-y-1 text-sm text-red-700 mb-3">
+                    {% if purchase.supplier %}<p><strong>Нийлүүлэгч:</strong> {{ purchase.supplier.name }}</p>{% endif %}
+                    <p><strong>{% if purchase.kind == 'CONVERSION' %}Бэлдэцийн өртөг{% else %}Нийт дүн{% endif %}:</strong> {{ purchase.total_amount|floatformat:0 }}₮</p>
                 </div>
+                <table class="w-full text-sm">
+                    <thead><tr class="text-left text-xs text-red-600 uppercase">
+                        <th class="py-1">Бараа</th><th class="py-1 text-center">Тоо</th><th class="py-1 text-right">Дүн</th>
+                    </tr></thead>
+                    <tbody class="text-red-800">
+                    {% for m in movements %}
+                        <tr class="border-t border-red-100">
+                            <td class="py-1">{% if m.movement_type == 'OUT' %}<span class="text-xs text-amber-700">бэлдэц −</span> {% endif %}{{ m.product.name }}</td>
+                            <td class="py-1 text-center">{{ m.quantity }}</td>
+                            <td class="py-1 text-right">{{ m.total_amount|floatformat:0 }}₮</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
             </div>
 
-            <!-- Анхааруулга -->
             <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <p class="text-sm text-yellow-800">
-                    <strong>⚠️ Анхаар:</strong> Устгахад:
-                </p>
+                <p class="text-sm text-yellow-800"><strong>⚠️ Анхаар:</strong> Устгахад:</p>
                 <ul class="list-disc list-inside text-sm text-yellow-700 mt-2 space-y-1">
-                    <li>Бараа материалын үлдэгдэл {{ movement.quantity }} ширхгээр буурна</li>
-                    <li>Журналын бичилт устгагдана</li>
+                    {% if purchase.kind == 'CONVERSION' %}
+                    <li>Хийсэн барааны үлдэгдэл буурч, зарцуулсан бэлдэцийн үлдэгдэл буцаж нэмэгдэнэ</li>
+                    {% else %}
+                    <li>Бүх барааны үлдэгдэл энэ худалдан авалтын тоогоор буурна</li>
+                    {% endif %}
+                    {% if entries %}<li>Журналын {{ entries|length }} бичилт устгагдана{% if auto_cash_count %}, автоматаар үүссэн кассын зарлага устгагдана{% endif %}</li>{% endif %}
+                    {% if purchase.payment_method == 'CREDIT' and purchase.supplier %}<li>Нийлүүлэгчийн өглөг {{ purchase.total_amount|floatformat:0 }}₮-өөр буурна</li>{% endif %}
+                    <li>Холбосон банкны гүйлгээ устахгүй — холбоогүй болж дахин холбох боломжтой болно</li>
                     <li>Энэ үйлдлийг буцаах боломжгүй!</li>
                 </ul>
             </div>
 
-            <!-- Товчнууд -->
             <form method="post" class="flex gap-4">
                 {% csrf_token %}
                 <button type="submit" class="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium">

@@ -1,0 +1,66 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Багшийн түвшин удирдах - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4 max-w-4xl">
+        <div class="mb-4">
+            <a href="{% url 'main:teacher_manage_list' %}" class="text-primary hover:underline">← Багшийн удирдлага руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-3xl font-bold text-secondary mb-6">Багшийн түвшин удирдах</h2>
+
+            <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-8">
+                {% csrf_token %}
+                <input type="hidden" name="level_id" id="level_id">
+                <input type="text" name="name" id="level_name" required placeholder="Түвшний нэр" class="md:col-span-2 px-4 py-2 border border-gray-300 rounded-lg">
+                <input type="number" name="sort_order" id="level_order" min="0" value="0" placeholder="Эрэмбэ" class="px-4 py-2 border border-gray-300 rounded-lg">
+                <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90">Хадгалах</button>
+            </form>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs text-gray-500 uppercase">Нэр</th>
+                            <th class="px-4 py-3 text-left text-xs text-gray-500 uppercase">Төлөв</th>
+                            <th class="px-4 py-3 text-left text-xs text-gray-500 uppercase">Эрэмбэ</th>
+                            <th class="px-4 py-3 text-right text-xs text-gray-500 uppercase">Үйлдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for level in levels %}
+                        <tr>
+                            <td class="px-4 py-3 font-medium">{{ level.name }}</td>
+                            <td class="px-4 py-3 text-sm {% if level.is_active %}text-green-600{% else %}text-gray-400{% endif %}">{% if level.is_active %}Идэвхтэй{% else %}Устгасан{% endif %}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ level.sort_order }}</td>
+                            <td class="px-4 py-3 text-right">
+                                <button type="button" onclick="editLevel('{{ level.id }}', '{{ level.name|escapejs }}', '{{ level.sort_order }}')" class="text-primary mr-3">Засах</button>
+                                {% if level.is_active %}
+                                <form method="post" action="{% url 'main:teacher_level_delete' level.id %}" class="inline" onsubmit="return confirm('Энэ түвшнийг устгах уу?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-red-600">Устгах</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Түвшин бүртгэгдээгүй байна.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function editLevel(id, name, order) {
+    document.getElementById('level_id').value = id;
+    document.getElementById('level_name').value = name;
+    document.getElementById('level_order').value = order;
+    document.getElementById('level_name').focus();
+}
+</script>
+{% endblock %}

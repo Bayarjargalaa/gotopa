@@ -83,6 +83,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'main.context_processors.page_content_processor',
+                'main.context_processors.books_period_processor',
             ],
         },
     },
@@ -147,12 +148,28 @@ AUTHENTICATION_BACKENDS = [
 LOGIN_URL = 'main:login'
 LOGIN_REDIRECT_URL = 'main:dashboard'
 LOGOUT_REDIRECT_URL = 'main:home'
+
+# Имэйл (нууц үг сэргээх). EMAIL_HOST_USER тохируулаагүй бол имэйлийг консолд хэвлэнэ.
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST_USER
+    else 'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_TIMEOUT = 20
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', f'Готопа <{EMAIL_HOST_USER or "noreply@gotopa.com"}>')
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24  # Сэргээх линк 1 өдөр хүчинтэй
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+TEACHER_PHOTO_DIR = BASE_DIR / 'static' / 'images' / 'багшнар'
 
 # Media files
 MEDIA_URL = '/media/'

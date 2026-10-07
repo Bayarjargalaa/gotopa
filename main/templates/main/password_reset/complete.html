@@ -1,0 +1,12 @@
+{% extends 'main/password_reset/base.html' %}
+
+{% block content %}
+<div class="text-center space-y-4 text-sm text-gray-700">
+    <div class="text-4xl">✅</div>
+    <p>Нууц үг амжилттай солигдлоо. Шинэ нууц үгээрээ нэвтэрнэ үү.</p>
+    <a href="{% url 'main:login' %}"
+       class="inline-block w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-opacity-90 transition shadow-lg">
+        Нэвтрэх
+    </a>
+</div>
+{% endblock %}

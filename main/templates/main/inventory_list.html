@@ -4,177 +4,222 @@
 {% block title %}Бараа материалын бүртгэл - Готопа{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="container mx-auto px-3 sm:px-4 py-4">
     <!-- Гарчиг ба товчнууд -->
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-secondary">📦 Бараа материалын бүртгэл</h1>
-        <div class="flex gap-2">
-            <a href="{% url 'main:purchase_create_multi' %}" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all font-bold">
-                ⬇ Худалдан авалт
-            </a>
-            <a href="{% url 'main:stock_free_intake' %}" class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition-all font-bold">
-                ➕ Үнэгүй орлогодох
-            </a>
-            <a href="{% url 'main:stock_free_outgoing' %}" class="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-all font-bold">
-                ➖ Үнэгүй зарлагадах
-            </a>
-            <a href="{% url 'main:sale_create_multi' %}" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-all font-bold">
-                ⬆ Борлуулалт бүртгэх (Олон бараа)
-            </a>
-            <a href="{% url 'main:product_create' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition-all font-bold">
-                + Бараа нэмэх
-            </a>
-
-            <a href="{% url 'main:inventory_cost_calculation' %}" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-all font-bold">
-                📊 Өртөг бодолт
-            </a>
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+        <h1 class="text-2xl font-bold text-secondary">📦 Бараа материалын бүртгэл</h1>
+        <div class="flex flex-wrap gap-2 text-sm">
+            <a href="{% url 'main:purchase_create_multi' %}" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-semibold">⬇ Худалдан авалт</a>
+            <a href="{% url 'main:sale_create_multi' %}" class="bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 font-semibold">⬆ Борлуулалт</a>
+            <a href="{% url 'main:stock_free_intake' %}" class="bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600 font-semibold">➕ Үнэгүй орлого</a>
+            <a href="{% url 'main:stock_free_outgoing' %}" class="bg-orange-600 text-white px-3 py-1.5 rounded-lg hover:bg-orange-700 font-semibold">➖ Үнэгүй зарлага</a>
+            <a href="{% url 'main:product_opening_stock' %}" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 font-semibold">📥 Эхний үлдэгдэл</a>
+            <a href="{% url 'main:inventory_cost_calculation' %}" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 font-semibold">📊 Өртөг бодолт</a>
+            <a href="{% url 'main:product_create' %}" class="bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-opacity-90 font-semibold">+ Бараа нэмэх</a>
         </div>
     </div>
 
-    <!-- Статистик -->
-    <div class="grid md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <p class="text-gray-600 text-sm">Нийт бүтээгдэхүүн</p>
-            <p class="text-3xl font-bold text-primary">{{ total_products }}</p>
+    <!-- ===== Шүүлт ===== -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+            <div class="relative flex-1 min-w-[220px]">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input type="search" id="invSearch" autocomplete="off" placeholder="Нэр, код, нийлүүлэгч, ангиллаар хайх...  ( / )"
+                       class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+            </div>
+
+            <!-- Үлдэгдэл -->
+            <div class="seg" data-filter="stock" role="radiogroup" aria-label="Үлдэгдэл">
+                <button type="button" data-value="">Бүгд</button>
+                <button type="button" data-value="in">Үлдэгдэлтэй <b data-count="stock:in"></b></button>
+                <button type="button" data-value="low" data-hide-empty>Бага <b data-count="stock:low" class="text-amber-600"></b></button>
+                <button type="button" data-value="out">Дууссан <b data-count="stock:out" class="text-red-600"></b></button>
+            </div>
+
+            <!-- Идэвхтэй эсэх -->
+            <div class="seg" data-filter="active" role="radiogroup" aria-label="Идэвхтэй эсэх">
+                <button type="button" data-value="">Идэвхтэй</button>
+                <button type="button" data-value="inactive">Идэвхгүй <b data-count="active:inactive"></b></button>
+                <button type="button" data-value="all">Бүгд</button>
+            </div>
+
+            {% if suppliers %}
+            <select id="invSupplier" class="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white" aria-label="Нийлүүлэгч">
+                <option value="">🚚 Бүх нийлүүлэгч</option>
+                {% for s in suppliers %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+            {% endif %}
+
         </div>
-        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-400">
-            <p class="text-gray-600 text-sm">Эхний үлдэгдлийн дүн</p>
-            <p class="text-2xl font-bold text-blue-700">{{ total_initial_value|floatformat:0 }}₮</p>
-            <p class="text-xs text-gray-400 mt-1">= Дансны бараа материалын эхний үлдэгдэл</p>
+
+        <!-- Үнэ / үлдэгдлийн нөхцөл -->
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-500"><i class="fas fa-filter mr-1"></i>Нөхцөл:</span>
+            <div id="invConds" class="contents"></div>
+            <button type="button" id="invAddCond"
+                    class="text-xs px-2.5 py-1 rounded-full border border-dashed border-gray-400 text-gray-600 hover:border-primary hover:text-primary">
+                <i class="fas fa-plus mr-1"></i>Үнэ / үлдэгдлээр шүүх
+            </button>
         </div>
-        <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-400">
-            <p class="text-gray-600 text-sm">Дундаж өртөгөөр үлдэгдэл</p>
-            <p class="text-2xl font-bold text-purple-700">{{ total_avg_stock_value|floatformat:0 }}₮</p>
-            <p class="text-xs text-gray-400 mt-1">Дундаж өртөг × одоогийн үлдэгдэл</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <p class="text-gray-600 text-sm">Үлдэгдэл бага</p>
-            <p class="text-3xl font-bold text-red-600">{{ low_stock_count }}</p>
+
+        <!-- Ангилал -->
+        <div class="flex flex-wrap items-center gap-1.5" id="invCategories">
+            <span class="text-xs text-gray-500 mr-1"><i class="fas fa-tags mr-1"></i>Ангилал:</span>
+            <button type="button" class="cat-pill" data-value="">Бүгд <b data-count="cat:"></b></button>
+            {% for cat in categories %}
+            <button type="button" class="cat-pill" data-value="{{ cat.id|stringformat:'d' }}">{{ cat.name }} <b data-count="cat:{{ cat.id|stringformat:'d' }}"></b></button>
+            {% endfor %}
+            {% if has_uncategorized %}
+            <button type="button" class="cat-pill" data-value="none">Ангилалгүй <b data-count="cat:none"></b></button>
+            {% endif %}
+                <select id="invSort" class="ml-auto px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white" aria-label="Эрэмбэлэх">
+                    <option value="name">↕ Нэрээр (А–Я)</option>
+                    <option value="code">Кодоор</option>
+                    <option value="stock_desc">Үлдэгдэл: ихээс бага</option>
+                    <option value="stock_asc">Үлдэгдэл: багаас их</option>
+                    <option value="value_desc">Үлдэгдлийн дүн: их</option>
+                    <option value="price_desc">Борлуулах үнэ: их</option>
+                    <option value="price_asc">Борлуулах үнэ: бага</option>
+                </select>
         </div>
     </div>
 
-    <!-- Хайлт ба шүүлт -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <form method="GET" class="grid md:grid-cols-4 gap-4">
-            <div>
-                <label class="block text-sm font-medium mb-2">Хайх</label>
-                <input type="text" name="q" value="{{ query }}" placeholder="Нэр, код, нийлүүлэгч..." 
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-            </div>
-            <div>
-                <label class="block text-sm font-medium mb-2">Ангилал</label>
-                <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                    <option value="">Бүгд</option>
-                    {% for cat in categories %}
-                    <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>
-                        {{ cat.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label class="block text-sm font-medium mb-2">Төлөв</label>
-                <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                    <option value="">Бүгд</option>
-                    <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Идэвхтэй</option>
-                    <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Идэвхгүй</option>
-                    <option value="low_stock" {% if selected_status == 'low_stock' %}selected{% endif %}>Үлдэгдэл бага</option>
-                </select>
-            </div>
-            <div class="flex items-end">
-                <button type="submit" class="w-full bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90">
-                    🔍 Хайх
-                </button>
-            </div>
-        </form>
+    <!-- Идэвхтэй шүүлт + нийт -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div class="flex flex-wrap items-center gap-1.5" id="invChips"></div>
+        <div class="text-sm text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+            <span><strong class="text-gray-800" id="sumCount">0</strong> бараа</span>
+            <span>Үлдэгдэл: <strong class="text-green-700" id="sumQty">0</strong> ш</span>
+            <span title="Дансны бараа материалын эхний үлдэгдэл">Эхний үлдэгдлийн дүн: <strong class="text-blue-700" id="sumInitial">0₮</strong></span>
+            <span title="Дундаж өртөг × одоогийн үлдэгдэл">Дундаж өртгөөр: <strong class="text-purple-700" id="sumAvg">0₮</strong></span>
+        </div>
     </div>
 
     <!-- Бүтээгдэхүүний жагсаалт -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-sm font-semibold">Код</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold">Нэр</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold">Ангилал</th>
-                        <th class="px-4 py-3 text-right text-sm font-semibold">Худалдан авах үнэ</th>
-                        <th class="px-4 py-3 text-right text-sm font-semibold text-purple-700">Дундаж өртөг</th>
-                        <th class="px-4 py-3 text-right text-sm font-semibold">Борлуулах үнэ</th>
-                        <th class="px-4 py-3 text-center text-sm font-semibold">Үлдэгдэл</th>
-                        <th class="px-4 py-3 text-center text-sm font-semibold">Нэгж</th>
-                        <th class="px-4 py-3 text-center text-sm font-semibold">Төлөв</th>
-                        <th class="px-4 py-3 text-center text-sm font-semibold">Үйлдэл</th>
+                <thead class="bg-gray-50 border-b">
+                    <tr class="text-xs text-gray-500 uppercase">
+                        <th class="px-4 py-3 text-left font-medium">Код</th>
+                        <th class="px-4 py-3 text-left font-medium">Нэр</th>
+                        <th class="px-4 py-3 text-left font-medium">Ангилал</th>
+                        <th class="px-4 py-3 text-right font-medium">Худалдан авах үнэ</th>
+                        <th class="px-4 py-3 text-right font-medium text-purple-700">Дундаж өртөг</th>
+                        <th class="px-4 py-3 text-right font-medium">Борлуулах үнэ</th>
+                        <th class="px-4 py-3 text-center font-medium">Үлдэгдэл</th>
+                        <th class="px-4 py-3 text-right font-medium">Үлдэгдлийн дүн</th>
+                        <th class="px-4 py-3 text-center font-medium">Үйлдэл</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="invBody" class="divide-y divide-gray-100">
                     {% for product in products %}
-                    <tr class="border-t hover:bg-gray-50">
-                        <td class="px-4 py-3 text-sm font-mono">{{ product.code }}</td>
-                        <td class="px-4 py-3">
-                            <div class="font-semibold">{{ product.name }}</div>
-                            {% if product.supplier %}
-                            <div class="text-xs text-gray-500">{{ product.supplier }}</div>
-                            {% endif %}
+                    <tr class="inv-row hover:bg-gray-50 {% if not product.is_active %}opacity-60{% endif %}"
+                        data-search="{{ product.code }} {{ product.name }} {{ product.supplier_label }} {{ product.category.name|default:'' }}"
+                        data-name="{{ product.name }}"
+                        data-code="{{ product.code }}"
+                        data-category="{% if product.category_id %}{{ product.category_id|stringformat:'d' }}{% else %}none{% endif %}"
+                        data-supplier="{{ product.supplier_label }}"
+                        data-active="{{ product.is_active|yesno:'1,0' }}"
+                        data-stock-state="{{ product.stock_state }}"
+                        data-stock="{{ product.stock_qty|stringformat:'d' }}"
+                        data-price="{{ product.selling_price|floatformat:'2u' }}"
+                        data-purchase="{{ product.purchase_price|floatformat:'2u' }}"
+                        data-avg-cost="{{ product.avg_cost|floatformat:'2u' }}"
+                        data-initial-value="{{ product.initial_value|floatformat:'2u' }}"
+                        data-avg-value="{{ product.avg_stock_value|floatformat:'2u' }}">
+                        <td class="px-4 py-2.5 text-sm font-mono text-gray-600">{{ product.code }}</td>
+                        <td class="px-4 py-2.5">
+                            <div class="font-semibold text-gray-900">{{ product.name }}
+                                {% if not product.is_active %}<span class="ml-1 text-[11px] font-normal px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">Идэвхгүй</span>{% endif %}
+                            </div>
+                            {% if product.supplier_label %}<div class="text-xs text-gray-500">{{ product.supplier_label }}</div>{% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm">{{ product.category.name|default:"-" }}</td>
-                        <td class="px-4 py-3 text-right text-sm">{{ product.purchase_price|floatformat:0 }}₮</td>
-                        <td class="px-4 py-3 text-right text-sm font-semibold text-purple-700">
+                        <td class="px-4 py-2.5 text-sm">{{ product.category.name|default:"—" }}</td>
+                        <td class="px-4 py-2.5 text-right text-sm">{{ product.purchase_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-2.5 text-right text-sm font-semibold text-purple-700">
                             {{ product.avg_cost|floatformat:0 }}₮
-                            {% if product.avg_cost != product.purchase_price %}
-                            <div class="text-xs font-normal text-gray-400">өөрчлөгдсән</div>
+                            {% if product.qty_purchased and product.avg_cost != product.purchase_price %}
+                            <div class="text-xs font-normal text-gray-400">өөрчлөгдсөн</div>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-right text-sm">{{ product.selling_price|floatformat:0 }}₮</td>
-                        <td class="px-4 py-3 text-center">
-                            {% if product.is_low_stock %}
-                            <span class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-bold">
-                                ⚠️ {{ product.current_stock }}
-                            </span>
+                        <td class="px-4 py-2.5 text-right text-sm">{{ product.selling_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-2.5 text-center whitespace-nowrap">
+                            {% if product.stock_state == 'out' %}
+                            <span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-sm font-bold">⚠️ {{ product.stock_qty }}</span>
+                            {% elif product.stock_state == 'low' %}
+                            <span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-sm font-bold">{{ product.stock_qty }}</span>
                             {% else %}
-                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-bold">
-                                {{ product.current_stock }}
-                            </span>
+                            <span class="bg-green-100 text-green-800 px-2 py-0.5 rounded text-sm font-bold">{{ product.stock_qty }}</span>
                             {% endif %}
+                            <span class="text-xs text-gray-400 ml-0.5">{{ product.get_unit_display }}</span>
                         </td>
-                        <td class="px-4 py-3 text-center text-sm">{{ product.get_unit_display }}</td>
-                        <td class="px-4 py-3 text-center">
-                            {% if product.is_active %}
-                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Идэвхтэй</span>
-                            {% else %}
-                            <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">Идэвхгүй</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-3 text-center">
-                            <a href="{% url 'main:product_edit' product.id %}" class="text-primary hover:text-opacity-80 mr-2">✏️ Засах</a>
-                            <button onclick="openInitialStockModal({{ product.id }}, '{{ product.name }}', {{ product.current_stock }}, {{ product.initial_stock }})" 
-                                    class="text-blue-600 hover:text-blue-800">
-                                📊 Үлдэгдэл
-                            </button>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="10" class="px-4 py-8 text-center text-gray-500">
-                            Бүтээгдэхүүн олдсонгүй.
+                        <td class="px-4 py-2.5 text-right text-sm text-gray-700">{{ product.avg_stock_value|floatformat:0 }}₮</td>
+                        <td class="px-4 py-2.5 text-center whitespace-nowrap text-sm">
+                            <a href="{% url 'main:product_edit' product.id %}" class="text-primary hover:underline mr-2">✏️ Засах</a>
+                            <button type="button"
+                                    onclick="openInitialStockModal({{ product.id }}, '{{ product.name|escapejs }}', {{ product.stock_qty }}, {{ product.initial_stock }})"
+                                    class="text-blue-600 hover:underline">📊 Үлдэгдэл</button>
                         </td>
                     </tr>
                     {% endfor %}
+                    <tr id="invEmpty" class="hidden">
+                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                            {% if products %}
+                                Шүүлтэд тохирох бараа олдсонгүй. <button type="button" class="text-primary hover:underline" onclick="invResetFilters()">Шүүлтийг цэвэрлэх</button>
+                            {% else %}
+                                Бүтээгдэхүүн олдсонгүй. <a href="{% url 'main:product_create' %}" class="text-primary hover:underline">Бараа нэмэх</a>
+                            {% endif %}
+                        </td>
+                    </tr>
                 </tbody>
-                <tfoot class="bg-gray-100 border-t-2 border-gray-300">
+                <tfoot class="bg-gray-50 border-t-2 border-gray-200 text-sm font-bold">
                     <tr>
-                        <td colspan="3" class="px-4 py-3 text-sm font-bold text-gray-700">Нийт {{ total_products }} бараа</td>
-                        <td class="px-4 py-3 text-right text-sm font-bold text-blue-700">{{ total_initial_value|floatformat:0 }}₮<div class="text-xs font-normal text-gray-400">{{ total_initial_quantity }} ширхэг • эхний үлдэгдэл</div></td>
-                        <td class="px-4 py-3 text-right text-sm font-bold text-purple-700">{{ total_avg_stock_value|floatformat:0 }}₮<div class="text-xs font-normal text-gray-400">дундаж өртөгөөр</div></td>
-                        <td class="px-4 py-3"></td>
-                        <td class="px-4 py-3 text-center text-sm font-bold text-green-700">{{ total_current_quantity }} ширхэг<div class="text-xs font-normal text-gray-400">одоогийн үлдэгдэл</div></td>
-                        <td colspan="3" class="px-4 py-3"></td>
+                        <td colspan="4" class="px-4 py-3 text-gray-700">Нийт <span id="footCount">0</span> бараа</td>
+                        <td class="px-4 py-3 text-right text-blue-700" colspan="2">
+                            <span id="footInitial">0₮</span>
+                            <div class="text-xs font-normal text-gray-400">эхний үлдэгдлийн дүн</div>
+                        </td>
+                        <td class="px-4 py-3 text-center text-green-700"><span id="footQty">0</span> ш</td>
+                        <td class="px-4 py-3 text-right text-purple-700">
+                            <span id="footAvg">0₮</span>
+                            <div class="text-xs font-normal text-gray-400">дундаж өртгөөр</div>
+                        </td>
+                        <td></td>
                     </tr>
                 </tfoot>
             </table>
         </div>
     </div>
 </div>
+
+<style>
+    .seg { display: inline-flex; border: 1px solid #d1d5db; border-radius: .5rem; overflow: hidden; background: #fff; }
+    .seg button { display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .75rem; font-size: .875rem; color: #374151; white-space: nowrap; }
+    .seg button + button { border-left: 1px solid #e5e7eb; }
+    .seg button.hidden { display: none; }
+    .seg button:hover { background: #f9fafb; }
+    .seg button b, .cat-pill b { font-weight: 600; font-size: .75rem; color: #6b7280; }
+    .seg button.active { background: #AB334C; color: #fff; }
+    .seg button.active b { color: #fff !important; }
+    .cat-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 9999px;
+                border: 1px solid #d1d5db; background: #fff; font-size: .8125rem; color: #374151; }
+    .cat-pill:hover { border-color: #AB334C; color: #AB334C; }
+    .cat-pill.active { background: #AB334C; border-color: #AB334C; color: #fff; }
+    .cat-pill.active b { color: #fff; }
+    .cond { display: inline-flex; align-items: center; gap: .25rem; padding: .2rem .3rem .2rem .4rem;
+            border: 1px solid #d1d5db; border-radius: .5rem; background: #f9fafb; }
+    .cond.complete { border-color: #AB334C; background: #fdf2f4; }
+    .cond select, .cond input { font-size: .8125rem; padding: .2rem .35rem; border: 1px solid #d1d5db; border-radius: .375rem; background: #fff; }
+    .cond input { width: 6.5rem; text-align: right; }
+    .cond .hidden { display: none; }
+    @media (max-width: 640px) {
+        .cond { flex-wrap: wrap; width: 100%; }
+        .cond input { flex: 1; min-width: 5rem; }
+        .seg { display: flex; width: 100%; }
+        .seg button { flex: 1; justify-content: center; padding: .45rem .3rem; font-size: .8rem; }
+    }
+</style>
 
 <!-- Эхний үлдэгдэл оруулах Modal -->
 <div id="initialStockModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
@@ -251,5 +296,301 @@ document.addEventListener('keydown', function(e) {
         closeInitialStockModal();
     }
 });
+
+// ===== Бараа шүүх — бүх шүүлт браузер дээр шууд ажиллана =====
+(function() {
+    const body = document.getElementById('invBody');
+    if (!body) return;
+    const rows = Array.from(body.querySelectorAll('tr.inv-row'));
+    const emptyRow = document.getElementById('invEmpty');
+    const search = document.getElementById('invSearch');
+    const supplierSelect = document.getElementById('invSupplier');
+    const sortSelect = document.getElementById('invSort');
+    const fmt = n => Math.round(n).toLocaleString('en-US');
+    const LABELS = {
+        stock: { in: 'Үлдэгдэлтэй', low: 'Бага', out: 'Дууссан' },
+        active: { inactive: 'Идэвхгүй', all: 'Идэвх: бүгд' },
+    };
+
+    const state = { q: '', stock: '', active: '', cat: '', supplier: '', sort: 'name' };
+
+    // URL-аас сэргээх (хуучин ?status= холбоосыг ч дэмжинэ)
+    const params = new URLSearchParams(location.search);
+    Object.keys(state).forEach(k => { if (params.get(k)) state[k] = params.get(k); });
+    if (params.get('category')) state.cat = params.get('category');
+    const legacyStatus = params.get('status');
+    if (legacyStatus === 'inactive') state.active = 'inactive';
+    if (legacyStatus === 'low_stock') state.stock = 'out';
+
+    // ----- Үнэ / үлдэгдлийн нөхцөл -----
+    const COND_FIELDS = {
+        price:    { label: 'Борлуулах үнэ',     money: true,  get: d => d.price },
+        purchase: { label: 'Худалдан авах үнэ', money: true,  get: d => d.purchase },
+        avg:      { label: 'Дундаж өртөг',      money: true,  get: d => d.avgCost },
+        margin:   { label: 'Ашиг (борлуулах − авах)', money: true, get: d => d.price - d.purchase },
+        stock:    { label: 'Үлдэгдэл',          money: false, get: d => d.stock },
+        value:    { label: 'Үлдэгдлийн дүн',    money: true,  get: d => d.avgValue },
+    };
+    const COND_OPS = {
+        eq:      { label: '= тэнцүү',           sym: '=', test: (x, a) => Math.abs(x - a) < 0.005 },
+        ne:      { label: '≠ ялгаатай',         sym: '≠', test: (x, a) => Math.abs(x - a) >= 0.005 },
+        gt:      { label: '> их',               sym: '>', test: (x, a) => x > a },
+        gte:     { label: '≥ их буюу тэнцүү',   sym: '≥', test: (x, a) => x >= a },
+        lt:      { label: '< бага',             sym: '<', test: (x, a) => x < a },
+        lte:     { label: '≤ бага буюу тэнцүү', sym: '≤', test: (x, a) => x <= a },
+        between: { label: '↔ хооронд',          sym: '↔', test: (x, a, b) => x >= Math.min(a, b) && x <= Math.max(a, b) },
+    };
+    const parseNum = v => {
+        const t = String(v ?? '').replace(/[\s,₮]/g, '');
+        return t === '' || isNaN(t) ? null : parseFloat(t);
+    };
+    // URL: ?c=price~gte~5000 эсвэл ?c=stock~between~10~50
+    let conds = params.getAll('c').map(raw => {
+        const [field, op, a, b] = raw.split('~');
+        return { field: COND_FIELDS[field] ? field : 'price', op: COND_OPS[op] ? op : 'eq', a: a ?? '', b: b ?? '' };
+    });
+    const condComplete = c => parseNum(c.a) !== null && (c.op !== 'between' || parseNum(c.b) !== null);
+    const condTest = (c, d) => COND_OPS[c.op].test(COND_FIELDS[c.field].get(d), parseNum(c.a), parseNum(c.b));
+
+    const data = rows.map(row => ({
+        row,
+        search: row.dataset.search.toLowerCase(),
+        name: row.dataset.name.toLowerCase(),
+        code: row.dataset.code.toLowerCase(),
+        category: row.dataset.category,
+        supplier: row.dataset.supplier,
+        active: row.dataset.active === '1',
+        stockState: row.dataset.stockState,
+        stock: parseFloat(row.dataset.stock) || 0,
+        price: parseFloat(row.dataset.price) || 0,
+        purchase: parseFloat(row.dataset.purchase) || 0,
+        avgCost: parseFloat(row.dataset.avgCost) || 0,
+        initialValue: parseFloat(row.dataset.initialValue) || 0,
+        avgValue: parseFloat(row.dataset.avgValue) || 0,
+    }));
+
+    // Тухайн шүүлтийг (skip) тооцохгүйгээр мөр тохирох эсэх — товчнуудын тоонд хэрэглэнэ
+    function matches(d, skip = null) {
+        if (skip !== 'q' && state.q) {
+            const terms = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+            if (!terms.every(t => d.search.includes(t))) return false;
+        }
+        if (skip !== 'stock' && state.stock && d.stockState !== state.stock) return false;
+        if (skip !== 'active') {
+            if (state.active === '' && !d.active) return false;
+            if (state.active === 'inactive' && d.active) return false;
+        }
+        if (skip !== 'cat' && state.cat && d.category !== state.cat) return false;
+        if (skip !== 'supplier' && state.supplier && d.supplier !== state.supplier) return false;
+        for (const c of conds) {
+            if (condComplete(c) && !condTest(c, d)) return false;
+        }
+        return true;
+    }
+
+    const sorters = {
+        name: (a, b) => a.name.localeCompare(b.name, 'mn'),
+        code: (a, b) => a.code.localeCompare(b.code, 'mn', { numeric: true }),
+        stock_desc: (a, b) => b.stock - a.stock,
+        stock_asc: (a, b) => a.stock - b.stock,
+        value_desc: (a, b) => b.avgValue - a.avgValue,
+        price_desc: (a, b) => b.price - a.price,
+        price_asc: (a, b) => a.price - b.price,
+    };
+
+    function setCount(key, n) {
+        document.querySelectorAll(`[data-count="${key}"]`).forEach(el => el.textContent = n);
+    }
+
+    function render() {
+        // Эрэмбэлэх
+        const sorted = [...data].sort(sorters[state.sort] || sorters.name);
+        sorted.forEach(d => body.insertBefore(d.row, emptyRow));
+
+        // Харуулах / нуух ба нийлбэр
+        let count = 0, qty = 0, initial = 0, avg = 0;
+        data.forEach(d => {
+            const ok = matches(d);
+            d.row.classList.toggle('hidden', !ok);
+            if (ok) { count++; qty += d.stock; initial += d.initialValue; avg += d.avgValue; }
+        });
+        emptyRow.classList.toggle('hidden', count > 0);
+        [['sumCount', count], ['footCount', count], ['sumQty', fmt(qty)], ['footQty', fmt(qty)]]
+            .forEach(([id, v]) => document.getElementById(id).textContent = v);
+        ['sumInitial', 'footInitial'].forEach(id => document.getElementById(id).textContent = fmt(initial) + '₮');
+        ['sumAvg', 'footAvg'].forEach(id => document.getElementById(id).textContent = fmt(avg) + '₮');
+
+        // Товч бүрийн тоо (бусад шүүлтийг хэрэглэсэн үед)
+        ['in', 'low', 'out'].forEach(s => setCount('stock:' + s, data.filter(d => matches(d, 'stock') && d.stockState === s).length));
+        setCount('active:inactive', data.filter(d => matches(d, 'active') && !d.active).length);
+        const catBase = data.filter(d => matches(d, 'cat'));
+        setCount('cat:', catBase.length);
+        document.querySelectorAll('.cat-pill[data-value]').forEach(pill => {
+            if (pill.dataset.value) setCount('cat:' + pill.dataset.value, catBase.filter(d => d.category === pill.dataset.value).length);
+        });
+
+        // Идэвхтэй төлөв
+        document.querySelectorAll('.seg[data-filter]').forEach(seg => {
+            seg.querySelectorAll('button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.value === state[seg.dataset.filter]);
+                // "Бага" гэх мэт огт тохиолдолгүй сонголтыг нуух
+                if (btn.hasAttribute('data-hide-empty')) {
+                    const total = data.filter(d => d.stockState === btn.dataset.value).length;
+                    btn.classList.toggle('hidden', total === 0 && state.stock !== btn.dataset.value);
+                }
+            });
+        });
+        document.querySelectorAll('.cat-pill').forEach(p => p.classList.toggle('active', p.dataset.value === state.cat));
+        if (supplierSelect) supplierSelect.value = state.supplier;
+        sortSelect.value = state.sort;
+        if (search.value !== state.q) search.value = state.q;
+
+        renderChips();
+        syncUrl();
+    }
+
+    function renderChips() {
+        const chips = [];
+        if (state.q) chips.push(['q', `Хайлт: "${state.q}"`]);
+        if (state.stock) chips.push(['stock', LABELS.stock[state.stock] || state.stock]);
+        if (state.active) chips.push(['active', LABELS.active[state.active] || state.active]);
+        if (state.cat) {
+            const pill = document.querySelector(`.cat-pill[data-value="${CSS.escape(state.cat)}"]`);
+            chips.push(['cat', 'Ангилал: ' + (pill ? pill.childNodes[0].textContent.trim() : state.cat)]);
+        }
+        if (state.supplier) chips.push(['supplier', 'Нийлүүлэгч: ' + state.supplier]);
+        conds.filter(condComplete).forEach(c => {
+            const f = COND_FIELDS[c.field], unit = f.money ? '₮' : '';
+            const val = c.op === 'between'
+                ? `${fmt(parseNum(c.a))}–${fmt(parseNum(c.b))}${unit}`
+                : `${fmt(parseNum(c.a))}${unit}`;
+            chips.push([c, `${f.label} ${COND_OPS[c.op].sym} ${val}`]);
+        });
+        const wrap = document.getElementById('invChips');
+        wrap.innerHTML = '';
+        chips.forEach(([key, label]) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full bg-white border border-gray-300 text-xs text-gray-700 hover:border-red-400 hover:text-red-600';
+            b.title = 'Шүүлтийг хасах';
+            b.innerHTML = `<span></span><i class="fas fa-times ml-0.5"></i>`;
+            b.querySelector('span').textContent = label;
+            b.addEventListener('click', () => {
+                if (typeof key === 'object') { conds = conds.filter(c => c !== key); renderConds(); }
+                else state[key] = '';
+                render();
+            });
+            wrap.appendChild(b);
+        });
+        if (chips.length > 1) {
+            const clear = document.createElement('button');
+            clear.type = 'button';
+            clear.className = 'text-xs text-red-600 hover:underline ml-1';
+            clear.textContent = 'Бүгдийг цэвэрлэх';
+            clear.addEventListener('click', window.invResetFilters);
+            wrap.appendChild(clear);
+        }
+    }
+
+    function syncUrl() {
+        const p = new URLSearchParams();
+        Object.entries(state).forEach(([k, v]) => { if (v && !(k === 'sort' && v === 'name')) p.set(k, v); });
+        conds.filter(condComplete).forEach(c => {
+            const parts = [c.field, c.op, parseNum(c.a)];
+            if (c.op === 'between') parts.push(parseNum(c.b));
+            p.append('c', parts.join('~'));
+        });
+        const qs = p.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    window.invResetFilters = function() {
+        Object.assign(state, { q: '', stock: '', active: '', cat: '', supplier: '' });
+        conds = [];
+        renderConds();
+        render();
+    };
+
+    // Нөхцөлийн мөрүүдийг зурах (зөвхөн нэмэх/хасахад — бичиж байхад focus алдагдахгүй)
+    const condsWrap = document.getElementById('invConds');
+    function renderConds() {
+        condsWrap.innerHTML = '';
+        conds.forEach(c => {
+            const el = document.createElement('div');
+            el.className = 'cond' + (condComplete(c) ? ' complete' : '');
+            el.innerHTML = `
+                <select data-k="field" aria-label="Талбар">${Object.entries(COND_FIELDS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select>
+                <select data-k="op" aria-label="Харьцуулалт">${Object.entries(COND_OPS).map(([k, o]) => `<option value="${k}">${o.label}</option>`).join('')}</select>
+                <input data-k="a" type="text" inputmode="decimal" placeholder="Утга" aria-label="Утга">
+                <span class="between-part text-gray-400 text-xs">–</span>
+                <input data-k="b" class="between-part" type="text" inputmode="decimal" placeholder="Дээд" aria-label="Дээд утга">
+                <button type="button" data-k="remove" class="px-1 text-gray-400 hover:text-red-600" title="Нөхцөл хасах"><i class="fas fa-times"></i></button>`;
+            el.querySelector('[data-k="field"]').value = c.field;
+            el.querySelector('[data-k="op"]').value = c.op;
+            el.querySelector('[data-k="a"]').value = c.a;
+            el.querySelector('[data-k="b"]').value = c.b;
+            const syncBetween = () => el.querySelectorAll('.between-part').forEach(x => x.classList.toggle('hidden', c.op !== 'between'));
+            syncBetween();
+            let t = null;
+            const onChange = e => {
+                const k = e.target.dataset.k;
+                if (!k || k === 'remove') return;
+                c[k] = e.target.value;
+                if (k === 'op') syncBetween();
+                el.classList.toggle('complete', condComplete(c));
+                clearTimeout(t);
+                t = setTimeout(render, e.target.tagName === 'INPUT' ? 200 : 0);
+            };
+            el.addEventListener('input', onChange);
+            el.addEventListener('change', onChange);
+            el.querySelector('[data-k="remove"]').addEventListener('click', () => {
+                conds = conds.filter(x => x !== c);
+                renderConds();
+                render();
+            });
+            condsWrap.appendChild(el);
+        });
+    }
+    document.getElementById('invAddCond').addEventListener('click', () => {
+        conds.push({ field: 'price', op: 'eq', a: '', b: '' });
+        renderConds();
+        condsWrap.lastElementChild.querySelector('[data-k="a"]').focus();
+    });
+    renderConds();
+
+    // ----- Үйлдлүүд -----
+    let timer = null;
+    search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { state.q = search.value.trim(); render(); }, 120);
+    });
+    document.querySelectorAll('.seg[data-filter]').forEach(seg => {
+        seg.addEventListener('click', e => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            state[seg.dataset.filter] = btn.dataset.value;
+            render();
+        });
+    });
+    document.getElementById('invCategories').addEventListener('click', e => {
+        const pill = e.target.closest('.cat-pill');
+        if (!pill) return;
+        state.cat = pill.dataset.value;
+        render();
+    });
+    if (supplierSelect) supplierSelect.addEventListener('change', () => { state.supplier = supplierSelect.value; render(); });
+    sortSelect.addEventListener('change', () => { state.sort = sortSelect.value; render(); });
+
+    // "/" — хайлт руу, Esc — хайлт цэвэрлэх
+    document.addEventListener('keydown', e => {
+        const tag = document.activeElement.tagName;
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) { e.preventDefault(); search.focus(); }
+        if (e.key === 'Escape' && document.activeElement === search && search.value) {
+            search.value = ''; state.q = ''; render();
+        }
+    });
+
+    render();
+})();
 </script>
 {% endblock %}

@@ -15,7 +15,7 @@
                 <span>
                     <i class="fas fa-chalkboard-teacher mr-2"></i>
                     {% for teacher in selected_teachers %}
-                        {{ teacher.full_name }}{% if not forloop.last %}, {% endif %}
+                        {% if teacher.first_name and teacher.last_name %}{{ teacher.first_name }} {{ teacher.last_name }}{% else %}{{ teacher.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}
                     {% empty %}
                         Багш сонгоогүй
                     {% endfor %}
@@ -160,6 +160,23 @@
                     </p>
                 </div>
 
+                <!-- Сурагч хайх -->
+                <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="relative flex-1">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text"
+                               id="studentSearch"
+                               autocomplete="off"
+                               placeholder="Сурагч хайх (овог, нэр, утас)..."
+                               class="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <button type="button" id="studentSearchClear" hidden
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <span id="studentSearchCount" class="text-sm text-gray-500 whitespace-nowrap"></span>
+                </div>
+
                 <!-- Ирцийн хүснэгт -->
                 <div class="bg-white rounded-lg shadow overflow-auto attendance-table-wrapper">
                     <table class="min-w-full divide-y divide-gray-200 attendance-table" id="attendanceTable">
@@ -180,7 +197,8 @@
                                     <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] date-header {% if forloop.first %}border-l-2 border-primary{% endif %}" data-date="{{ date|date:'Y-m-d' }}">
                                         <div>{{ date|date:"d" }}</div>
                                         <div class="text-xs font-normal text-gray-400">{{ date|date:"D" }}</div>
-                                        <button type="button" 
+                                        <div class="day-stat" data-date="{{ date|date:'Y-m-d' }}" title="Ирсэн / Нийт сурагч">-</div>
+                                        <button type="button"
                                                 onclick="removeDateColumn('{{ date|date:'Y-m-d' }}')"
                                                 class="text-red-500 hover:text-red-700 mt-1">
                                             <i class="fas fa-times-circle"></i>
@@ -197,7 +215,13 @@
                                     <div class="flex items-center">
                                         <div class="text-sm font-medium text-amber-700 mr-2">Багш</div>
                                         <div>
-                                            <div class="text-sm font-semibold text-gray-900">{{ teacher.full_name }}</div>
+                                            <div class="text-sm font-semibold text-gray-900">
+                                                {% if teacher.first_name and teacher.last_name %}
+                                                    {{ teacher.first_name }} <span class="font-normal text-gray-600">{{ teacher.last_name }}</span>
+                                                {% else %}
+                                                    {{ teacher.full_name }}
+                                                {% endif %}
+                                            </div>
                                             <div class="text-xs text-amber-700">Хичээл заасан эсэх</div>
                                         </div>
                                     </div>
@@ -219,12 +243,19 @@
                             </tr>
                             {% endfor %}
                             {% for enrollment in enrollments %}
-                            <tr class="hover:bg-gray-50" data-row-type="student" data-person-id="{{ enrollment.id }}">
+                            <tr class="hover:bg-gray-50 student-row" data-row-type="student" data-person-id="{{ enrollment.id }}"
+                                data-search="{{ enrollment.student.display_name_short }} {{ enrollment.student.full_name }} {{ enrollment.student.last_name }} {{ enrollment.student.first_name }} {{ enrollment.student.mongolian_name }} {{ enrollment.student.phone }}">
                                 <td class="sticky left-0 bg-white px-6 py-4 whitespace-nowrap border-r border-gray-300">
                                     <div class="flex items-center">
                                         <div class="text-sm font-medium text-gray-900 mr-2">{{ forloop.counter }}.</div>
                                         <div>
-                                            <div class="text-sm font-medium text-gray-900">{{ enrollment.student.display_name_short|default:enrollment.student.full_name }}</div>
+                                            <div class="text-sm font-medium text-gray-900">
+                                                {% if enrollment.student.first_name and enrollment.student.last_name %}
+                                                    {{ enrollment.student.first_name }} <span class="font-normal text-gray-600">{{ enrollment.student.last_name }}</span>
+                                                {% else %}
+                                                    {{ enrollment.student.full_name }}
+                                                {% endif %}
+                                            </div>
                                             <div class="text-xs text-gray-500">{{ enrollment.student.phone }}</div>
                                         </div>
                                     </div>
@@ -243,6 +274,11 @@
                                 {% endfor %}
                             </tr>
                             {% endfor %}
+                            <tr id="studentSearchEmpty" hidden>
+                                <td class="sticky left-0 bg-white px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                                    <i class="fas fa-search mr-2"></i>Хайлтад тохирох сурагч олдсонгүй
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -275,16 +311,6 @@
                         Буцах
                     </a>
                     <div class="flex gap-4">
-                        <button type="button" 
-                                onclick="checkAllVisible()"
-                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
-                            <i class="fas fa-check-square mr-2"></i>Бүгдийг чагтлах
-                        </button>
-                        <button type="button" 
-                                onclick="uncheckAllVisible()"
-                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
-                            <i class="fas fa-square mr-2"></i>Бүгдийг арилгах
-                        </button>
                         <button type="submit"
                             name="action"
                             value="save_attendance"
@@ -341,16 +367,96 @@ function updateStats() {
     
     document.getElementById('totalChecked').textContent = checked;
     document.getElementById('avgAttendance').textContent = avgPercent + '%';
+    updateDayStats();
 }
+
+// Өдөр бүрийн ирсэн сурагчийн тоог баганын толгойд харуулах
+function updateDayStats() {
+    const totalStudents = document.querySelectorAll('#attendanceTable tbody tr[data-row-type="student"]').length;
+    document.querySelectorAll('.day-stat').forEach(el => {
+        const date = el.dataset.date;
+        const present = document.querySelectorAll(
+            `.date-cell[data-date="${date}"][data-enrollment] input[type="checkbox"]:checked`
+        ).length;
+        const percent = totalStudents > 0 ? Math.round((present / totalStudents) * 100) : 0;
+        el.textContent = `${present}/${totalStudents}`;
+        el.title = `Ирсэн ${present} / Нийт ${totalStudents} сурагч (${percent}%)`;
+        el.classList.toggle('day-stat-full', totalStudents > 0 && present === totalStudents);
+        el.classList.toggle('day-stat-empty', present === 0);
+    });
+}
+
+// Сурагч хайх (том жижиг үсэг хамаарахгүй)
+function filterStudents() {
+    const input = document.getElementById('studentSearch');
+    const query = input.value.trim().toLocaleLowerCase();
+    const rows = document.querySelectorAll('#attendanceTable tbody tr[data-row-type="student"]');
+    let visible = 0;
+    rows.forEach(row => {
+        const haystack = (row.dataset.search || '').toLocaleLowerCase();
+        const match = !query || haystack.includes(query);
+        row.hidden = !match;
+        if (match) visible++;
+    });
+    document.getElementById('studentSearchEmpty').hidden = visible > 0;
+    document.getElementById('studentSearchClear').hidden = !query;
+    document.getElementById('studentSearchCount').textContent = query ? `${visible}/${rows.length} сурагч` : '';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.getElementById('studentSearch');
+    if (!input) return;
+    input.addEventListener('input', filterStudents);
+    // Enter дарахад форм илгээгдэхээс сэргийлэх
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    document.getElementById('studentSearchClear').addEventListener('click', () => {
+        input.value = '';
+        filterStudents();
+        input.focus();
+    });
+});
 
 // Бүх checkbox-д listener нэмэх
 document.addEventListener('DOMContentLoaded', function() {
-    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"], input[type="checkbox"][name^="teacher_attendance_"]');
     checkboxes.forEach(cb => {
         cb.addEventListener('change', updateStats);
+        cb.addEventListener('change', autoSaveAttendance);
     });
     updateStats();
 });
+
+// Checkbox өөрчлөгдөх бүрт тухайн нэг ирцийг шууд хадгална.
+function autoSaveAttendance(event) {
+    const checkbox = event.currentTarget;
+    const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+    if (!csrfToken) return;
+
+    checkbox.disabled = true;
+    const body = new URLSearchParams({
+        csrfmiddlewaretoken: csrfToken,
+        action: 'autosave_attendance',
+        checkbox_name: checkbox.name,
+        checked: String(checkbox.checked),
+    });
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        body,
+    }).then(response => {
+        if (!response.ok) throw new Error('save failed');
+        return response.json();
+    }).then(data => {
+        if (!data.success) throw new Error(data.error || 'save failed');
+    }).catch(() => {
+        checkbox.checked = !checkbox.checked;
+        alert('Ирц автоматаар хадгалагдсангүй. Дахин оролдоно уу.');
+        updateStats();
+    }).finally(() => {
+        checkbox.disabled = false;
+    });
+}
 
 // Шинэ огноо нэмэх
 function addDateColumn() {
@@ -386,7 +492,8 @@ function addDateColumn() {
     newHeader.innerHTML = `
         <div>${day}</div>
         <div class="text-xs font-normal text-gray-400">${dayName}</div>
-        <button type="button" 
+        <div class="day-stat" data-date="${dateValue}" title="Ирсэн / Нийт сурагч">-</div>
+        <button type="button"
                 onclick="removeDateColumn('${dateValue}')"
                 class="text-red-500 hover:text-red-700 mt-1">
             <i class="fas fa-times-circle"></i>
@@ -402,7 +509,7 @@ function addDateColumn() {
     visibleDatesContainer.appendChild(hiddenInput);
     
     // Харагдаж буй мөр бүрт checkbox нэмэх
-    const bodyRows = table.querySelectorAll('tbody tr');
+    const bodyRows = table.querySelectorAll('tbody tr[data-row-type]');
     bodyRows.forEach(row => {
         const rowType = row.dataset.rowType;
         const personId = row.dataset.personId;
@@ -428,8 +535,9 @@ function addDateColumn() {
         
         // Listener нэмэх
         const checkbox = newCell.querySelector('input');
-        if (checkbox && rowType !== 'teacher') {
+        if (checkbox) {
             checkbox.addEventListener('change', updateStats);
+            checkbox.addEventListener('change', autoSaveAttendance);
         }
     });
     
@@ -480,19 +588,6 @@ function removeDateColumn(dateValue) {
     updateStats();
 }
 
-// Бүгдийг чагтлах
-function checkAllVisible() {
-    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
-    checkboxes.forEach(cb => cb.checked = true);
-    updateStats();
-}
-
-// Бүгдийг арилгах
-function uncheckAllVisible() {
-    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="attendance_"]');
-    checkboxes.forEach(cb => cb.checked = false);
-    updateStats();
-}
 </script>
 
 <style>
@@ -539,6 +634,30 @@ function uncheckAllVisible() {
 
 .sticky.left-0 {
     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+/* Өдрийн ирцийн статистик (толгойд) */
+.day-stat {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-transform: none;
+    letter-spacing: 0;
+    background: #dcfce7;
+    color: #15803d;
+    white-space: nowrap;
+}
+.day-stat.day-stat-empty {
+    background: #f3f4f6;
+    color: #9ca3af;
+}
+.day-stat.day-stat-full {
+    background: #16a34a;
+    color: #fff;
 }
 
 /* Checkbox hover effect */

@@ -173,7 +173,7 @@
             <div class="space-y-2 mb-4">
                 {% for purchase in recent_purchases %}
                 <div class="flex justify-between items-center text-sm">
-                    <span>{{ purchase.supplier.name }}</span>
+                    <span>{% if purchase.kind == 'CONVERSION' %}🔄 Бараа хувиргалт{% else %}{{ purchase.supplier.name|default:"Нийлүүлэгчгүй" }}{% endif %}</span>
                     <span class="font-bold">{{ purchase.total_amount|floatformat:0 }}₮</span>
                 </div>
                 {% empty %}

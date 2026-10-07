@@ -32,7 +32,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сургалт</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Түвшин</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Багш</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сурагчид</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Бүртгэлтэй сурагчид</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Хуваарь</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Үйлдэл</th>
                         </tr>
@@ -63,7 +63,11 @@
                                 {{ course.teacher.full_name }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <span class="font-semibold text-primary">{{ course.approved_count }}</span> / {{ course.max_students }}
+                                <a href="{% url 'main:student_list' %}?q=&active=&enrollment_status=APPROVED&course={{ course.id }}&sort=name_asc"
+                                   class="font-semibold text-primary hover:underline"
+                                   title="Баталсан сурагчдын жагсаалтыг харах">
+                                    {{ course.approved_count }}
+                                </a>
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-500">
                                 {{ course.schedule|default:"Тодорхойгүй" }}

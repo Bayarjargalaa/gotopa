@@ -29,14 +29,14 @@
                 <!-- Тоо ширхэг -->
                 <div>
                     <label for="quantity" class="block text-sm font-medium text-gray-700 mb-2">Тоо ширхэг *</label>
-                    <input type="number" name="quantity" id="quantity" value="{{ movement.quantity }}" required min="1" 
+                    <input type="number" name="quantity" id="quantity" value="{{ movement.quantity|stringformat:'d' }}" required min="1" 
                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 </div>
 
                 <!-- Нэгж үнэ -->
                 <div>
                     <label for="price" class="block text-sm font-medium text-gray-700 mb-2">Нэгж үнэ *</label>
-                    <input type="number" name="price" id="price" value="{{ movement.price }}" required min="0" step="0.01" 
+                    <input type="number" name="price" id="price" value="{{ movement.price|floatformat:'2u' }}" required min="0" step="0.01" 
                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 </div>
 

@@ -1,0 +1,12 @@
+{% autoescape off %}Сайн байна уу{% if user.profile.full_name %}, {{ user.profile.full_name }}{% endif %}!
+
+Готопа бясалгалын төвийн системд нууц үг сэргээх хүсэлт ирлээ. Доорх линк дээр дарж шинэ нууц үгээ тохируулна уу:
+
+{{ protocol }}://{{ domain }}{% url 'main:password_reset_confirm' uidb64=uid token=token %}
+
+Таны нэвтрэх нэр: {{ user.get_username }}{% if user.profile.phone %} (эсвэл утас: {{ user.profile.phone }}){% endif %}
+
+Линк 24 цагийн дотор хүчинтэй. Хэрэв та энэ хүсэлтийг гаргаагүй бол энэ имэйлийг үл тоомсорлоно уу — таны нууц үг өөрчлөгдөхгүй.
+
+Готопа бясалгалын төв
+{% endautoescape %}

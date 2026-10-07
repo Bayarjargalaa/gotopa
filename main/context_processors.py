@@ -44,3 +44,15 @@ def page_content_processor(request):
         'user_menu': user_menu,  # Sidebar menu
         'header_menu': header_menu,  # Header navigation
     }
+
+
+def books_period_processor(request):
+    """Систем эхлэх огноо, архив горим — бүх template-д (archive_toggle.html ашиглана)."""
+    from .books_period import get_books_start_date, can_view_archive, wants_archive
+    if not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return {}
+    return {
+        'books_start_date': get_books_start_date(),
+        'can_view_archive': can_view_archive(request.user),
+        'archive_mode': wants_archive(request),
+    }

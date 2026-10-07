@@ -1,0 +1,17 @@
+{% extends 'main/password_reset/base.html' %}
+
+{% block content %}
+<div class="text-center space-y-4 text-sm text-gray-700">
+    <div class="text-4xl">📧</div>
+    {% if sent_to %}
+    <p>Нууц үг сэргээх линкийг дараах имэйл рүү илгээлээ:</p>
+    {% for email in sent_to %}
+    <p class="font-mono font-semibold text-base text-gray-900">{{ email }}</p>
+    {% endfor %}
+    <p>Имэйлээ шалгана уу. Inbox-д харагдахгүй бол Spam хавтсаа шалгаарай.</p>
+    {% else %}
+    <p>Нууц үг сэргээх линк илгээгдсэн. Имэйлээ шалгана уу.</p>
+    {% endif %}
+    <p class="text-gray-500">Энэ имэйл хаяг танд хамаарахгүй эсвэл имэйл ирэхгүй бол менежерт хандана уу.</p>
+</div>
+{% endblock %}

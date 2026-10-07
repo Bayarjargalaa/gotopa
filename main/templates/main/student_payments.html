@@ -7,280 +7,298 @@
 
 {% block content %}
 {% csrf_token %}
-<div class="container mx-auto px-4 py-8">
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <!-- Гарчиг -->
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-secondary">
-                <i class="fas fa-money-bill-wave text-primary mr-3"></i>
-                Сурагчдын төлбөр, ирц
-            </h1>
-            <div class="text-right">
-                <div class="text-sm text-gray-600">{{ selected_year|unlocalize }} он</div>
-                {% if total_payments_count > 0 %}
-                <div class="text-lg font-bold text-green-600">
-                    {{ total_payments|floatformat:0 }}₮
-                    <span class="text-sm text-gray-500">({{ total_payments_count }} гүйлгээ)</span>
-                </div>
-                {% else %}
-                <div class="text-sm text-orange-600">⚠️ Төлбөрийн гүйлгээ байхгүй</div>
-                {% endif %}
-            </div>
+<div class="container mx-auto px-3 sm:px-4 py-4">
+    <!-- ===== Толгой ===== -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <h1 class="text-2xl font-bold text-secondary"><i class="fas fa-money-bill-wave text-primary mr-2"></i>Сурагчдын төлбөр, ирц</h1>
+        <div class="text-sm text-gray-500">
+            {{ selected_year|unlocalize }} он{% if selected_month != 'all' %} · {{ selected_month }}-р сар{% endif %}
+            · {{ total_payments_count }} төлбөрийн гүйлгээ
         </div>
-
-        <!-- Шүүлт -->
-        <div class="mb-6 bg-gray-50 p-4 rounded-lg">
-            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <!-- Он -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Он</label>
-                    <select name="year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        {% for year in years %}
-                        <option value="{{ year|unlocalize }}" {% if year == selected_year %}selected{% endif %}>{{ year|unlocalize }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Сар -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Сар</label>
-                    <select name="month" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="all" {% if selected_month == 'all' %}selected{% endif %}>Бүх сар</option>
-                        {% for month_num, month_name in months %}
-                        <option value="{{ month_num }}" {% if selected_month == month_num|stringformat:"s" %}selected{% endif %}>{{ month_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Анги/Курс -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Анги</label>
-                    <select name="course" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="all" {% if selected_course == 'all' %}selected{% endif %}>Бүх анги</option>
-                        {% for course in courses %}
-                        <option value="{{ course.id }}" {% if selected_course == course.id|stringformat:"s" %}selected{% endif %}>
-                            {{ course.name }} ({{ course.get_level_display }})
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Хайх товч -->
-                <div class="flex items-end">
-                    <button type="submit" class="w-full bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition-colors">
-                        <i class="fas fa-search mr-2"></i>Хайх
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Тайлбар -->
-        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4">
-            <p class="text-sm text-blue-800">
-                <i class="fas fa-info-circle mr-2"></i>
-                <strong>Төлбөр:</strong> Банкны гүйлгээнд сурагчийн төлбөр гэж ангилагдсан дүн |
-                <strong>Ирц:</strong> Тухайн сард ирсэн ирцийн тоо
-            </p>
-            <p class="text-xs text-blue-600 mt-2">
-                💡 Төлбөр харагдахгүй байвал: Банкны гүйлгээ импортолж, "Холбох" дарж эсрэг данс холбоод, 
-                орлогын төрөл = "Сурагчийн төлбөр" гэж ангилаад, сурагч болон сар сонгоно уу.
-            </p>
-        </div>
-
-        <!-- Хүснэгт -->
-        {% if table_data %}
-            {% for course_data in table_data %}
-            <div class="mb-8">
-                <!-- Ангийн нэр -->
-                <h2 class="text-xl font-bold text-gray-800 mb-4 bg-primary bg-opacity-10 p-3 rounded-lg">
-                    <i class="fas fa-graduation-cap mr-2"></i>
-                    {{ course_data.course.name }} ({{ course_data.course.get_level_display }})
-                    <span class="text-sm font-normal ml-2 text-gray-600">
-                        - Сурагч: {{ course_data.enrollments|length }}
-                    </span>
-                </h2>
-
-                <!-- Хүснэгт -->
-                <div class="overflow-x-auto">
-                    <table class="min-w-full bg-white border border-gray-300">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b border-r">
-                                    Сурагчийн нэр
-                                </th>
-                                {% if selected_month == 'all' %}
-                                    <!-- Бүх сар харуулах -->
-                                    {% for month_num, month_name in months %}
-                                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase border-b border-r">
-                                        {{ month_num }}-р
-                                    </th>
-                                    {% endfor %}
-                                    <th class="px-4 py-3 text-center text-xs font-semibold text-primary uppercase border-b border-r bg-primary bg-opacity-10">
-                                        Нийт
-                                    </th>
-                                {% else %}
-                                    <!-- Нэг сар харуулах -->
-                                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase border-b">
-                                        {{ selected_month }}-р сарын төлбөр/ирц
-                                    </th>
-                                {% endif %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in course_data.enrollments %}
-                            <tr class="hover:bg-gray-50">
-                                <!-- Сурагчийн нэр -->
-                                <td class="px-4 py-3 border-b border-r">
-                                    <div class="flex items-center">
-                                        <div>
-                                            <div class="font-semibold text-gray-900">
-                                                {{ row.student.display_name_short|default:row.student.full_name|default:row.student.user.username }}
-                                            </div>
-                                            {% if row.student.phone %}
-                                            <div class="text-xs text-gray-500">{{ row.student.phone }}</div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <!-- Сар бүрийн төлбөр/ирц -->
-                                {% if selected_month == 'all' %}
-                                    {% for month_num, month_name in months %}
-                                        {% with data=row.months_data|get_item:month_num %}
-                                            <td class="px-2 py-2 text-center border-b border-r text-xs relative group cursor-pointer payment-cell"
-                                                {% if data.transactions %}
-                                                    {% for tx in data.transactions %}
-                                                        {% if tx.color %}
-                                                            style="background-color: {{ tx.color }}20;"
-                                                        {% endif %}
-                                                    {% endfor %}
-                                                    data-student-id="{{ row.student.id }}"
-                                                    data-month="{{ month_num }}"
-                                                    data-student-name="{{ row.student.display_name_short|default:row.student.full_name|default:row.student.user.username }}"
-                                                    data-transactions='{{ data.transactions|jsonify }}'
-                                                {% endif %}
-                                                >
-                                                {% if data %}
-                                                    {% if data.payment > 0 or data.attendance > 0 %}
-                                                        <div class="text-green-700 font-semibold">{{ data.payment|floatformat:0 }}₮</div>
-                                                        <div class="text-blue-600">{{ data.attendance }} ирц</div>
-                                                        {% if data.transactions %}
-                                                            {% for tx in data.transactions %}
-                                                                {% if tx.comment %}
-                                                                    <div class="text-xs text-gray-600 mt-1 truncate" title="{{ tx.comment }}">
-                                                                        💬 {{ tx.comment|truncatewords:3 }}
-                                                                    </div>
-                                                                {% endif %}
-                                                            {% endfor %}
-                                                        {% endif %}
-                                                    {% else %}
-                                                        <span class="text-gray-300">-</span>
-                                                    {% endif %}
-                                                {% else %}
-                                                    <span class="text-gray-300">-</span>
-                                                {% endif %}
-                                            </td>
-                                        {% endwith %}
-                                    {% endfor %}
-                                    
-                                    <!-- Мөрийн нийт дүн -->
-                                    <td class="px-4 py-3 text-center border-b border-r bg-primary bg-opacity-5">
-                                        <div class="font-bold text-primary text-base">
-                                            {{ row.student_total|floatformat:0 }}₮
-                                        </div>
-                                    </td>
-                                {% else %}
-                                    <!-- Нэг сарын мэдээлэл -->
-                                    {% with data=row.months_data|get_item:selected_month_int %}
-                                        <td class="px-4 py-3 text-center border-b relative group cursor-pointer payment-cell"
-                                            {% if data.transactions %}
-                                                {% for tx in data.transactions %}
-                                                    {% if tx.color %}
-                                                        style="background-color: {{ tx.color }}20;"
-                                                    {% endif %}
-                                                {% endfor %}
-                                                data-student-id="{{ row.student.id }}"
-                                                data-month="{{ selected_month_int }}"
-                                                data-student-name="{{ row.student.display_name_short|default:row.student.full_name|default:row.student.user.username }}"
-                                                data-transactions='{{ data.transactions|jsonify }}'
-                                            {% endif %}
-                                            >
-                                            {% if data %}
-                                                {% if data.payment > 0 or data.attendance > 0 %}
-                                                    <div class="text-green-700 font-semibold text-lg">{{ data.payment|floatformat:0 }}₮</div>
-                                                    <div class="text-blue-600 mt-1">{{ data.attendance }} ирц</div>
-                                                    {% if data.transactions %}
-                                                        {% for tx in data.transactions %}
-                                                            {% if tx.comment %}
-                                                                <div class="text-xs text-gray-600 mt-2 italic">
-                                                                    💬 {{ tx.comment }}
-                                                                </div>
-                                                            {% endif %}
-                                                        {% endfor %}
-                                                    {% endif %}
-                                                {% else %}
-                                                    <span class="text-gray-400">-</span>
-                                                {% endif %}
-                                            {% else %}
-                                                <span class="text-gray-400">-</span>
-                                            {% endif %}
-                                        </td>
-                                    {% endwith %}
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                            
-                            <!-- Баганы нийт дүн -->
-                            {% if selected_month == 'all' %}
-                            <tr class="bg-primary bg-opacity-10 font-bold">
-                                <td class="px-4 py-3 text-left border-t-2 border-primary">
-                                    <span class="text-primary">НИЙТ ({{ course_data.course.name }})</span>
-                                </td>
-                                {% for month_num, month_name in months %}
-                                <td class="px-3 py-3 text-center border-t-2 border-primary border-r">
-                                    <span class="text-primary">{{ course_data.column_totals|get_item:month_num|floatformat:0 }}₮</span>
-                                </td>
-                                {% endfor %}
-                                <td class="px-4 py-3 text-center border-t-2 border-primary border-r bg-primary bg-opacity-20">
-                                    <span class="text-primary text-lg">{{ course_data.course_total|floatformat:0 }}₮</span>
-                                </td>
-                            </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% endfor %}
-            
-            <!-- Бүгдийн нийт дүн -->
-            {% if table_data and selected_month == 'all' %}
-            <div class="mt-6 bg-primary bg-opacity-10 border-2 border-primary rounded-lg p-6">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h3 class="text-xl font-bold text-primary mb-2">
-                            <i class="fas fa-chart-line mr-2"></i>
-                            Нийт төлбөр ({{ selected_year|unlocalize }} он)
-                        </h3>
-                        <p class="text-sm text-gray-600">
-                            Ангиуд: {{ table_data|length }} | Төлбөрийн тоо: {{ total_payments_count }}
-                        </p>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-4xl font-bold text-primary">
-                            {{ grand_total|floatformat:0 }}₮
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        {% else %}
-            <div class="text-center py-12 bg-gray-50 rounded-lg">
-                <i class="fas fa-inbox text-gray-400 text-5xl mb-4"></i>
-                <p class="text-gray-500 text-lg">Сонгосон шүүлтэд тохирох сурагч олдсонгүй.</p>
-            </div>
-        {% endif %}
     </div>
+
+    <!-- ===== Үндсэн шүүлт (сервер) ===== -->
+    <form method="get" id="spServerForm" class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-3">
+        <input type="hidden" name="q" id="spQHidden" value="{{ request.GET.q }}">
+        <input type="hidden" name="cond" id="spCondHidden" value="{{ request.GET.cond }}">
+        <input type="hidden" name="sort" id="spSortHidden" value="{{ request.GET.sort }}">
+        <div class="flex flex-wrap items-end gap-2">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Он</label>
+                <select name="year" class="sp-auto px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                    {% for year in years %}<option value="{{ year|unlocalize }}" {% if year == selected_year %}selected{% endif %}>{{ year|unlocalize }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Сар</label>
+                <select name="month" class="sp-auto px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                    <option value="all" {% if selected_month == 'all' %}selected{% endif %}>Бүх сар</option>
+                    {% for month_num, month_name in months %}
+                    <option value="{{ month_num }}" {% if selected_month == month_num|stringformat:"s" %}selected{% endif %}>{{ month_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Анги</label>
+                <select name="course" class="sp-auto px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                    <option value="all" {% if selected_course == 'all' %}selected{% endif %}>Бүх анги</option>
+                    {% for course in courses %}
+                    <option value="{{ course.id|stringformat:'d' }}" {% if selected_course == course.id|stringformat:"s" %}selected{% endif %}>{{ course.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Бүртгэлийн төлөв</label>
+                <select name="status" class="sp-auto px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                    <option value="all" {% if selected_status == 'all' %}selected{% endif %}>Бүх төлөв</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if selected_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="relative flex-1 min-w-[220px]">
+                <label class="block text-xs text-gray-500 mb-1">Сурагч хайх</label>
+                <i class="fas fa-search absolute left-3 bottom-2.5 text-gray-400 text-sm"></i>
+                <input type="search" id="spSearch" value="{{ request.GET.q }}" autocomplete="off" placeholder="Нэр, овог, утас...  ( / )"
+                       class="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Эрэмбэлэх</label>
+                <select id="spSort" class="px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                    <option value="name">Нэрээр</option>
+                    <option value="debt">Өр: их → бага</option>
+                    <option value="paid_desc">Төлсөн: их → бага</option>
+                    <option value="paid_asc">Төлсөн: бага → их</option>
+                    <option value="att_desc">Ирц: их → бага</option>
+                </select>
+            </div>
+        </div>
+    </form>
+
+    <!-- ===== Нөхцлөөр шүүх (шууд) ===== -->
+    <div class="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-10 gap-2 mb-3" id="spConds">
+        <button type="button" class="cond-card" data-cond="">
+            <span class="cc-label">Бүгд</span><span class="cc-count" data-count=""></span>
+            <span class="cc-sub">сурагч</span>
+        </button>
+        <button type="button" class="cond-card cc-red" data-cond="unpaid">
+            <span class="cc-label">⚠ Ирсэн ч төлөөгүй</span><span class="cc-count" data-count="unpaid"></span>
+            <span class="cc-sub">ирсэн сардаа төлбөргүй</span>
+        </button>
+        <button type="button" class="cond-card cc-amber" data-cond="partial">
+            <span class="cc-label">◐ Дутуу төлсөн</span><span class="cc-count" data-count="partial"></span>
+            <span class="cc-sub">сарын төлбөрөөс бага</span>
+        </button>
+        <button type="button" class="cond-card cc-orange" data-cond="debt">
+            <span class="cc-label">₮ Өртэй</span><span class="cc-count" data-count="debt"></span>
+            <span class="cc-sub" id="spDebtTotal">нийт өр</span>
+        </button>
+        <button type="button" class="cond-card cc-green" data-cond="paid_ok">
+            <span class="cc-label">✓ Бүрэн төлсөн</span><span class="cc-count" data-count="paid_ok"></span>
+            <span class="cc-sub">өргүй, төлбөртэй</span>
+        </button>
+        <button type="button" class="cond-card cc-sky" data-cond="pending">
+            <span class="cc-label">⏳ Хуулга хүлээж буй</span><span class="cc-count" data-count="pending"></span>
+            <span class="cc-sub">төлсөн гэж тэмдэглэсэн</span>
+        </button>
+        <button type="button" class="cond-card cc-blue" data-cond="no_attendance">
+            <span class="cc-label">Төлсөн ч ирээгүй</span><span class="cc-count" data-count="no_attendance"></span>
+            <span class="cc-sub">төлсөн сардаа ирцгүй</span>
+        </button>
+        <button type="button" class="cond-card cc-purple" data-cond="discounted">
+            <span class="cc-label">🎁 Хөнгөлөлттэй</span><span class="cc-count" data-count="discounted"></span>
+            <span class="cc-sub">хөнгөлөлт өгсөн сартай</span>
+        </button>
+        <button type="button" class="cond-card cc-gray" data-cond="noted">
+            <span class="cc-label">💬 Тэмдэглэлтэй</span><span class="cc-count" data-count="noted"></span>
+            <span class="cc-sub">нүдэнд тэмдэглэл бичсэн</span>
+        </button>
+        <button type="button" class="cond-card cc-gray" data-cond="inactive">
+            <span class="cc-label">Ирц, төлбөргүй</span><span class="cc-count" data-count="inactive"></span>
+            <span class="cc-sub">огт ирээгүй, төлөөгүй</span>
+        </button>
+    </div>
+
+    <!-- Тайлбар -->
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 mb-3">
+        <span><span class="legend bg-green-100 border-green-300"></span>Бүрэн төлсөн</span>
+        <span><span class="legend bg-amber-100 border-amber-300"></span>Дутуу төлсөн</span>
+        <span><span class="legend bg-red-100 border-red-300"></span>Ирсэн ч төлөөгүй</span>
+        <span><span class="legend bg-sky-100 border-sky-400" style="border-style:dashed"></span>⏳ Төлсөн гэж тэмдэглэсэн (хуулга хүлээж буй)</span>
+        <span><span class="legend bg-purple-100 border-purple-300"></span>🎁 Хөнгөлөлттэй</span>
+        {% if books_start %}<span><span class="legend bg-gray-100 border-gray-300"></span>Систем эхлэхээс өмнө ({{ books_start|date:'Y-m-d' }}) — өр, шүүлтэд тооцохгүй</span>{% endif %}
+        <span><span class="legend bg-white border-gray-300"></span>Ирц, төлбөргүй</span>
+        <span class="text-gray-400">· Өр = ирсэн сарын (сарын төлбөр − хөнгөлөлт − төлсөн). Сарын төлбөрийг ангийн тохиргоонд засна.</span>
+        <span class="ml-auto"><strong id="spVisibleCount">0</strong> сурагч харагдаж байна</span>
+    </div>
+
+    {% if table_data %}
+        {% for course_data in table_data %}
+        <div class="sp-course mb-5 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gray-50 border-b">
+                <h2 class="font-bold text-gray-800">
+                    <i class="fas fa-graduation-cap mr-1 text-primary"></i>{{ course_data.course.name }}
+                    <span class="text-sm font-normal text-gray-500">({{ course_data.course.get_level_display }})</span>
+                </h2>
+                <div class="text-xs text-gray-600 flex flex-wrap gap-x-3">
+                    <span>Сарын төлбөр: <strong>{% if course_data.fee %}{{ course_data.fee|floatformat:0 }}₮{% else %}тохируулаагүй{% endif %}</strong></span>
+                    <span>Сурагч: <strong class="course-visible-count">{{ course_data.enrollments|length }}</strong></span>
+                    <span>Төлсөн: <strong class="text-green-700">{{ course_data.course_total|floatformat:0 }}₮</strong></span>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white text-xs text-gray-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-medium sticky left-0 bg-white z-10 min-w-[180px] border-b">Сурагч</th>
+                            {% if selected_month == 'all' %}
+                                {% for month_num, month_name in months %}
+                                <th class="px-2 py-2 text-center font-medium border-b {% if month_num > current_month %}text-gray-300{% endif %}">{{ month_num }}-р</th>
+                                {% endfor %}
+                            {% else %}
+                                <th class="px-3 py-2 text-center font-medium border-b">{{ selected_month }}-р сар</th>
+                            {% endif %}
+                            <th class="px-3 py-2 text-right font-medium border-b">Төлсөн</th>
+                            <th class="px-3 py-2 text-right font-medium border-b">Өр</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for row in course_data.enrollments %}
+                        <tr class="sp-row hover:bg-gray-50"
+                            data-flags="{{ row.flags }}"
+                            data-name="{{ row.student.name_first_display|lower }}"
+                            data-paid="{{ row.visible_paid|floatformat:'0u' }}"
+                            data-debt="{{ row.debt|floatformat:'0u' }}"
+                            data-att="{{ row.attendance_total|stringformat:'d' }}"
+                            data-search="{{ row.student.name_first_display }} {{ row.student.full_name }} {{ row.student.phone|default:'' }} {{ row.student.user.username }} {{ row.student.user.email }} {{ row.notes_text }}">
+                            <td class="px-3 py-2 sticky left-0 bg-white z-10">
+                                <div class="font-semibold text-gray-900">{{ row.student.name_first_display }}</div>
+                                <div class="text-xs text-gray-500">{{ row.student.phone|default:"" }}{% if row.enrollment.status != 'APPROVED' %} · {{ row.enrollment.get_status_display }}{% endif %}</div>
+                            </td>
+                            {% if selected_month == 'all' %}
+                                {% for month_num, month_name in months %}
+                                {% with data=row.months_data|get_item:month_num %}
+                                <td class="sp-cell st-{{ data.state }} {% if data.transactions or data.pending or data.discount or can_mark_payments %}payment-cell cursor-pointer{% endif %} {% if month_num > current_month and data.state == 'empty' %}future{% endif %}"
+                                    {% if data.note.color %}style="background-color: {{ data.note.color }};"{% endif %}
+                                    data-student-id="{{ row.student.id|stringformat:'d' }}" data-course-id="{{ course_data.course.id|stringformat:'d' }}" data-month="{{ month_num }}"
+                                    data-fee="{{ course_data.fee|floatformat:'0u' }}" data-due="{{ data.due|floatformat:'0u' }}" data-paid="{{ data.payment|floatformat:'0u' }}"
+                                    data-student-name="{{ row.student.name_first_display }}" data-transactions='{{ data.transactions|jsonify }}' data-pending='{{ data.pending|jsonify }}' data-note='{{ data.note|jsonify }}' data-discount='{{ data.discount|jsonify }}'
+                                    title="{{ month_num }}-р сар: төлсөн {{ data.payment|floatformat:0 }}₮{% if data.pending_amount %}, хуулга хүлээж буй {{ data.pending_amount|floatformat:0 }}₮{% endif %}, ирц {{ data.attendance }}{% if data.discount %}, хөнгөлөлт: {{ data.discount.name }} ({{ data.discount.label }}){% endif %}{% if data.shortfall %}, дутуу {{ data.shortfall|floatformat:0 }}₮{% endif %}{% if data.state == 'pre_start' %}, систем эхлэхээс өмнө{% endif %}">
+                                    {% if data.state == 'empty' %}
+                                        <span class="text-gray-300">·</span>
+                                    {% else %}
+                                        {% if data.payment > 0 %}<div class="font-semibold">{{ data.payment|floatformat:0 }}</div>
+                                        {% elif data.pending_amount %}
+                                        {% elif data.state == 'discounted' %}<div class="font-semibold">🎁 Хөнгөлөлт</div>
+                                        {% elif data.state == 'pre_start' %}<div class="font-semibold">—</div>
+                                        {% else %}<div class="font-semibold">Төлөөгүй</div>{% endif %}
+                                        {% if data.pending_amount %}<div class="pending-line" title="Төлсөн гэж тэмдэглэсэн, хуулга хүлээж буй">⏳ {{ data.pending_amount|floatformat:0 }}</div>{% endif %}
+                                        {% if data.paid_date_label %}<div class="date-line" title="Төлсөн: {{ data.paid_dates|join:', ' }}">📅 {{ data.paid_date_label }}</div>{% endif %}
+                                        {% if data.discount %}<div class="discount-line">🎁 {{ data.discount.name }}</div>{% endif %}
+                                        <div class="text-[11px] opacity-80">{{ data.attendance }} ирц{% if data.state == 'partial' %} · −{{ data.shortfall|floatformat:0 }}{% elif data.state == 'pre_start' %} · эхлэхээс өмнө{% endif %}</div>
+                                    {% endif %}
+                                    {% if data.note.comment %}<div class="note-line" title="{{ data.note.comment }}">💬 {{ data.note.comment }}</div>{% endif %}
+                                </td>
+                                {% endwith %}
+                                {% endfor %}
+                            {% else %}
+                                {% with data=row.months_data|get_item:selected_month_int %}
+                                <td class="sp-cell st-{{ data.state }} {% if data.transactions or data.pending or data.discount or can_mark_payments %}payment-cell cursor-pointer{% endif %}"
+                                    {% if data.note.color %}style="background-color: {{ data.note.color }};"{% endif %}
+                                    data-student-id="{{ row.student.id|stringformat:'d' }}" data-course-id="{{ course_data.course.id|stringformat:'d' }}" data-month="{{ selected_month_int }}"
+                                    data-fee="{{ course_data.fee|floatformat:'0u' }}" data-due="{{ data.due|floatformat:'0u' }}" data-paid="{{ data.payment|floatformat:'0u' }}"
+                                    data-student-name="{{ row.student.name_first_display }}" data-transactions='{{ data.transactions|jsonify }}' data-pending='{{ data.pending|jsonify }}' data-note='{{ data.note|jsonify }}' data-discount='{{ data.discount|jsonify }}'>
+                                    {% if data.state == 'empty' %}<span class="text-gray-300">·</span>{% else %}
+                                        {% if data.payment > 0 %}<div class="font-semibold">{{ data.payment|floatformat:0 }}₮</div>
+                                        {% elif data.pending_amount %}
+                                        {% elif data.state == 'discounted' %}<div class="font-semibold">🎁 Хөнгөлөлт</div>
+                                        {% elif data.state == 'pre_start' %}<div class="font-semibold">— систем эхлэхээс өмнө</div>
+                                        {% else %}<div class="font-semibold">Төлөөгүй</div>{% endif %}
+                                        {% if data.pending_amount %}<div class="pending-line">⏳ {{ data.pending_amount|floatformat:0 }}₮ хуулга хүлээж буй</div>{% endif %}
+                                        {% if data.paid_dates %}<div class="date-line">📅 {{ data.paid_dates|join:', ' }}</div>{% endif %}
+                                        {% if data.discount %}<div class="discount-line wide">🎁 {{ data.discount.name }} ({{ data.discount.label }})</div>{% endif %}
+                                        <div class="text-xs opacity-80">{{ data.attendance }} ирц{% if data.state == 'partial' %} · дутуу {{ data.shortfall|floatformat:0 }}₮{% endif %}</div>
+                                    {% endif %}
+                                    {% if data.note.comment %}<div class="note-line wide">💬 {{ data.note.comment }}</div>{% endif %}
+                                </td>
+                                {% endwith %}
+                            {% endif %}
+                            <td class="px-3 py-2 text-right font-semibold text-green-700 whitespace-nowrap">{{ row.visible_paid|floatformat:0 }}₮</td>
+                            <td class="px-3 py-2 text-right font-semibold whitespace-nowrap {% if row.debt %}text-red-600{% else %}text-gray-300{% endif %}">{% if row.debt %}{{ row.debt|floatformat:0 }}₮{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if selected_month == 'all' %}
+                    <tfoot class="bg-gray-50 text-xs font-semibold text-gray-700">
+                        <tr>
+                            <td class="px-3 py-2 sticky left-0 bg-gray-50">Нийт</td>
+                            {% for month_num, month_name in months %}
+                            <td class="px-2 py-2 text-center">{% with t=course_data.column_totals|get_item:month_num %}{% if t %}{{ t|floatformat:0 }}{% else %}<span class="text-gray-300">·</span>{% endif %}{% endwith %}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-right text-green-700">{{ course_data.course_total|floatformat:0 }}₮</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+        <div id="spEmpty" class="hidden text-center py-10 text-gray-500 bg-white rounded-lg border border-gray-200">
+            <i class="fas fa-search mr-1"></i>Шүүлтэд тохирох сурагч олдсонгүй.
+            <button type="button" class="text-primary hover:underline ml-1" onclick="spReset()">Шүүлтийг цэвэрлэх</button>
+        </div>
+
+        {% if selected_month == 'all' %}
+        <div class="mt-2 px-4 py-3 bg-white rounded-lg border border-gray-200 flex flex-wrap justify-between items-center gap-2">
+            <span class="text-sm text-gray-600">Нийт төлбөр ({{ selected_year|unlocalize }} он, {{ table_data|length }} анги)</span>
+            <span class="text-2xl font-bold text-primary">{{ grand_total|floatformat:0 }}₮</span>
+        </div>
+        {% endif %}
+    {% else %}
+        <div class="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <i class="fas fa-inbox text-gray-300 text-5xl mb-3"></i>
+            <p class="text-gray-500">Сонгосон шүүлтэд тохирох сурагч олдсонгүй.</p>
+        </div>
+    {% endif %}
 </div>
+
+<style>
+    .cond-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: .55rem .75rem;
+                 border-radius: .6rem; border: 1px solid #e5e7eb; background: #fff; transition: all .15s; }
+    .cond-card:hover { border-color: #AB334C; }
+    .cond-card .cc-label { font-size: .78rem; font-weight: 600; color: #374151; }
+    .cond-card .cc-count { font-size: 1.35rem; font-weight: 700; line-height: 1.3; color: #111827; }
+    .cond-card .cc-sub { font-size: .68rem; color: #6b7280; }
+    .cond-card.cc-red .cc-count { color: #dc2626; } .cond-card.cc-amber .cc-count { color: #d97706; }
+    .cond-card.cc-orange .cc-count { color: #ea580c; } .cond-card.cc-green .cc-count { color: #16a34a; }
+    .cond-card.cc-blue .cc-count { color: #2563eb; } .cond-card.cc-sky .cc-count { color: #0284c7; } .cond-card.cc-gray .cc-count { color: #6b7280; }
+    .cond-card.active { border-color: #AB334C; box-shadow: 0 0 0 2px #AB334C33; background: #fdf2f4; }
+    .legend { display: inline-block; width: .8rem; height: .8rem; border-radius: .2rem; border: 1px solid; margin-right: .25rem; vertical-align: -1px; }
+    .sp-cell { padding: .35rem .4rem; text-align: center; font-size: .75rem; white-space: nowrap; border-left: 1px solid #f3f4f6; }
+    .sp-cell.st-paid { background: #f0fdf4; color: #15803d; }
+    .sp-cell.st-partial { background: #fffbeb; color: #b45309; }
+    .sp-cell.st-unpaid { background: #fef2f2; color: #b91c1c; }
+    .sp-cell.st-pending { background: #f0f9ff; color: #0369a1; box-shadow: inset 0 0 0 1px #7dd3fc; }
+    .sp-cell .note-line { font-size: 10px; color: #4b5563; max-width: 90px; overflow: hidden; text-overflow: ellipsis; margin: 0 auto; }
+    .sp-cell .note-line.wide { font-size: 12px; max-width: 260px; white-space: normal; font-style: italic; }
+    .sp-cell .pending-line { font-size: 11px; font-weight: 600; color: #0369a1; }
+    .sp-cell .date-line { font-size: 10px; color: #6b7280; line-height: 1.2; }
+    .sp-cell.st-discounted { background: #faf5ff; color: #7e22ce; }
+    .sp-cell.st-pre_start { background: #f3f4f6; color: #6b7280; }
+    .sp-cell .discount-line { font-size: 10px; font-weight: 600; color: #7e22ce; max-width: 90px; overflow: hidden; text-overflow: ellipsis; margin: 0 auto; }
+    .sp-cell .discount-line.wide { font-size: 12px; max-width: 260px; white-space: normal; }
+    .cond-card.cc-purple .cc-count { color: #9333ea; }
+    .sp-cell.future { background: #fafafa; }
+    .pay-method { display: flex; cursor: pointer; }
+    .pay-method input { position: absolute; opacity: 0; pointer-events: none; }
+    .pay-method span { flex: 1; text-align: center; padding: .5rem .25rem; border: 1px solid #d1d5db; border-radius: .5rem; font-size: .85rem; background: #fff; }
+    .pay-method input:checked + span { border-color: #AB334C; background: #fdf2f4; font-weight: 600; box-shadow: 0 0 0 2px #AB334C33; }
+    .pay-method input:focus-visible + span { outline: 2px solid #AB334C; }
+    .note-swatch { width: 1.75rem; height: 1.75rem; border-radius: .35rem; border: 2px solid #d1d5db; display: inline-flex; align-items: center; justify-content: center; }
+    .note-swatch.selected { border-color: #AB334C; box-shadow: 0 0 0 2px #AB334C33; }
+    .sp-cell.payment-cell:hover { outline: 2px solid #AB334C; outline-offset: -2px; }
+</style>
 
 <!-- Төлбөрийн дэлгэрэнгүй Modal -->
 <div id="paymentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
@@ -303,7 +321,113 @@
     </div>
 </div>
 
+{{ cash_accounts|json_script:"cashAccountsData" }}
+{{ discount_presets|json_script:"discountPresetsData" }}
 <script>
+// ===== Сурагчдын төлбөр — шууд шүүлт =====
+(function() {
+    const rows = Array.from(document.querySelectorAll('tr.sp-row'));
+    const sections = Array.from(document.querySelectorAll('.sp-course'));
+    const search = document.getElementById('spSearch');
+    const sortSel = document.getElementById('spSort');
+    const params = new URLSearchParams(location.search);
+    const state = { q: params.get('q') || '', cond: params.get('cond') || '', sort: params.get('sort') || 'name' };
+    const fmt = n => Math.round(n).toLocaleString('en-US');
+
+    const data = rows.map(row => ({
+        row,
+        flags: new Set((row.dataset.flags || '').split(' ').filter(Boolean)),
+        search: (row.dataset.search || '').toLowerCase(),
+        name: row.dataset.name || '',
+        paid: parseFloat(row.dataset.paid) || 0,
+        debt: parseFloat(row.dataset.debt) || 0,
+        att: parseInt(row.dataset.att) || 0,
+    }));
+
+    function condMatch(d, cond) {
+        switch (cond) {
+            case '': return true;
+            case 'debt': return d.debt > 0;
+            case 'inactive': return d.flags.has('never_paid') && d.flags.has('never_attended');
+            default: return d.flags.has(cond);
+        }
+    }
+    function searchMatch(d) {
+        const terms = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+        return terms.every(t => d.search.includes(t));
+    }
+    const sorters = {
+        name: (a, b) => a.name.localeCompare(b.name, 'mn'),
+        debt: (a, b) => b.debt - a.debt,
+        paid_desc: (a, b) => b.paid - a.paid,
+        paid_asc: (a, b) => a.paid - b.paid,
+        att_desc: (a, b) => b.att - a.att,
+    };
+
+    function render() {
+        // Эрэмбэ — анги бүрийн дотор
+        sections.forEach(sec => {
+            const tbody = sec.querySelector('tbody');
+            data.filter(d => tbody.contains(d.row)).sort(sorters[state.sort] || sorters.name)
+                .forEach(d => tbody.appendChild(d.row));
+        });
+        let visible = 0;
+        data.forEach(d => {
+            const ok = searchMatch(d) && condMatch(d, state.cond);
+            d.row.style.display = ok ? '' : 'none';
+            if (ok) visible++;
+        });
+        sections.forEach(sec => {
+            const n = Array.from(sec.querySelectorAll('tr.sp-row')).filter(r => r.style.display !== 'none').length;
+            sec.style.display = n ? '' : 'none';
+            const c = sec.querySelector('.course-visible-count');
+            if (c) c.textContent = n;
+        });
+        // Нөхцөл бүрийн тоо (хайлтыг тооцож)
+        const base = data.filter(searchMatch);
+        document.querySelectorAll('[data-count]').forEach(el => {
+            el.textContent = base.filter(d => condMatch(d, el.dataset.count)).length;
+        });
+        const debtTotal = base.reduce((s, d) => s + d.debt, 0);
+        document.getElementById('spDebtTotal').textContent = 'нийт ' + fmt(debtTotal) + '₮';
+        document.querySelectorAll('.cond-card').forEach(c => c.classList.toggle('active', c.dataset.cond === state.cond));
+        document.getElementById('spVisibleCount').textContent = visible;
+        const empty = document.getElementById('spEmpty');
+        if (empty) empty.classList.toggle('hidden', visible > 0);
+        if (search.value !== state.q) search.value = state.q;
+        sortSel.value = state.sort;
+
+        // URL болон серверийн формд хадгалах (он/сар солиход шүүлт алдагдахгүй)
+        const url = new URL(location);
+        [['q', state.q], ['cond', state.cond], ['sort', state.sort === 'name' ? '' : state.sort]].forEach(([k, v]) => {
+            if (v) url.searchParams.set(k, v); else url.searchParams.delete(k);
+            const hidden = document.getElementById('sp' + k.charAt(0).toUpperCase() + k.slice(1) + 'Hidden');
+            if (hidden) hidden.value = v;
+        });
+        history.replaceState(null, '', url);
+    }
+
+    window.spReset = function() { state.q = ''; state.cond = ''; render(); };
+
+    let t = null;
+    search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.q = search.value.trim(); render(); }, 120); });
+    search.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    sortSel.addEventListener('change', () => { state.sort = sortSel.value; render(); });
+    document.getElementById('spConds').addEventListener('click', e => {
+        const card = e.target.closest('.cond-card');
+        if (!card) return;
+        state.cond = state.cond === card.dataset.cond ? '' : card.dataset.cond;
+        render();
+    });
+    // Он, сар, анги, төлөв — сонгоход шууд
+    document.querySelectorAll('.sp-auto').forEach(sel => sel.addEventListener('change', () => document.getElementById('spServerForm').submit()));
+    document.addEventListener('keydown', e => {
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) { e.preventDefault(); search.focus(); }
+    });
+    render();
+})();
+
+
 // HTML escape функц
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -311,95 +435,97 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function openPaymentModal(studentId, month, studentName, transactions) {
+const CAN_MARK_PAYMENTS = {{ can_mark_payments|yesno:'true,false' }};
+const SELECTED_YEAR = {{ selected_year|unlocalize }};
+const TODAY = '{{ today }}';
+const CASH_ACCOUNTS = JSON.parse(document.getElementById('cashAccountsData').textContent);
+const DISCOUNT_PRESETS = JSON.parse(document.getElementById('discountPresetsData').textContent);
+const SINGLE_MONTH = {% if selected_month == 'all' %}false{% else %}true{% endif %};
+
+const NOTE_COLORS = ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#e9d5ff', '#e5e7eb'];
+
+function openPaymentModal(cell) {
+    const studentName = cell.dataset.studentName;
+    const month = parseInt(cell.dataset.month);
+    const transactions = JSON.parse(cell.dataset.transactions || '[]');
+    const pending = JSON.parse(cell.dataset.pending || '[]');
+    const note = JSON.parse(cell.dataset.note || '{}');
+    const discount = JSON.parse(cell.dataset.discount || 'null');
     const modal = document.getElementById('paymentModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalContent = document.getElementById('modalContent');
-    
-    const monthNames = ['', '1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар', 
+
+    const monthNames = ['', '1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар',
                         '7-р сар', '8-р сар', '9-р сар', '10-р сар', '11-р сар', '12-р сар'];
-    
+
     modalTitle.textContent = `${studentName} - ${monthNames[month]}`;
-    
-    let html = '';
-    transactions.forEach((tx, index) => {
-        const txId = tx.id;
-        const txAmount = Number(tx.amount).toLocaleString();
-        const txDate = tx.date;
-        const txComment = tx.comment || '';
-        const txColor = tx.color || '';
-        
-        html += `
-            <div class="border rounded-lg p-4" style="${txColor ? 'background-color: ' + txColor + '20;' : ''}">
-                <div class="flex justify-between items-start mb-3">
-                    <div>
-                        <div class="text-lg font-semibold text-green-700">${txAmount}₮</div>
-                        <div class="text-xs text-gray-500">${txDate}</div>
-                    </div>
-                    <button type="button" onclick="editPaymentComment(${txId})" 
-                            class="bg-primary text-white px-3 py-1 rounded hover:bg-opacity-90 text-sm">
-                        <i class="fas fa-edit mr-1"></i> Засах
-                    </button>
-                </div>
-                
-                <div id="comment-display-${txId}">
-                    ${txComment ? `
-                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded">
-                            <p class="text-sm text-gray-700">${escapeHtml(txComment)}</p>
-                        </div>
-                    ` : '<p class="text-gray-400 text-sm italic">Тэмдэглэл байхгүй</p>'}
-                </div>
-                
-                <div id="comment-edit-${txId}" class="hidden">
-                    <form onsubmit="savePaymentComment(event, ${txId})">
-                        <textarea id="comment-input-${txId}" 
-                                  class="w-full border rounded p-2 mb-2 text-sm" 
-                                  rows="3" 
-                                  placeholder="Тэмдэглэл бичих...">${escapeHtml(txComment)}</textarea>
-                        
-                        <div class="mb-3">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Өнгө сонгох:</label>
-                            <div class="flex gap-2 flex-wrap">
-                                <button type="button" onclick="selectColor(${txId}, '')" 
-                                        class="w-8 h-8 rounded border-2 ${!txColor ? 'border-primary' : 'border-gray-300'} bg-white"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#ffebee')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#ffebee' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #ffebee;"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#fff3e0')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#fff3e0' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #fff3e0;"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#e8f5e9')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#e8f5e9' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #e8f5e9;"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#e3f2fd')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#e3f2fd' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #e3f2fd;"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#f3e5f5')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#f3e5f5' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #f3e5f5;"></button>
-                                <button type="button" onclick="selectColor(${txId}, '#fce4ec')" 
-                                        class="w-8 h-8 rounded border-2 ${txColor === '#fce4ec' ? 'border-primary' : 'border-gray-300'}" 
-                                        style="background-color: #fce4ec;"></button>
-                            </div>
-                            <input type="hidden" id="color-input-${txId}" value="${txColor}">
-                        </div>
-                        
-                        <div class="flex gap-2">
-                            <button type="submit" class="bg-primary text-white px-4 py-2 rounded hover:bg-opacity-90">
-                                <i class="fas fa-save mr-1"></i> Хадгалах
-                            </button>
-                            <button type="button" onclick="cancelEdit(${txId})" 
-                                    class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
-                                Цуцлах
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        `;
-    });
-    
+
+    let html = renderDiscountInfo(discount, cell) + renderPaymentList(transactions, pending);
+    html += CAN_MARK_PAYMENTS ? renderCellForm(cell, note, pending, discount) : renderNoteReadonly(note, transactions, pending, discount);
     modalContent.innerHTML = html;
+
+    const form = document.getElementById('cellForm');
+    if (form) {
+        // Хөнгөлөлт: асаах/унтраах, бэлэн загвар, урьдчилан харах
+        const fee = parseFloat(cell.dataset.fee) || 0;
+        const updateDiscountPreview = () => {
+            const value = parseFloat(form.discount_value.value) || 0;
+            const cut = Math.min(form.discount_kind.value === 'PERCENT' ? fee * value / 100 : value, fee);
+            document.getElementById('discountPreview').textContent = fee
+                ? `Хасагдах: ${Math.round(cut).toLocaleString('en-US')}₮ → сард төлөх: ${Math.round(fee - cut).toLocaleString('en-US')}₮`
+                : 'Ангийн сарын төлбөр тохируулаагүй байна.';
+        };
+        form.has_discount.addEventListener('change', () => {
+            document.getElementById('discountFields').classList.toggle('hidden', !form.has_discount.checked);
+            form.discount_name.required = form.has_discount.checked;
+            form.discount_value.required = form.has_discount.checked;
+            if (form.has_discount.checked && !form.discount_name.value) form.discount_name.focus();
+        });
+        form.querySelectorAll('.discount-preset').forEach(btn => btn.addEventListener('click', () => {
+            form.discount_name.value = btn.dataset.name;
+            form.discount_kind.value = btn.dataset.kind;
+            form.discount_value.value = btn.dataset.value;
+            updateDiscountPreview();
+        }));
+        form.discount_value.addEventListener('input', updateDiscountPreview);
+        form.discount_kind.addEventListener('change', updateDiscountPreview);
+        updateDiscountPreview();
+
+        form.addEventListener('click', e => {
+            const sw = e.target.closest('.note-swatch');
+            if (!sw) return;
+            form.color.value = sw.dataset.color;
+            form.querySelectorAll('.note-swatch').forEach(b => b.classList.toggle('selected', b === sw));
+        });
+        const METHOD_HINTS = {
+            BANK: 'Хуулга хүлээж буй гэж тэмдэглэнэ. Хуулга импортлоод гүйлгээг холбоход автоматаар баталгаажна.',
+            CASH: 'Кассын орлогоор шууд бүртгэгдэж, журналд орно.',
+            POS: 'POS-ын сэттлмэнт хүлээж буй гэж тэмдэглэнэ. Хуулганд орж ирсэн гүйлгээг холбоход автоматаар баталгаажна.',
+            MIXED: 'Бэлэн хэсэг кассын орлогоор шууд бүртгэгдэнэ, дансны хэсэг хуулга хүлээж буй гэж тэмдэглэгдэнэ.',
+        };
+        const updateMixedBank = () => {
+            const rest = (parseFloat(form.amount.value) || 0) - (parseFloat(form.cash_amount.value) || 0);
+            document.getElementById('mixedBankAmount').textContent = Math.max(rest, 0).toLocaleString('en-US');
+        };
+        form.amount.addEventListener('input', updateMixedBank);
+        form.cash_amount.addEventListener('input', updateMixedBank);
+        form.querySelectorAll('input[name=method]').forEach(r => r.addEventListener('change', () => {
+            const method = form.method.value;
+            const usesCash = method === 'CASH' || method === 'MIXED';
+            document.getElementById('paidFields').classList.toggle('hidden', !method);
+            form.amount.required = !!method;
+            form.cash_amount.required = method === 'MIXED';
+            document.getElementById('mixedFields').classList.toggle('hidden', method !== 'MIXED');
+            const hint = document.getElementById('methodHint');
+            hint.className = 'text-xs mb-2 ' + (method === 'CASH' ? 'text-green-700' : 'text-sky-700');
+            hint.textContent = METHOD_HINTS[method] || '';
+            const cashField = document.getElementById('cashAccountField');
+            if (cashField) cashField.classList.toggle('hidden', !usesCash);
+            updateMixedBank();
+            if (method) form.amount.select();
+        }));
+        form.addEventListener('submit', e => saveCell(e, cell, note, discount));
+    }
     modal.classList.remove('hidden');
 }
 
@@ -407,60 +533,281 @@ function closePaymentModal() {
     document.getElementById('paymentModal').classList.add('hidden');
 }
 
-function editPaymentComment(txId) {
-    document.getElementById(`comment-display-${txId}`).classList.add('hidden');
-    document.getElementById(`comment-edit-${txId}`).classList.remove('hidden');
+function renderDiscountInfo(discount, cell) {
+    if (!discount) return '';
+    const fee = parseFloat(cell.dataset.fee) || 0;
+    const due = parseFloat(cell.dataset.due) || 0;
+    return `
+        <div class="border border-purple-200 bg-purple-50 rounded-lg p-3 text-sm">
+            <div class="font-semibold text-purple-800">🎁 ${escapeHtml(discount.name)} <span class="font-normal">(${escapeHtml(discount.label)})</span></div>
+            <div class="text-xs text-purple-700 mt-0.5">Сарын төлбөр ${Math.round(fee).toLocaleString('en-US')}₮ − хөнгөлөлт ${Math.round(Number(discount.amount)).toLocaleString('en-US')}₮ = төлөх ${Math.round(due).toLocaleString('en-US')}₮</div>
+            ${discount.comment ? `<div class="text-xs text-gray-700 mt-1">💬 ${escapeHtml(discount.comment)}</div>` : ''}
+        </div>`;
 }
 
-function cancelEdit(txId) {
-    document.getElementById(`comment-display-${txId}`).classList.remove('hidden');
-    document.getElementById(`comment-edit-${txId}`).classList.add('hidden');
-}
-
-function selectColor(txId, color) {
-    document.getElementById(`color-input-${txId}`).value = color;
-    // Бүх өнгөний border-г цэвэрлэх
-    const form = document.getElementById(`comment-edit-${txId}`);
-    const colorButtons = form.querySelectorAll('button[type="button"][onclick*="selectColor"]');
-    colorButtons.forEach(btn => {
-        btn.classList.remove('border-primary');
-        btn.classList.add('border-gray-300');
+// Банкаар баталгаажсан болон хуулга хүлээж буй төлбөрүүд
+function renderPaymentList(transactions, pending) {
+    const fmt = n => Math.round(Number(n)).toLocaleString('en-US');
+    let html = '';
+    if (transactions.length) html += '<div class="text-xs font-semibold text-gray-500 uppercase">Баталгаажсан төлбөр</div>';
+    transactions.forEach(tx => {
+        if (tx.pre_start_id) {
+            html += `
+            <div class="border rounded-lg p-3 flex justify-between items-start gap-3">
+                <div>
+                    <div class="text-lg font-semibold text-green-700">${fmt(tx.amount)}₮
+                        <span class="text-xs font-normal text-gray-500">💵 Бэлэн</span></div>
+                    <div class="text-xs text-gray-500">${escapeHtml(tx.date)} · <span class="text-amber-700">Систем эхлэхээс өмнө — касс, журналд бүртгээгүй</span></div>
+                </div>
+                ${CAN_MARK_PAYMENTS ? `<button type="button" onclick="deletePendingPayment(${tx.pre_start_id})" class="text-gray-400 hover:text-red-600 px-2" title="Устгах"><i class="fas fa-trash"></i></button>` : ''}
+            </div>`;
+            return;
+        }
+        html += `
+            <div class="border rounded-lg p-3">
+                <div class="text-lg font-semibold text-green-700">${fmt(tx.amount)}₮
+                    <span class="text-xs font-normal text-gray-500">${tx.is_cash ? '💵 Касс' : '🏦 Банк'}</span></div>
+                <div class="text-xs text-gray-500">${escapeHtml(tx.date)}${tx.pre_marked ? ` · <span class="text-sky-700"><i class="fas fa-link"></i> ${escapeHtml(tx.pre_marked)}-нд тэмдэглэсэнтэй холбогдсон</span>` : ''}</div>
+            </div>`;
     });
-    // Сонгосон өнгийг тэмдэглэх
-    event.target.classList.remove('border-gray-300');
-    event.target.classList.add('border-primary');
+    if (pending.length) html += '<div class="text-xs font-semibold text-sky-700 uppercase mt-2">⏳ Хуулга хүлээж буй</div>';
+    pending.forEach(p => {
+        html += `
+            <div class="border border-dashed border-sky-300 bg-sky-50 rounded-lg p-3 flex justify-between items-start gap-3">
+                <div class="text-sm">
+                    <div class="text-lg font-semibold text-sky-700">${fmt(p.amount)}₮</div>
+                    <div class="text-xs text-gray-600">${escapeHtml(p.paid_date)} · ${escapeHtml(p.method)}${p.payer_name ? ' · ' + escapeHtml(p.payer_name) : ''}</div>
+                    ${p.comment ? `<div class="text-xs text-gray-700 mt-1">💬 ${escapeHtml(p.comment)}</div>` : ''}
+                    <div class="text-[11px] text-gray-500 mt-1">Банкны хуулга импортлоод гүйлгээг энэ сурагч, сартай холбоход автоматаар баталгаажна.</div>
+                </div>
+                ${CAN_MARK_PAYMENTS ? `<button type="button" onclick="deletePendingPayment(${p.id})" class="text-gray-400 hover:text-red-600 px-2" title="Тэмдэглэл устгах"><i class="fas fa-trash"></i></button>` : ''}
+            </div>`;
+    });
+    return html;
 }
 
-function savePaymentComment(event, txId) {
-    event.preventDefault();
-    
-    const comment = document.getElementById(`comment-input-${txId}`).value;
-    const color = document.getElementById(`color-input-${txId}`).value;
-    
-    // AJAX хүсэлт илгээх
-    fetch(`/payment-comment/${txId}/`, {
+function renderNoteReadonly(note, transactions, pending, discount) {
+    if (note.comment) return `<div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-sm text-gray-700 mt-2">💬 ${escapeHtml(note.comment)}</div>`;
+    return (!transactions.length && !pending.length && !discount) ? '<p class="text-gray-400 text-sm italic">Төлбөр, тэмдэглэл байхгүй</p>' : '';
+}
+
+function renderDiscountSection(cell, discount) {
+    const month = parseInt(cell.dataset.month);
+    const d = discount || { name: '', kind: 'PERCENT', value: '', comment: '' };
+    const value = d.value ? String(Number(d.value)) : '';
+    const presets = DISCOUNT_PRESETS.map(p => `
+        <button type="button" class="discount-preset text-xs px-2 py-1 rounded-full border border-purple-300 text-purple-700 hover:bg-purple-50"
+                data-name="${escapeHtml(p.name)}" data-kind="${p.kind}" data-value="${escapeHtml(p.value)}">${escapeHtml(p.name)} · ${escapeHtml(p.value)}${p.kind === 'PERCENT' ? '%' : '₮'}</button>`).join('');
+    const toMonths = [];
+    for (let m = month; m <= 12; m++) toMonths.push(`<option value="${m}">${m}-р сар</option>`);
+    return `
+        <div class="border-t pt-3">
+            <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                <input type="checkbox" name="has_discount" ${discount ? 'checked' : ''}> 🎁 Хөнгөлөлт
+            </label>
+            <div id="discountFields" class="${discount ? '' : 'hidden'} mt-2 space-y-2">
+                <div class="flex flex-wrap gap-1">${presets}</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="text-xs text-gray-500 col-span-2">Нэр / тайлбар
+                        <input type="text" name="discount_name" value="${escapeHtml(d.name)}" maxlength="100" placeholder="ж: Эхний сар үнэгүй"
+                               class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white" ${discount ? 'required' : ''}>
+                    </label>
+                    <label class="text-xs text-gray-500">Төрөл
+                        <select name="discount_kind" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                            <option value="PERCENT" ${d.kind === 'PERCENT' ? 'selected' : ''}>Хувь (%)</option>
+                            <option value="AMOUNT" ${d.kind === 'AMOUNT' ? 'selected' : ''}>Дүн (₮)</option>
+                        </select>
+                    </label>
+                    <label class="text-xs text-gray-500">Хэмжээ
+                        <input type="number" name="discount_value" value="${value}" min="0.01" step="any"
+                               class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-right" ${discount ? 'required' : ''}>
+                    </label>
+                    <label class="text-xs text-gray-500">Хүртэл сар <span class="text-gray-400">(олон сард)</span>
+                        <select name="discount_to_month" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">${toMonths.join('')}</select>
+                    </label>
+                    <label class="text-xs text-gray-500">Нэмэлт тайлбар
+                        <input type="text" name="discount_comment" value="${escapeHtml(d.comment || '')}" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                    </label>
+                </div>
+                <div id="discountPreview" class="text-xs text-purple-700"></div>
+            </div>
+        </div>`;
+}
+
+// Нэг маягт: тэмдэглэл, өнгө + хөнгөлөлт + (сонголтоор) төлсөн гэж тэмдэглэх
+function renderCellForm(cell, note, pending, discount) {
+    const comment = note.comment || '';
+    const color = note.color || '';
+    const swatches = ['', ...NOTE_COLORS].map(c => `
+        <button type="button" class="note-swatch ${c === color ? 'selected' : ''}" data-color="${c}"
+                style="background-color: ${c || '#ffffff'};" title="${c ? c : 'Өнгөгүй'}">${c ? '' : '<i class="fas fa-ban text-gray-300 text-xs"></i>'}</button>`).join('');
+    const legacy = color && !NOTE_COLORS.includes(color)
+        ? `<button type="button" class="note-swatch selected" data-color="${escapeHtml(color)}" style="background-color: ${escapeHtml(color)};"></button>` : '';
+
+    const fee = parseFloat(cell.dataset.due) || 0;  // хөнгөлөлтийн дараах сарын төлбөр
+    const paid = parseFloat(cell.dataset.paid) || 0;
+    const pendingSum = pending.reduce((s, p) => s + Number(p.amount), 0);
+    const suggested = Math.max(fee - paid - pendingSum, 0) || '';
+
+    return `
+        <form id="cellForm" class="border rounded-lg p-3 mt-2 space-y-3">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1"><i class="fas fa-comment-dots mr-1 text-primary"></i>Тэмдэглэл</label>
+                <textarea name="comment" rows="2" class="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Тэмдэглэл бичих...">${escapeHtml(comment)}</textarea>
+                <input type="hidden" name="color" value="${escapeHtml(color)}">
+                <div class="flex flex-wrap items-center gap-2 mt-1">
+                    <span class="text-xs text-gray-500 mr-1">Нүдний өнгө:</span>${swatches}${legacy}
+                </div>
+            </div>
+
+            ${renderDiscountSection(cell, discount)}
+
+            <div class="border-t pt-3">
+                <div class="text-sm font-semibold text-gray-700 mb-2">Төлбөр</div>
+                <div class="pay-methods grid grid-cols-3 gap-2">
+                    <label class="pay-method"><input type="radio" name="method" value="" checked><span>Тэмдэглэхгүй</span></label>
+                    <label class="pay-method"><input type="radio" name="method" value="BANK"><span>🏦 Банкаар</span></label>
+                    <label class="pay-method"><input type="radio" name="method" value="CASH"><span>💵 Бэлнээр</span></label>
+                    <label class="pay-method"><input type="radio" name="method" value="POS"><span>💳 POS-оор</span></label>
+                    <label class="pay-method col-span-2"><input type="radio" name="method" value="MIXED"><span>🏦 Данс + 💵 Бэлэн</span></label>
+                </div>
+                <div id="paidFields" class="hidden mt-2">
+                    <div id="methodHint" class="text-xs mb-2"></div>
+                    ${fee && paid + pendingSum >= fee ? '<div class="text-xs text-amber-700 mb-2">Энэ сарын төлбөр аль хэдийн бүрэн бүртгэгдсэн байна.</div>' : ''}
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="text-xs text-gray-500">Дүн ₮
+                            <input type="number" name="amount" min="1" step="1" value="${suggested}" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-right">
+                        </label>
+                        <label class="text-xs text-gray-500">Төлсөн огноо
+                            <input type="date" name="paid_date" value="${TODAY}" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                        </label>
+                        <div id="mixedFields" class="col-span-2 grid grid-cols-2 gap-2 hidden">
+                            <label class="text-xs text-gray-500">💵 Бэлэн ₮
+                                <input type="number" name="cash_amount" min="1" step="1" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-right">
+                            </label>
+                            <div class="text-xs text-gray-500">🏦 Данс ₮
+                                <div id="mixedBankAmount" class="px-2 py-1.5 border border-gray-200 rounded text-sm bg-gray-50 text-right">0</div>
+                            </div>
+                        </div>
+                        <label class="text-xs text-gray-500 col-span-2">Төлсөн хүн <span class="text-gray-400">(заавал биш)</span>
+                            <input type="text" name="payer_name" placeholder="ж: ээж Б.Сараа" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                        </label>
+                        ${CASH_ACCOUNTS.length > 1 ? `
+                        <label id="cashAccountField" class="text-xs text-gray-500 col-span-2 hidden">Касс
+                            <select name="cash_account" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                                ${CASH_ACCOUNTS.map(a => `<option value="${a.id}">${escapeHtml(a.label)}</option>`).join('')}
+                            </select>
+                        </label>` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closePaymentModal()" class="px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100">Болих</button>
+                <button type="submit" class="bg-primary text-white px-5 py-2 rounded hover:bg-opacity-90 text-sm">
+                    <i class="fas fa-save mr-1"></i>Хадгалах
+                </button>
+            </div>
+        </form>`;
+}
+
+function postJson(url, body) {
+    return fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
-        body: JSON.stringify({
-            comment: comment,
-            color: color
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Хуудсыг дахин ачаалах
-            location.reload();
-        } else {
-            alert('Алдаа гарлаа: ' + (data.error || 'Тодорхойгүй алдаа'));
+        body: JSON.stringify(body || {})
+    }).then(r => r.json());
+}
+
+async function saveCell(event, cell, note, discount) {
+    event.preventDefault();
+    const f = event.target;
+    const btn = f.querySelector('button[type=submit]');
+    const key = { student: cell.dataset.studentId, course: cell.dataset.courseId, year: SELECTED_YEAR, month: cell.dataset.month };
+    const comment = f.comment.value.trim();
+    const color = f.color.value;
+    const noteChanged = comment !== (note.comment || '') || color !== (note.color || '');
+    const method = f.method.value;
+    const markPaid = !!method;
+
+    // Хөнгөлөлт: шинэ/өөрчилсөн бол хадгална, чагтыг авсан бол устгана
+    const discountBody = {
+        name: f.discount_name.value.trim(),
+        kind: f.discount_kind.value,
+        value: f.discount_value.value,
+        comment: f.discount_comment.value.trim(),
+        to_month: f.discount_to_month.value,
+    };
+    let discountAction = null;
+    if (f.has_discount.checked) {
+        const changed = !discount || discountBody.name !== discount.name || discountBody.kind !== discount.kind
+            || Number(discountBody.value) !== Number(discount.value) || discountBody.comment !== (discount.comment || '')
+            || discountBody.to_month !== cell.dataset.month;
+        if (changed) discountAction = discountBody;
+    } else if (discount) {
+        discountAction = { delete: true };
+    }
+
+    if (!noteChanged && !markPaid && !discountAction) { closePaymentModal(); return; }
+    btn.disabled = true;
+    try {
+        if (noteChanged) {
+            const data = await postJson('{% url "main:payment_cell_note_save" %}', { ...key, comment, color });
+            if (!data.success) throw new Error(data.error);
+            updateCellNote(cell, comment, color);
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Алдаа гарлаа. Дахин оролдоно уу.');
+        if (discountAction) {
+            const data = await postJson('{% url "main:payment_discount_save" %}', { ...key, ...discountAction });
+            if (!data.success) throw new Error(data.error);
+            if (!markPaid) { location.reload(); return; }  // төлөв, өрийг дахин тооцно
+        }
+        if (markPaid) {
+            const data = await postJson('{% url "main:pending_payment_create" %}', {
+                ...key,
+                amount: f.amount.value,
+                paid_date: f.paid_date.value,
+                method,
+                cash_amount: method === 'MIXED' ? f.cash_amount.value : '',
+                payer_name: f.payer_name.value,
+                cash_account: f.cash_account ? f.cash_account.value : '',
+            });
+            if (!data.success) throw new Error(data.error);
+            location.reload();  // төлөв, өр, нийлбэрийг дахин тооцно
+            return;
+        }
+        closePaymentModal();
+    } catch (err) {
+        alert('Алдаа гарлаа: ' + (err.message || 'Дахин оролдоно уу.'));
+    }
+    btn.disabled = false;
+}
+
+// Хуудсыг дахин ачаалахгүйгээр нүдний тэмдэглэл, өнгийг шинэчлэх
+function updateCellNote(cell, comment, color) {
+    cell.dataset.note = JSON.stringify({ comment, color });
+    cell.style.backgroundColor = color;
+    let line = cell.querySelector('.note-line');
+    if (comment) {
+        if (!line) {
+            line = document.createElement('div');
+            line.className = 'note-line' + (SINGLE_MONTH ? ' wide' : '');
+            cell.appendChild(line);
+        }
+        line.textContent = '💬 ' + comment;
+        line.title = comment;
+    } else if (line) {
+        line.remove();
+    }
+}
+
+function deletePendingPayment(id) {
+    if (!confirm('Энэ тэмдэглэлийг устгах уу?')) return;
+    postJson(`{% url "main:pending_payment_delete" 0 %}`.replace('/0/', `/${id}/`)).then(data => {
+        if (data.success) location.reload();
+        else alert('Алдаа гарлаа: ' + (data.error || 'Тодорхойгүй алдаа'));
     });
 }
 
@@ -468,16 +815,13 @@ function savePaymentComment(event, txId) {
 document.addEventListener('DOMContentLoaded', function() {
     const paymentCells = document.querySelectorAll('.payment-cell');
     paymentCells.forEach(cell => {
-        if (cell.dataset.transactions) {
-            cell.addEventListener('click', function() {
-                const studentId = this.dataset.studentId;
-                const month = parseInt(this.dataset.month);
-                const studentName = this.dataset.studentName;
-                const transactions = JSON.parse(this.dataset.transactions);
-                openPaymentModal(studentId, month, studentName, transactions);
-            });
-        }
+        cell.addEventListener('click', function() { openPaymentModal(this); });
     });
+});
+
+// Esc дарахад хаах
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('paymentModal').classList.contains('hidden')) closePaymentModal();
 });
 
 // Modal-г гадна дарахад хаах

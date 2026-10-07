@@ -112,3 +112,6 @@ static/css/tailwind.css
 # Temporary files
 *.tmp
 *.temp
+
+# Өгөгдлийн сангийн нөөц
+backups/

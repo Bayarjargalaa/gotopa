@@ -6,6 +6,7 @@
 {% block content %}
 <div class="min-h-screen bg-light py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {% include 'main/includes/archive_toggle.html' %}
         <!-- Header -->
         <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
             <div class="flex justify-between items-center mb-6">
@@ -74,7 +75,7 @@
 
         <!-- Хайлт ба Шүүлт -->
         <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <form method="GET" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <form method="GET" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">{% if archive_mode %}<input type="hidden" name="archive" value="1">{% endif %}
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Хайлт</label>
                     <input type="text" name="search" value="{{ search }}" 

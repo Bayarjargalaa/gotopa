@@ -1,0 +1,97 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Багш нарын удирдлага - Готопа{% endblock %}
+
+{% block content %}
+<div class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="mb-4">
+            <a href="{% url 'main:dashboard' %}" class="text-primary hover:underline">← Dashboard руу буцах</a>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-3xl font-bold text-secondary">Багш нарын удирдлага</h2>
+                <div class="flex gap-2">
+                    <a href="{% url 'main:teacher_level_manage' %}" class="px-4 py-3 border border-primary text-primary rounded-lg hover:bg-red-50 transition-colors">Түвшин удирдах</a>
+                    <a href="{% url 'main:teacher_create' %}" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors">
+                        <i class="fas fa-user-plus mr-2"></i>Шинэ багш нэмэх
+                    </a>
+                </div>
+            </div>
+
+            <form method="post" id="order-form">
+                {% csrf_token %}
+                <div class="flex justify-end mb-4">
+                    <button type="submit" class="px-5 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90">Дараалал хадгалах</button>
+                </div>
+            </form>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Зураг</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Нэр</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Утас</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Имэйл</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Түвшин</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ангиуд</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дараалал</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Үйлдэл</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for teacher in teachers %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3">
+                                {% if teacher.photo_filename %}
+                                <img src="{% static 'images/багшнар/' %}{{ teacher.photo_filename }}" alt="{{ teacher.full_name }}" class="w-12 h-12 object-cover rounded-full border">
+                                {% elif teacher.photo %}
+                                <img src="{{ teacher.photo.url }}" alt="{{ teacher.full_name }}" class="w-12 h-12 object-cover rounded-full border">
+                                {% else %}
+                                <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ teacher.full_name }}</td>
+                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-600">{{ teacher.phone|default:"-" }}</td>
+                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-600">{{ teacher.user.email|default:"-" }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600">
+                                {% for level_name in teacher.get_teacher_level_names %}
+                                    <span class="inline-block px-2 py-0.5 mb-1 text-xs bg-gray-100 rounded">{{ level_name }}</span>
+                                {% empty %}-{% endfor %}
+                            </td>
+                            <td class="px-6 py-3 text-sm text-gray-600">
+                                {% for assignment in teacher.course_assignments.all %}
+                                    <span class="inline-block px-2 py-0.5 mb-1 text-xs bg-gray-100 rounded">{{ assignment.course.name }}</span>
+                                {% empty %}
+                                    <span class="text-gray-400">-</span>
+                                {% endfor %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <input type="number" name="teacher_order_{{ teacher.id }}" value="{{ teacher.teacher_display_order }}" min="0" form="order-form" class="w-20 px-2 py-1 border border-gray-300 rounded-lg text-sm">
+                            </td>
+                            <td class="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex justify-end gap-2">
+                                    <a href="{% url 'main:teacher_update' teacher.id %}" class="px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">Засах</a>
+                                    <form method="post" action="{% url 'main:teacher_delete' teacher.id %}" onsubmit="return confirm('{{ teacher.full_name }}-г устгахдаа итгэлтэй байна уу?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors">Устгах</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">Одоогоор багш бүртгэгдээгүй байна.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

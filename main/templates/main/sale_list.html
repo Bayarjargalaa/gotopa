@@ -6,6 +6,7 @@
 {% block content %}
 <div class="bg-gray-100 min-h-screen py-8">
     <div class="container mx-auto px-4">
+        {% include 'main/includes/archive_toggle.html' %}
 
         <!-- Буцах товч -->
         <div class="mb-4">
@@ -49,7 +50,7 @@
             </div>
 
             <!-- Шүүлтүүр -->
-            <form method="get">
+            <form method="get">{% if archive_mode %}<input type="hidden" name="archive" value="1">{% endif %}
                 <!-- Эгнээ 1: Хайлт -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                     <input type="text" name="customer" value="{{ request.GET.customer }}"

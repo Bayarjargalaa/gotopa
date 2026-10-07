@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode, urlparse
 from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User, Group, Permission
@@ -9,25 +10,67 @@ from django.contrib.contenttypes.models import ContentType
 from .models import (
     UserProfile, Course, Enrollment, Attendance, AttendanceWeekdayTemplate,
     AttendanceTeacherSelection, TeacherAttendance, CourseTeacherAssignment,
-    UserRole, PageContent,
+    UserRole, TeacherLevel, PageContent,
     Product, ProductCategory, StockMovement,
     Account, Counterparty, Transaction, Purchase, PurchaseItem, Sale, SaleItem,
     ChartOfAccounts, AccountingEntry, BankTransaction, CashFlowIndicator, PaymentAllocation,
     SalePaymentAllocation, BankTransferLink
 )
-from django.http import JsonResponse
+from django.http import JsonResponse, QueryDict
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Sum, Count, F, Exists, OuterRef, Prefetch
+from django.db.models import Q, Sum, Count, F, Exists, OuterRef, Prefetch, Case, When, IntegerField
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import slugify
 from django.core.paginator import Paginator
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, date
 import re
+
+COURSE_LEVEL_ORDER = Case(
+    When(level='BEGINNER_1', then=0),
+    When(level='BEGINNER_2', then=1),
+    When(level='INTERMEDIATE', then=2),
+    When(level='ADVANCED', then=3),
+    When(level='VIP', then=4),
+    default=99,
+    output_field=IntegerField(),
+)
 import os
 from .import_counterparties import import_counterparties
 from .import_bank_transactions import import_bank_transactions, next_entry_number
+from .books_period import (
+    get_books_start_date, is_archived_date, can_view_archive, wants_archive, period_filter,
+    current_period_movements, archived_denied, closed_period_error,
+)
+from .auto_link import find_matches as find_auto_link_matches
+from django.conf import settings
+
+TEACHER_PHOTO_ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+
+def save_teacher_static_photo(teacher_id, uploaded_file):
+    """Багшийн зургийг static/images/багшнар фолдерт хадгалж, файлын нэрийг буцаана."""
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    if ext not in TEACHER_PHOTO_ALLOWED_EXTENSIONS:
+        ext = '.jpg'
+    filename = f'teacher_{teacher_id}{ext}'
+
+    target_dirs = [settings.TEACHER_PHOTO_DIR]
+    if settings.STATIC_ROOT:
+        target_dirs.append(settings.STATIC_ROOT / 'images' / 'багшнар')
+
+    for target_dir in target_dirs:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / filename
+        with open(target_path, 'wb') as destination:
+            for chunk in uploaded_file.chunks():
+                destination.write(chunk)
+        uploaded_file.seek(0)
+
+    return filename
+
 
 def home(request):
     """Нүүр хуудас"""
@@ -61,6 +104,21 @@ def user_login(request):
             messages.error(request, 'Утас/имэйл эсвэл нууц үг буруу байна.')
     
     return render(request, 'main/login.html')
+
+class PasswordResetRequestView(auth_views.PasswordResetView):
+    """Нууц үг сэргээх линк илгээж, аль имэйл рүү явсныг (нууцалж) харуулна"""
+
+    def form_valid(self, form):
+        self.request.session['password_reset_sent_to'] = form.masked_emails
+        return super().form_valid(form)
+
+
+class PasswordResetSentView(auth_views.PasswordResetDoneView):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['sent_to'] = self.request.session.pop('password_reset_sent_to', [])
+        return context
+
 
 def user_logout(request):
     """Гарах"""
@@ -261,26 +319,26 @@ def dashboard(request):
             last_month = datetime.now() - timedelta(days=30)
             
             # Орлого (банкны гүйлгээ)
-            total_income = BankTransaction.objects.filter(
+            total_income = period_filter(BankTransaction.objects.all(), 'transaction_date').filter(
                 income_amount__gt=0,
                 transaction_date__gte=last_month
             ).aggregate(total=Sum('income_amount'))['total'] or 0
             
             # Зарлага (банкны гүйлгээ)
-            total_expense = BankTransaction.objects.filter(
+            total_expense = period_filter(BankTransaction.objects.all(), 'transaction_date').filter(
                 expense_amount__gt=0,
                 transaction_date__gte=last_month
             ).aggregate(total=Sum('expense_amount'))['total'] or 0
             
             # Худалдан авалт (сүүлийн сарын)
-            purchases = StockMovement.objects.filter(
+            purchases = current_period_movements(StockMovement.objects.all()).filter(
                 movement_type='IN',
                 created_at__gte=last_month
             )
             total_purchases = sum(p.quantity * (p.price or 0) for p in purchases)
             
             # Борлуулалт (сүүлийн сарын)
-            sales = StockMovement.objects.filter(
+            sales = current_period_movements(StockMovement.objects.all()).filter(
                 movement_type='OUT',
                 created_at__gte=last_month
             )
@@ -341,6 +399,8 @@ def student_list(request):
 
     if q:
         searchable_fields = [
+            'first_name',
+            'last_name',
             'mongolian_name',
             'user__first_name',
             'user__last_name',
@@ -369,11 +429,15 @@ def student_list(request):
         students = students.filter(is_active_student=False)
 
     allowed_enrollment_statuses = {choice[0] for choice in Enrollment.STATUS_CHOICES}
+    enrollment_filter = {}
     if enrollment_status in allowed_enrollment_statuses:
-        students = students.filter(enrollments__status=enrollment_status)
-
+        enrollment_filter['enrollments__status'] = enrollment_status
     if course_id.isdigit():
-        students = students.filter(enrollments__course_id=course_id)
+        enrollment_filter['enrollments__course_id'] = course_id
+    if enrollment_filter:
+        # Нэг enrollment дээрх анги + төлөвийг хамтад нь шалгана.
+        # Тусдаа filter хийвэл өөр enrollment-үүдийг нийлүүлж буруу үр дүн гарна.
+        students = students.filter(**enrollment_filter)
 
     students = students.distinct()
 
@@ -389,38 +453,34 @@ def student_list(request):
     students = students.order_by(*sort_options.get(sort, sort_options['name_asc']))
     filtered_count = students.count()
 
-    class_counts = {
-        'BEGINNER_1': 0,
-        'BEGINNER_2': 0,
-        'INTERMEDIATE': 0,
-        'ADVANCED': 0,
-    }
     status_labels = dict(Enrollment.STATUS_CHOICES)
-    class_status_counts = {level: {status: 0 for status in status_labels} for level in class_counts}
+    active_courses = list(Course.objects.filter(is_active=True).order_by('name'))
+    course_counts = {course.id: 0 for course in active_courses}
+    course_status_counts = {course.id: {status: 0 for status in status_labels} for course in active_courses}
 
     enrollment_counts = (
         Enrollment.objects
         .filter(student__in=students)
-        .values('course__level')
+        .values('course_id')
         .annotate(student_count=Count('student', distinct=True))
     )
 
     for row in enrollment_counts:
-        level = row['course__level']
-        if level in class_counts:
-            class_counts[level] = row['student_count']
+        course_id_key = row['course_id']
+        if course_id_key in course_counts:
+            course_counts[course_id_key] = row['student_count']
 
-    level_status_rows = (
+    course_status_rows = (
         Enrollment.objects
         .filter(student__in=students)
-        .values('course__level', 'status')
+        .values('course_id', 'status')
         .annotate(student_count=Count('student', distinct=True))
     )
-    for row in level_status_rows:
-        level = row['course__level']
+    for row in course_status_rows:
+        course_id_key = row['course_id']
         status = row['status']
-        if level in class_status_counts and status in class_status_counts[level]:
-            class_status_counts[level][status] = row['student_count']
+        if course_id_key in course_status_counts and status in course_status_counts[course_id_key]:
+            course_status_counts[course_id_key][status] = row['student_count']
 
     status_counts = {choice[0]: 0 for choice in Enrollment.STATUS_CHOICES}
     status_count_rows = (
@@ -448,14 +508,19 @@ def student_list(request):
             if count
         ]
 
+    course_accents = ['bg-green-500', 'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500']
+
     stats = [
         {'label': 'Нийт сурагч', 'value': total_students, 'accent': 'bg-secondary', 'breakdown': status_breakdown(status_counts)},
         {'label': 'Харагдаж буй', 'value': filtered_count, 'accent': 'bg-primary', 'breakdown': status_breakdown(status_counts)},
-        {'label': 'Анхан 1', 'value': class_counts['BEGINNER_1'], 'accent': 'bg-green-500', 'breakdown': status_breakdown(class_status_counts['BEGINNER_1'])},
-        {'label': 'Анхан 2', 'value': class_counts['BEGINNER_2'], 'accent': 'bg-emerald-500', 'breakdown': status_breakdown(class_status_counts['BEGINNER_2'])},
-        {'label': 'Дунд', 'value': class_counts['INTERMEDIATE'], 'accent': 'bg-blue-500', 'breakdown': status_breakdown(class_status_counts['INTERMEDIATE'])},
-        {'label': 'Ахисан', 'value': class_counts['ADVANCED'], 'accent': 'bg-purple-500', 'breakdown': status_breakdown(class_status_counts['ADVANCED'])},
     ]
+    for index, course in enumerate(active_courses):
+        stats.append({
+            'label': course.name,
+            'value': course_counts[course.id],
+            'accent': course_accents[index % len(course_accents)],
+            'breakdown': status_breakdown(course_status_counts[course.id]),
+        })
 
     context = {
         'students': students,
@@ -464,7 +529,7 @@ def student_list(request):
         'enrollment_status': enrollment_status,
         'status_choices': Enrollment.STATUS_CHOICES,
         'course_id': course_id,
-        'courses': Course.objects.filter(is_active=True).order_by('name'),
+        'courses': active_courses,
         'sort': sort,
         'total_students': total_students,
         'filtered_count': filtered_count,
@@ -798,6 +863,34 @@ def student_update(request, student_id):
         if email and User.objects.filter(email=email).exclude(id=student_profile.user.id).exists():
             messages.error(request, f'Имэйл хаяг {email} аль хэдийн бүртгэгдсэн байна.')
             return render(request, 'main/student_update.html', {'student': student_profile})
+
+        enrollment_course_changes = {}
+        for enrollment in enrollments:
+            selected_course_id = request.POST.get(
+                f'enrollment_course_{enrollment.id}', str(enrollment.course_id)
+            ).strip()
+            if not selected_course_id.isdigit() or int(selected_course_id) == enrollment.course_id:
+                continue
+            selected_course = courses.filter(id=int(selected_course_id)).first()
+            if not selected_course:
+                messages.error(request, f'{enrollment.course.name} бүртгэлд сонгосон анги буруу байна.')
+                return render(request, 'main/student_update.html', {
+                    'student': student_profile,
+                    'courses': courses,
+                    'enrollments': enrollments,
+                    'enrolled_course_ids': enrolled_course_ids
+                })
+            if Enrollment.objects.filter(
+                student=student_profile, course=selected_course
+            ).exclude(id=enrollment.id).exists():
+                messages.error(request, f'Сурагч аль хэдийн "{selected_course.name}" ангид бүртгэлтэй байна.')
+                return render(request, 'main/student_update.html', {
+                    'student': student_profile,
+                    'courses': courses,
+                    'enrollments': enrollments,
+                    'enrolled_course_ids': enrolled_course_ids
+                })
+            enrollment_course_changes[enrollment.id] = selected_course
         
         try:
             # User мэдээлэл шинэчлэх
@@ -842,12 +935,16 @@ def student_update(request, student_id):
             enrollment_date_changed_count = 0
             allowed_statuses = {'PENDING', 'APPROVED', 'COMPLETED', 'CANCELLED'}
             for enrollment in enrollments:
+                selected_course = enrollment_course_changes.get(enrollment.id)
+                if selected_course:
+                    enrollment.course = selected_course
+                    enrollment_changed = True
+                else:
+                    enrollment_changed = False
                 selected_status = request.POST.get(f'enrollment_status_{enrollment.id}', '').strip()
                 selected_enrollment_date = request.POST.get(
                     f'enrollment_date_{enrollment.id}', ''
                 ).strip()
-                enrollment_changed = False
-
                 if selected_status in allowed_statuses and selected_status != enrollment.status:
                     enrollment.status = selected_status
                     # Цуцалсан төлөвт идэвхгүй, бусад үед идэвхтэй байлгана
@@ -947,24 +1044,90 @@ def student_delete(request, student_id):
     
     return redirect('main:student_list')
 
-@login_required
 def teacher_list(request):
-    """Багш нарын жагсаалт - Зөвхөн админ"""
+    """Багш нарын танилцуулга - Нэвтрээгүй хүн ч орж үзэх нийтийн хуудас"""
+    teachers = UserProfile.objects.filter(
+        role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
+    ).select_related('user').prefetch_related('course_assignments__course').order_by('teacher_display_order', 'last_name', 'first_name')
+    return render(request, 'main/teacher_list.html', {'teachers': teachers})
+
+
+def get_teacher_levels():
+    return TeacherLevel.objects.filter(is_active=True)
+
+
+@login_required
+def teacher_level_manage(request):
+    if not request.user.profile.is_admin:
+        messages.error(request, 'Хандах эрхгүй байна.')
+        return redirect('main:teacher_manage_list')
+
+    if request.method == 'POST':
+        level_id = request.POST.get('level_id')
+        name = request.POST.get('name', '').strip()
+        sort_order = request.POST.get('sort_order', '0')
+        if not name:
+            messages.error(request, 'Түвшний нэр оруулна уу.')
+        else:
+            try:
+                sort_order = int(sort_order)
+                level = TeacherLevel.objects.filter(id=level_id).first() if level_id else TeacherLevel()
+                level.name = name
+                level.slug = slugify(name, allow_unicode=True) or f'level-{TeacherLevel.objects.count() + 1}'
+                level.sort_order = max(sort_order, 0)
+                level.is_active = True
+                level.save()
+                messages.success(request, 'Багшийн түвшин хадгалагдлаа.')
+            except (TypeError, ValueError):
+                messages.error(request, 'Эрэмбэ тоо байх ёстой.')
+        return redirect('main:teacher_level_manage')
+
+    return render(request, 'main/teacher_level_manage.html', {'levels': TeacherLevel.objects.all()})
+
+
+@login_required
+def teacher_level_delete(request, level_id):
+    if not request.user.profile.is_admin:
+        messages.error(request, 'Хандах эрхгүй байна.')
+        return redirect('main:teacher_manage_list')
+    if request.method == 'POST':
+        TeacherLevel.objects.filter(id=level_id).update(is_active=False)
+        messages.success(request, 'Багшийн түвшин устгагдлаа.')
+    return redirect('main:teacher_level_manage')
+
+
+@login_required
+def teacher_manage_list(request):
+    """Багш нарын удирдлага - Зөвхөн админ (үүсгэх, засах, устгах)"""
     if not request.user.profile.is_admin:
         messages.error(request, 'Хандах эрхгүй байна.')
         return redirect('main:dashboard')
+
+    if request.method == 'POST':
+        teachers = UserProfile.objects.filter(
+            role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
+        )
+        try:
+            for teacher in teachers:
+                raw_order = request.POST.get(f'teacher_order_{teacher.id}', '9999').strip()
+                teacher.teacher_display_order = max(int(raw_order), 0)
+                teacher.save(update_fields=['teacher_display_order', 'updated_at'])
+            messages.success(request, 'Багшийн жагсаалтын дараалал хадгалагдлаа.')
+        except (TypeError, ValueError):
+            messages.error(request, 'Дарааллын утга 0-ээс их буюу тэнцүү тоо байх ёстой.')
+        return redirect('main:teacher_manage_list')
     
     teachers = UserProfile.objects.filter(
         role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-    ).select_related('user').prefetch_related('course_assignments__course')
-    return render(request, 'main/teacher_list.html', {'teachers': teachers})
+    ).select_related('user').prefetch_related('course_assignments__course').order_by('teacher_display_order', 'last_name', 'first_name')
+    return render(request, 'main/teacher_manage_list.html', {'teachers': teachers})
 
 @login_required
 def teacher_create(request):
     """Багш бүртгэх - Зөвхөн админ"""
     if not request.user.profile.is_admin:
         messages.error(request, 'Танд багш бүртгэх эрх байхгүй байна.')
-        return redirect('main:teacher_list')
+        return redirect('main:teacher_manage_list')
     
     if request.method == 'POST':
         # Форм мэдээлэл авах
@@ -980,12 +1143,14 @@ def teacher_create(request):
         email = request.POST.get('email', '').strip()
         address = request.POST.get('address', '').strip()
         selected_levels = request.POST.getlist('teacher_level_choices')
-        # Нэвтрэх эрхэд ашиглах гол role (эхний сонголт)
-        role = selected_levels[0] if selected_levels else ''
+        role = UserRole.TEACHER_BEGINNER
+        valid_level_slugs = set(get_teacher_levels().values_list('slug', flat=True))
+        selected_levels = [level for level in selected_levels if level in valid_level_slugs]
         teacher_levels_str = ','.join(selected_levels)
+        photo = request.FILES.get('photo')
         
         # Validation
-        _courses_ctx = {'courses': Course.objects.all().order_by('level', 'name')}
+        _courses_ctx = {'courses': Course.objects.all().order_by('level', 'name'), 'teacher_levels': get_teacher_levels()}
         if not last_name or not first_name:
             messages.error(request, 'Овог, нэр оруулна уу.')
             return render(request, 'main/teacher_create.html', _courses_ctx)
@@ -996,6 +1161,10 @@ def teacher_create(request):
         
         if not selected_levels:
             messages.error(request, 'Багшийн түвшин сонгоно уу.')
+            return render(request, 'main/teacher_create.html', _courses_ctx)
+        
+        if photo and photo.size > 15 * 1024 * 1024:
+            messages.error(request, 'Зургийн хэмжээ 15MB-с хэтэрсэн байна. Жижиг зураг сонгоно уу.')
             return render(request, 'main/teacher_create.html', _courses_ctx)
         
         # Утасны дугаар цэвэрлэх
@@ -1051,16 +1220,22 @@ def teacher_create(request):
                 enrollment_date=timezone.now().date()
             )
 
+            if photo:
+                new_profile.photo_filename = save_teacher_static_photo(new_profile.id, photo)
+                new_profile.save(update_fields=['photo_filename'])
+
             # Сонгосон ангиудыг оноох
-            course_ids = request.POST.getlist('course_ids')
+            course_ids = [int(cid) for cid in request.POST.getlist('course_ids') if str(cid).isdigit()]
             if course_ids:
                 CourseTeacherAssignment.objects.bulk_create(
                     [
                         CourseTeacherAssignment(course_id=course_id, teacher=new_profile)
-                        for course_id in course_ids if str(course_id).isdigit()
+                        for course_id in course_ids
                     ],
                     ignore_conflicts=True
                 )
+                # Үндсэн багшгүй ангид энэ багшийг үндсэн багш болгоно
+                sync_course_primary_teacher(course_ids)
 
             messages.success(
                 request,
@@ -1068,22 +1243,22 @@ def teacher_create(request):
                 f'Username: {username}\n'
                 f'Нууц үг: {phone_clean[-8:] if len(phone_clean) >= 8 else phone_clean}'
             )
-            return redirect('main:teacher_list')
+            return redirect('main:teacher_manage_list')
             
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
             courses = Course.objects.all().order_by('level', 'name')
-            return render(request, 'main/teacher_create.html', {'courses': courses})
+            return render(request, 'main/teacher_create.html', {'courses': courses, 'teacher_levels': get_teacher_levels()})
     
     courses = Course.objects.all().order_by('level', 'name')
-    return render(request, 'main/teacher_create.html', {'courses': courses})
+    return render(request, 'main/teacher_create.html', {'courses': courses, 'teacher_levels': get_teacher_levels()})
 
 @login_required
 def teacher_update(request, teacher_id):
     """Багш засах - Зөвхөн админ"""
     if not request.user.profile.is_admin:
         messages.error(request, 'Танд багш засах эрх байхгүй байна.')
-        return redirect('main:teacher_list')
+        return redirect('main:teacher_manage_list')
     
     teacher_profile = get_object_or_404(
         UserProfile, 
@@ -1099,7 +1274,9 @@ def teacher_update(request, teacher_id):
         email = request.POST.get('email', '').strip()
         address = request.POST.get('address', '').strip()
         selected_levels = request.POST.getlist('teacher_level_choices')
-        role = selected_levels[0] if selected_levels else ''
+        role = teacher_profile.role
+        valid_level_slugs = set(get_teacher_levels().values_list('slug', flat=True))
+        selected_levels = [level for level in selected_levels if level in valid_level_slugs]
         teacher_levels_str = ','.join(selected_levels)
         birth_date = request.POST.get('birth_date', '').strip()
         gender = request.POST.get('gender', '').strip()
@@ -1113,19 +1290,25 @@ def teacher_update(request, teacher_id):
             messages.error(request, 'Овог, нэр оруулна уу.')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         if not phone:
             messages.error(request, 'Утасны дугаар оруулна уу.')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         if not selected_levels:
             messages.error(request, 'Багшийн түвшин сонгоно уу.')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
+        
+        if photo and photo.size > 15 * 1024 * 1024:
+            messages.error(request, 'Зургийн хэмжээ 15MB-с хэтэрсэн байна. Жижиг зураг сонгоно уу.')
+            courses = Course.objects.all().order_by('level', 'name')
+            teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         # Утасны дугаар цэвэрлэх
         phone_clean = phone.replace(' ', '').replace('-', '').replace('+976', '')
@@ -1135,21 +1318,21 @@ def teacher_update(request, teacher_id):
             messages.error(request, 'Утасны дугаар 8 оронтой тоо байх ёстой. Жишээ: 99001234')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         # Утас давхцаж байгаа эсэх шалгах (өөр хэрэглэгчтэй)
         if UserProfile.objects.filter(phone=phone_clean).exclude(id=teacher_id).exists():
             messages.error(request, f'Утасны дугаар {phone_clean} аль хэдийн бүртгэгдсэн байна.')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         # Имэйл давхцаж байгаа эсэх шалгах (өөр хэрэглэгчтэй)
         if email and User.objects.filter(email=email).exclude(id=teacher_profile.user.id).exists():
             messages.error(request, f'Имэйл хаяг {email} аль хэдийн бүртгэгдсэн байна.')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
         
         try:
             # User мэдээлэл шинэчлэх
@@ -1174,12 +1357,16 @@ def teacher_update(request, teacher_id):
             
             # Зураг шинэчлэх (хэрэв байвал)
             if photo:
-                teacher_profile.photo = photo
+                teacher_profile.photo_filename = save_teacher_static_photo(teacher_profile.id, photo)
             
             teacher_profile.save()
 
             # Ангийн оноолт шинэчлэх
-            course_ids = [int(cid) for cid in request.POST.getlist('course_ids')]
+            course_ids = [int(cid) for cid in request.POST.getlist('course_ids') if str(cid).isdigit()]
+            removed_course_ids = list(
+                CourseTeacherAssignment.objects.filter(teacher=teacher_profile)
+                .exclude(course_id__in=course_ids).values_list('course_id', flat=True)
+            )
             CourseTeacherAssignment.objects.filter(teacher=teacher_profile).exclude(course_id__in=course_ids).delete()
             existing_course_ids = set(
                 CourseTeacherAssignment.objects.filter(teacher=teacher_profile).values_list('course_id', flat=True)
@@ -1191,26 +1378,32 @@ def teacher_update(request, teacher_id):
                 ],
                 ignore_conflicts=True
             )
+            # Хасагдсан ангиуд болон үндсэн багшгүй ангиудын үндсэн багшийг уялдуулах
+            # (хасагдсан багш үндсэн багш хэвээр үлдэхгүй)
+            removed_course_ids += list(
+                Course.objects.filter(teacher=teacher_profile).exclude(id__in=course_ids).values_list('id', flat=True)
+            )
+            sync_course_primary_teacher(set(removed_course_ids) | set(course_ids))
 
             messages.success(request, f'✓ Багш "{last_name} {first_name}" амжилттай шинэчлэгдлээ!')
-            return redirect('main:teacher_list')
+            return redirect('main:teacher_manage_list')
             
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
             courses = Course.objects.all().order_by('level', 'name')
             teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+            return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
     
     courses = Course.objects.all().order_by('level', 'name')
     teacher_course_ids = list(teacher_profile.course_assignments.values_list('course_id', flat=True))
-    return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids})
+    return render(request, 'main/teacher_update.html', {'teacher': teacher_profile, 'courses': courses, 'teacher_course_ids': teacher_course_ids, 'teacher_levels': get_teacher_levels()})
 
 @login_required
 def teacher_delete(request, teacher_id):
     """Багш устгах - Зөвхөн админ"""
     if not request.user.profile.is_admin:
         messages.error(request, 'Танд багш устгах эрх байхгүй байна.')
-        return redirect('main:teacher_list')
+        return redirect('main:teacher_manage_list')
     
     teacher_profile = get_object_or_404(
         UserProfile, 
@@ -1226,12 +1419,12 @@ def teacher_delete(request, teacher_id):
             # User устгахад profile автоматаар устана (CASCADE)
             user.delete()
             messages.success(request, f'✓ Багш "{teacher_name}" амжилттай устгагдлаа.')
-            return redirect('main:teacher_list')
+            return redirect('main:teacher_manage_list')
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
-            return redirect('main:teacher_list')
+            return redirect('main:teacher_manage_list')
     
-    return redirect('main:teacher_list')
+    return redirect('main:teacher_manage_list')
 
 @login_required
 def enrollment_list(request):
@@ -1305,9 +1498,9 @@ def attendance_list(request):
         courses = Course.objects.filter(
             Q(teacher=profile) | Q(teacher_assignments__teacher=profile),
             is_active=True
-        ).distinct()
+        ).distinct().order_by(COURSE_LEVEL_ORDER, 'name')
     else:
-        courses = Course.objects.filter(is_active=True)
+        courses = Course.objects.filter(is_active=True).order_by(COURSE_LEVEL_ORDER, 'name')
     
     return render(request, 'main/attendance_list.html', {'courses': courses})
 
@@ -1384,6 +1577,35 @@ def attendance_sheet(request, course_id):
             else:
                 messages.info(request, 'Устгах загвар олдсонгүй.')
             return redirect('main:attendance_sheet', course_id=course_id)
+
+        if action == 'autosave_attendance':
+            checkbox_name = request.POST.get('checkbox_name', '').strip()
+            is_present = request.POST.get('checked') == 'true'
+            parts = checkbox_name.split('_')
+            try:
+                if checkbox_name.startswith('attendance_') and len(parts) == 3:
+                    enrollment = enrollments.get(id=int(parts[1]))
+                    attendance_date = datetime.strptime(parts[2], '%Y-%m-%d').date()
+                    Attendance.objects.update_or_create(
+                        enrollment=enrollment,
+                        date=attendance_date,
+                        defaults={'present': is_present, 'notes': ''},
+                    )
+                elif checkbox_name.startswith('teacher_attendance_') and len(parts) == 4:
+                    teacher = selected_teachers.get(id=int(parts[2]))
+                    attendance_date = datetime.strptime(parts[3], '%Y-%m-%d').date()
+                    TeacherAttendance.objects.update_or_create(
+                        course=course,
+                        teacher=teacher,
+                        date=attendance_date,
+                        defaults={'present': is_present, 'notes': ''},
+                    )
+                else:
+                    return JsonResponse({'success': False, 'error': 'Ирцийн checkbox буруу байна.'}, status=400)
+            except (ValueError, Attendance.DoesNotExist, TeacherAttendance.DoesNotExist):
+                return JsonResponse({'success': False, 'error': 'Ирц хадгалах өгөгдөл буруу байна.'}, status=400)
+
+            return JsonResponse({'success': True})
 
         # Ирц хадгалах
         all_dates = set()
@@ -1728,8 +1950,10 @@ def attendance_mark(request, course_id):
 @login_required
 def course_list(request):
     """Сургалтын жагсаалт"""
-    courses = Course.objects.all().select_related('teacher__user').order_by('-is_active', '-end_date')
-    
+    courses = Course.objects.all().select_related('teacher__user').prefetch_related(
+        'teacher_assignments__teacher__user'
+    ).order_by(COURSE_LEVEL_ORDER, 'name')
+
     # Админ эрх шалгах
     is_admin = False
     if hasattr(request.user, 'profile'):
@@ -1740,7 +1964,62 @@ def course_list(request):
         'is_admin': is_admin
     })
 
-@login_required
+def get_course_form_teachers():
+    """Хичээлийн форм дээр сонгох багш нарын жагсаалт"""
+    return UserProfile.objects.filter(
+        role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
+    ).select_related('user').order_by('teacher_display_order', 'last_name', 'first_name')
+
+
+def get_selected_teacher_ids(request, teachers):
+    """POST-оос ирсэн багшийн ID-уудыг зөвхөн хүчинтэй багшаар шүүж, дарааллыг хадгална"""
+    valid_ids = set(teachers.values_list('id', flat=True))
+    selected = []
+    for value in request.POST.getlist('teacher_ids'):
+        if str(value).isdigit() and int(value) in valid_ids and int(value) not in selected:
+            selected.append(int(value))
+    return selected
+
+
+def set_course_teachers(course, teacher_ids):
+    """Ангийн багш нарыг сонгосон жагсаалттай яг тааруулна"""
+    CourseTeacherAssignment.objects.filter(course=course).exclude(teacher_id__in=teacher_ids).delete()
+    existing_ids = set(
+        CourseTeacherAssignment.objects.filter(course=course).values_list('teacher_id', flat=True)
+    )
+    CourseTeacherAssignment.objects.bulk_create(
+        [CourseTeacherAssignment(course=course, teacher_id=tid) for tid in teacher_ids if tid not in existing_ids],
+        ignore_conflicts=True
+    )
+    sync_course_primary_teacher([course.id])
+
+
+def sync_course_primary_teacher(course_ids):
+    """Course.teacher (үндсэн багш)-ийг оноолттой уялдуулна.
+    Үндсэн багш оноолтоос хасагдсан бол эхний оноогдсон багшийг, байхгүй бол хоосон болгоно."""
+    for course in Course.objects.filter(id__in=course_ids):
+        assigned_ids = list(
+            CourseTeacherAssignment.objects.filter(course=course)
+            .order_by('teacher__teacher_display_order', 'teacher__last_name', 'teacher__first_name')
+            .values_list('teacher_id', flat=True)
+        )
+        if course.teacher_id in assigned_ids:
+            continue
+        new_teacher_id = assigned_ids[0] if assigned_ids else None
+        if course.teacher_id != new_teacher_id:
+            course.teacher_id = new_teacher_id
+            course.save(update_fields=['teacher'])
+
+
+def _parse_money(raw, default):
+    """'50,000' → Decimal('50000'); хоосон/буруу бол default."""
+    raw = (raw or '').replace(',', '').replace(' ', '').replace('₮', '').strip()
+    try:
+        return Decimal(raw) if raw else default
+    except InvalidOperation:
+        return default
+
+
 @login_required
 def course_create(request):
     """Шинэ хичээл үүсгэх - Админ, менежер, нягтлан"""
@@ -1748,55 +2027,48 @@ def course_create(request):
     if not hasattr(request.user, 'profile') or request.user.profile.role not in [UserRole.PRESIDENT, UserRole.DIRECTOR, UserRole.MANAGER, UserRole.ACCOUNTANT]:
         messages.error(request, 'Танд хичээл үүсгэх эрх байхгүй байна.')
         return redirect('main:course_list')
-    
+
+    teachers = get_course_form_teachers()
+
     if request.method == 'POST':
         name = request.POST.get('name')
         level = request.POST.get('level')
-        teacher_id = request.POST.get('teacher')
+        teacher_ids = get_selected_teacher_ids(request, teachers)
         is_active = request.POST.get('is_active') == 'on'
-        
-        teachers = UserProfile.objects.filter(
-            role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-        ).select_related('user')
-        
+        context = {'teachers': teachers, 'selected_teacher_ids': teacher_ids}
+
         # Validation
         if not name:
             messages.error(request, 'Хичээлийн нэр оруулна уу.')
-            return render(request, 'main/course_form.html', {'teachers': teachers})
-        
+            return render(request, 'main/course_form.html', context)
+
         if not level:
             messages.error(request, 'Түвшин сонгоно уу.')
-            return render(request, 'main/course_form.html', {'teachers': teachers})
-        
+            return render(request, 'main/course_form.html', context)
+
         try:
-            teacher = UserProfile.objects.get(id=teacher_id) if teacher_id else None
             today = timezone.now().date()
-            
+
             course = Course.objects.create(
                 name=name,
                 level=level,
                 duration_weeks=0,
                 price=0,
+                monthly_fee=_parse_money(request.POST.get('monthly_fee'), 0),
                 start_date=today,
                 end_date=today,
-                teacher=teacher,
+                teacher_id=teacher_ids[0] if teacher_ids else None,
                 is_active=is_active
             )
-            if teacher:
-                CourseTeacherAssignment.objects.get_or_create(course=course, teacher=teacher)
-            
+            set_course_teachers(course, teacher_ids)
+
             messages.success(request, f'✓ "{name}" сургалт амжилттай үүслээ!')
             return redirect('main:course_list')
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
-            return render(request, 'main/course_form.html', {'teachers': teachers})
-    
-    # Багш нарын жагсаалт
-    teachers = UserProfile.objects.filter(
-        role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-    ).select_related('user')
-    
-    return render(request, 'main/course_form.html', {'teachers': teachers})
+            return render(request, 'main/course_form.html', context)
+
+    return render(request, 'main/course_form.html', {'teachers': teachers, 'selected_teacher_ids': []})
 
 @login_required
 def course_edit(request, course_id):
@@ -1812,32 +2084,36 @@ def course_edit(request, course_id):
         messages.error(request, 'Хичээл олдсонгүй.')
         return redirect('main:course_list')
     
+    teachers = get_course_form_teachers()
+
     if request.method == 'POST':
         course.name = request.POST.get('name')
         course.level = request.POST.get('level')
         course.duration_weeks = request.POST.get('duration_weeks') or course.duration_weeks
         course.price = request.POST.get('price') or course.price
+        course.monthly_fee = _parse_money(request.POST.get('monthly_fee'), course.monthly_fee)
         course.start_date = request.POST.get('start_date') or course.start_date
         course.end_date = request.POST.get('end_date') or course.end_date
         course.is_active = request.POST.get('is_active') == 'on'
-        
-        teacher_id = request.POST.get('teacher')
-        course.teacher = UserProfile.objects.get(id=teacher_id) if teacher_id else None
-        
+
+        teacher_ids = get_selected_teacher_ids(request, teachers)
+        # Одоогийн үндсэн багш сонгогдсон хэвээр бол хадгална, үгүй бол эхний сонгосон багш
+        if course.teacher_id not in teacher_ids:
+            course.teacher_id = teacher_ids[0] if teacher_ids else None
+
         course.save()
-        if course.teacher:
-            CourseTeacherAssignment.objects.get_or_create(course=course, teacher=course.teacher)
+        set_course_teachers(course, teacher_ids)
         messages.success(request, f'"{course.name}" хичээл амжилттай шинэчлэгдлээ.')
         return redirect('main:course_list')
-    
-    # Багш нарын жагсаалт
-    teachers = UserProfile.objects.filter(
-        role__in=[UserRole.TEACHER_BEGINNER, UserRole.TEACHER_INTERMEDIATE, UserRole.TEACHER_ADVANCED]
-    ).select_related('user')
-    
+
+    selected_teacher_ids = list(course.teacher_assignments.values_list('teacher_id', flat=True))
+    if course.teacher_id and course.teacher_id not in selected_teacher_ids:
+        selected_teacher_ids.append(course.teacher_id)
+
     return render(request, 'main/course_form.html', {
         'course': course,
-        'teachers': teachers
+        'teachers': teachers,
+        'selected_teacher_ids': selected_teacher_ids,
     })
 
 @login_required
@@ -2028,6 +2304,75 @@ def product_set_initial_stock(request):
 
 
 @login_required
+def product_opening_stock(request):
+    """Барааны эхний үлдэгдэл (тоо, нэгжийн өртөг)-ийг систем эхлэх огноогоор бөөнөөр оруулах"""
+    profile = request.user.profile
+    user = request.user
+    has_access = (
+        profile.is_admin or
+        profile.role == UserRole.ACCOUNTANT or
+        user.is_superuser or
+        user.has_perm('main.change_product')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
+        return redirect('main:inventory_list')
+
+    products = list(Product.objects.select_related('category').order_by('name'))
+
+    if request.method == 'POST':
+        def parse(value, cast):
+            value = (value or '').replace(',', '').replace(' ', '').strip()
+            return cast(value) if value else cast('0')
+
+        changed, errors = 0, []
+        with transaction.atomic():
+            for product in products:
+                key = product.id
+                if f'qty_{key}' not in request.POST:
+                    continue
+                try:
+                    qty = parse(request.POST.get(f'qty_{key}'), int)
+                    cost = parse(request.POST.get(f'cost_{key}'), Decimal)
+                except (ValueError, InvalidOperation):
+                    errors.append(product.name)
+                    continue
+                if qty < 0 or cost < 0:
+                    errors.append(product.name)
+                    continue
+                if product.initial_stock != qty or product.purchase_price != cost:
+                    product.initial_stock = qty
+                    product.purchase_price = cost
+                    product.save(update_fields=['initial_stock', 'purchase_price', 'updated_at'])
+                    changed += 1
+        if errors:
+            messages.error(request, 'Буруу утгатай бараа: ' + ', '.join(errors[:10]))
+        messages.success(request, f'{changed} барааны эхний үлдэгдэл хадгалагдлаа.' if changed else 'Өөрчлөлт олдсонгүй.')
+
+        # "150101 Бараа материал" дансны эхний үлдэгдэл = барааны эхний үлдэгдлийн нийт дүн
+        inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
+        if inventory_account:
+            total = sum((p.initial_stock * (p.purchase_price or 0) for p in Product.objects.all()), Decimal('0'))
+            total = total.quantize(Decimal('0.01'))
+            if inventory_account.opening_balance != total:
+                inventory_account.opening_balance = total
+                inventory_account.save(update_fields=['opening_balance', 'updated_at'])
+                messages.info(request, f'150101 Бараа материал дансны эхний үлдэгдэл {total:,.2f}₮ болж шинэчлэгдлээ.')
+        return redirect('main:product_opening_stock')
+
+    total_value = sum((p.initial_stock * (p.purchase_price or 0) for p in products), Decimal('0'))
+    # "150101 Бараа материал" дансны эхний үлдэгдэлтэй тулгах
+    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
+    context = {
+        'products': products,
+        'total_value': total_value,
+        'total_qty': sum(p.initial_stock for p in products),
+        'inventory_account': inventory_account,
+    }
+    return render(request, 'main/product_opening_stock.html', context)
+
+
+@login_required
 def inventory_cost_calculation(request):
     """Дундаж өртгийн (WAC) тооцоолол — бараа тус бүрээр эхний үлдэгдэл, орлого, дундаж өртөг"""
     profile = request.user.profile
@@ -2060,7 +2405,10 @@ def inventory_cost_calculation(request):
         init_value = init_qty * init_price
 
         # Орлогын хөдөлгөөнүүд (худалдан авалт, үнэгүй орлого)
-        in_movements = [m for m in product.movements.all() if m.movement_type == 'IN']
+        in_movements = [
+            m for m in product.movements.all()
+            if m.movement_type == 'IN' and not is_archived_date(m.created_at)
+        ]
         in_qty = sum(m.quantity for m in in_movements)
         in_value = sum((m.total_amount or Decimal('0')) for m in in_movements)
 
@@ -2127,6 +2475,12 @@ def unlink_bank_transaction(request, transaction_id):
         return redirect('main:dashboard')
 
     transaction = get_object_or_404(BankTransaction, id=transaction_id)
+
+    _denied = archived_denied(request, transaction.transaction_date, 'main:bank_transaction_list')
+
+    if _denied:
+
+        return _denied
 
     # Where to return after unlinking: prefer explicit POST/GET `return_to`, then Referer
     return_to = request.POST.get('return_to', request.GET.get('return_to', '')).strip()
@@ -2227,46 +2581,57 @@ def inventory_list(request):
         messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
         return redirect('main:dashboard')
     
-    # Хайлт, шүүлт
-    query = request.GET.get('q', '')
-    category_id = request.GET.get('category', '')
-    status = request.GET.get('status', '')
-    
-    products = Product.objects.select_related('category', 'created_by').all()
-    
-    if query:
-        products = products.filter(
-            Q(name__icontains=query) | 
-            Q(code__icontains=query) |
-            Q(supplier__icontains=query)
+    # Бүх барааг нэг query-гээр (хөдөлгөөний нийлбэртэй) авч, шүүлтийг
+    # браузер дээр шууд хийнэ — бараа цөөн тул хуудас дахин ачаалах шаардлагагүй.
+    start_date = get_books_start_date()
+
+    def movement_sum(field, types):
+        condition = Q(movements__movement_type__in=types)
+        if start_date:
+            # Систем эхлэх огнооноос өмнөх хөдөлгөөнийг эхний үлдэгдэл орлоно
+            condition &= Q(movements__created_at__date__gte=start_date)
+        return Sum(f'movements__{field}', filter=condition)
+
+    products = list(
+        Product.objects.select_related('category', 'supplier_fk')
+        .annotate(
+            qty_in=movement_sum('quantity', ['IN', 'RETURN']),
+            qty_purchased=movement_sum('quantity', ['IN']),
+            value_purchased=movement_sum('total_amount', ['IN']),
+            qty_out=movement_sum('quantity', ['OUT']),
+            qty_adjusted=movement_sum('quantity', ['ADJUSTMENT']),
         )
-    
-    if category_id:
-        products = products.filter(category_id=category_id)
-    
-    if status == 'active':
-        products = products.filter(is_active=True)
-    elif status == 'inactive':
-        products = products.filter(is_active=False)
-    elif status == 'low_stock':
-        products = [p for p in products if p.is_low_stock]
-    
-    categories = ProductCategory.objects.filter(is_active=True)
-    
-    # Статистик
-    total_products = products.count() if not status == 'low_stock' else len(products)
-    total_stock_value = sum(p.stock_value for p in products)
-    low_stock_count = sum(1 for p in Product.objects.all() if p.is_low_stock)
-    
+        .order_by('name')
+    )
+
+    for product in products:
+        init_qty = product.initial_stock or 0
+        init_price = product.purchase_price or Decimal('0')
+        # Одоогийн үлдэгдэл = эхний + орлого/буцаалт − зарлага ± тохируулга (Product.current_stock-тэй ижил)
+        product.stock_qty = init_qty + (product.qty_in or 0) - (product.qty_out or 0) + (product.qty_adjusted or 0)
+        # Дундаж өртөг (WAC) — "Өртөг бодолт" хуудастай ижил аргачлал
+        total_qty = init_qty + (product.qty_purchased or 0)
+        total_value = init_qty * init_price + (product.value_purchased or Decimal('0'))
+        product.avg_cost = (total_value / total_qty) if total_qty > 0 else init_price
+        product.initial_value = init_qty * init_price
+        product.avg_stock_value = product.stock_qty * product.avg_cost
+        if product.stock_qty <= 0:
+            product.stock_state = 'out'
+        elif product.stock_qty <= (product.min_stock or 0):
+            product.stock_state = 'low'
+        else:
+            product.stock_state = 'in'
+        product.supplier_label = product.supplier_fk.name if product.supplier_fk else (product.supplier or '')
+
+    categories = ProductCategory.objects.filter(is_active=True).order_by('name')
+    suppliers = sorted({p.supplier_label for p in products if p.supplier_label})
+
     context = {
         'products': products,
         'categories': categories,
-        'query': query,
-        'selected_category': category_id,
-        'selected_status': status,
-        'total_products': total_products,
-        'total_stock_value': total_stock_value,
-        'low_stock_count': low_stock_count,
+        'suppliers': suppliers,
+        'has_uncategorized': any(p.category_id is None for p in products),
+        'units': Product.UNIT_CHOICES,
     }
     
     return render(request, 'main/inventory_list.html', context)
@@ -2469,6 +2834,12 @@ def stock_movement_delete(request, movement_id):
         return redirect('main:inventory_list')
 
     movement = get_object_or_404(StockMovement, id=movement_id)
+
+    _denied = archived_denied(request, movement.created_at, 'main:stock_movement_list')
+
+    if _denied:
+
+        return _denied
 
     # Борлуулалттай холбогдсон хөдөлгөөнийг эндээс устгахгүй — борлуулалтаараа устгана
     if getattr(movement, 'sale_id', None):
@@ -2679,11 +3050,12 @@ def stock_movement_list(request):
         messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
         return redirect('main:dashboard')
     
-    movements = StockMovement.objects.select_related('product', 'created_by').order_by('-created_at')[:100]
+    period_movements = period_filter(StockMovement.objects.all(), 'created_at__date', archive=wants_archive(request))
+    movements = period_movements.select_related('product', 'created_by').order_by('-created_at')[:100]
     
     # Статистик
-    total_in = StockMovement.objects.filter(movement_type='IN').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-    total_out = StockMovement.objects.filter(movement_type='OUT').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    total_in = period_movements.filter(movement_type='IN').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    total_out = period_movements.filter(movement_type='OUT').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     
     context = {
         'movements': movements,
@@ -2726,7 +3098,8 @@ def finance_dashboard(request):
     ).distinct().order_by('code')
 
     account_ids = [acc.id for acc in cash_bank_accounts]
-    tx_summary = BankTransaction.objects.filter(
+    # Үлдэгдэл = эхний үлдэгдэл + систем эхлэх огнооноос хойших гүйлгээ
+    tx_summary = period_filter(BankTransaction.objects.all(), 'transaction_date').filter(
         bank_account_id__in=account_ids
     ).values('bank_account_id').annotate(
         total_income=Sum('income_amount'),
@@ -2790,11 +3163,11 @@ def finance_dashboard(request):
     ).order_by('-transaction_date', '-created_at')[:10]
     
     # Сүүлийн худалдан авалт/борлуулалт
-    recent_purchases = Purchase.objects.select_related('supplier').order_by('-purchase_date')[:5]
-    recent_sales = Sale.objects.select_related('customer').order_by('-sale_date')[:5]
+    recent_purchases = Purchase.objects.select_related('supplier').order_by('-purchase_date', '-id')[:5]
+    recent_sales = period_filter(Sale.objects.all(), 'sale_date').select_related('customer').order_by('-sale_date')[:5]
 
     # Банкны гүйлгээний статистик
-    bank_transactions = BankTransaction.objects.filter(account_type='BANK')
+    bank_transactions = period_filter(BankTransaction.objects.filter(account_type='BANK'), 'transaction_date')
     bank_tx_total = bank_transactions.count()
     bank_tx_linked = bank_transactions.filter(is_processed=True).count()
     bank_tx_unlinked = bank_transactions.filter(is_processed=False).count()
@@ -2838,10 +3211,35 @@ def account_opening_balance(request):
         messages.error(request, 'Танд эхний үлдэгдэл оруулах эрх байхгүй.')
         return redirect('main:finance_dashboard')
     
+    # Систем эхлэх огноо солих (зөвхөн superuser) — дансны үлдэгдлийг дахин тооцоолно
+    if request.method == 'POST' and request.POST.get('action') == 'set_start_date':
+        if not user.is_superuser:
+            messages.error(request, 'Систем эхлэх огноог зөвхөн superuser өөрчилнө.')
+            return redirect('main:account_opening_balance')
+        from .models import FinanceSettings
+        from .books_period import recalculate_account_balances
+        raw = request.POST.get('books_start_date', '').strip()
+        try:
+            new_date = datetime.strptime(raw, '%Y-%m-%d').date() if raw else None
+        except ValueError:
+            messages.error(request, 'Огноо буруу байна.')
+            return redirect('main:account_opening_balance')
+        settings_obj, _ = FinanceSettings.objects.get_or_create(pk=1)
+        settings_obj.books_start_date = new_date
+        settings_obj.updated_by = user
+        settings_obj.save()
+        changed = recalculate_account_balances()
+        messages.success(
+            request,
+            f'Систем эхлэх огноо: {new_date:%Y-%m-%d}. ' if new_date else 'Систем эхлэх огноог арилгалаа. '
+        )
+        messages.info(request, f'{changed} дансны дебит/кредит дүнг шинэ үеийн журналаар дахин тооцоолов.')
+        return redirect('main:account_opening_balance')
+
     if request.method == 'POST':
         try:
             updated_count = 0
-            
+
             # Бүх дансны эхний үлдэгдлийг шинэчлэх
             accounts = ChartOfAccounts.objects.filter(is_active=True)
             
@@ -2852,6 +3250,7 @@ def account_opening_balance(request):
                     opening_value = request.POST.get(opening_key, '0')
                     
                     try:
+                        opening_value = (opening_value or '').replace(',', '').replace(' ', '').strip()
                         opening = Decimal(opening_value) if opening_value else Decimal('0')
                         
                         # Үлдэгдэл өөрчлөгдсөн эсэхийг шалгах
@@ -2875,9 +3274,18 @@ def account_opening_balance(request):
     
     # GET хүсэлт - бүх дансыг харуулах
     accounts = ChartOfAccounts.objects.filter(is_active=True).order_by('code')
-    
+
+    # Дебит шинжтэй (Актив, Зардал, Өртөг) ба кредит шинжтэй (Пассив, Өмч, Орлого)
+    # дансны эхний үлдэгдлийн нийлбэр тэнцүү байх ёстой
+    debit_nature = {'ASSET', 'EXPENSE', 'COST'}
+    opening_debit_total = sum((a.opening_balance for a in accounts if a.account_type in debit_nature), Decimal('0'))
+    opening_credit_total = sum((a.opening_balance for a in accounts if a.account_type not in debit_nature), Decimal('0'))
+
     context = {
         'accounts': accounts,
+        'opening_debit_total': opening_debit_total,
+        'opening_credit_total': opening_credit_total,
+        'debit_nature_types': debit_nature,
     }
     
     return render(request, 'main/account_opening_balance.html', context)
@@ -2901,36 +3309,46 @@ def purchase_list(request):
         return redirect('main:dashboard')
     
     # StockMovement-н худалдан авалтууд (movement_type='IN')
-    purchases = StockMovement.objects.filter(movement_type='IN').select_related(
-        'product', 'counterparty', 'bank_account', 'created_by'
+    purchases = period_filter(
+        StockMovement.objects.filter(movement_type='IN'), 'created_at__date', archive=wants_archive(request)
+    ).select_related(
+        'product', 'counterparty', 'bank_account', 'created_by__profile', 'purchase'
     )
-    
+
     # Шүүлтүүд
     supplier = request.GET.get('supplier', '')
     if supplier:
         purchases = purchases.filter(counterparty__name__icontains=supplier)
-    
+
     payment_method = request.GET.get('payment_method', '')
     if payment_method:
         purchases = purchases.filter(payment_method=payment_method)
-    
+
+    # Огноо: баримтын огноо (байхгүй бол бүртгэсэн огноо)
     date_from = request.GET.get('date_from', '')
     if date_from:
-        purchases = purchases.filter(created_at__gte=date_from)
-    
+        purchases = purchases.filter(
+            Q(purchase__purchase_date__gte=date_from) | Q(purchase__isnull=True, created_at__date__gte=date_from))
+
     date_to = request.GET.get('date_to', '')
     if date_to:
-        purchases = purchases.filter(created_at__lte=date_to)
-    
-    # Статистик
-    total_quantity = purchases.aggregate(total=Sum('quantity'))['total'] or 0
-    total_amount = purchases.aggregate(total=Sum('total_amount'))['total'] or 0
-    
+        purchases = purchases.filter(
+            Q(purchase__purchase_date__lte=date_to) | Q(purchase__isnull=True, created_at__date__lte=date_to))
+
+    # Статистик — бараа хувиргалт нь худалдан авалт биш тул (тусгайлан шүүгээгүй бол) тооцохгүй
+    stats_qs = purchases if payment_method == 'CONVERSION' else purchases.exclude(payment_method='CONVERSION')
+    total_quantity = stats_qs.aggregate(total=Sum('quantity'))['total'] or 0
+    total_amount = stats_qs.aggregate(total=Sum('total_amount'))['total'] or 0
+
+    rows = list(purchases.order_by('-created_at')[:100])  # Сүүлийн 100
+    for row in rows:
+        row.creator_name = _get_salesperson_display_name(row.created_by) if row.created_by else '—'
+
     context = {
-        'purchases': purchases.order_by('-created_at')[:100],  # Сүүлийн 100
+        'purchases': rows,
         'total_quantity': total_quantity,
         'total_amount': total_amount,
-        'payment_methods': StockMovement.PAYMENT_METHOD_CHOICES,
+        'payment_methods': PURCHASE_PAYMENT_METHODS,
         'selected_payment_method': payment_method,
     }
     
@@ -2955,7 +3373,7 @@ def sale_list(request):
         messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
         return redirect('main:dashboard')
 
-    sales = Sale.objects.select_related(
+    sales = period_filter(Sale.objects.all(), 'sale_date', archive=wants_archive(request)).select_related(
         'customer', 'payment_account', 'created_by'
     ).prefetch_related('items__product', 'banktransaction_set', 'payment_allocations__transaction')
 
@@ -3084,6 +3502,12 @@ def sale_detail(request, sale_id):
         pk=sale_id
     )
 
+    _denied = archived_denied(request, sale.sale_date, 'main:sale_list')
+
+    if _denied:
+
+        return _denied
+
     def get_tx_available_for_sale(tx_obj):
         """Тухайн гүйлгээнээс энэ борлуулалтад холбож болох үлдэгдэл дүн"""
         student_alloc = tx_obj.allocations.aggregate(s=Sum('amount'))['s'] or Decimal('0')
@@ -3118,6 +3542,7 @@ def sale_detail(request, sale_id):
         Q(has_sale_alloc=False) &
         (Q(offset_account__isnull=False) | Q(accounting_entry__isnull=False))
     ).select_related('bank_account', 'counterparty').order_by('-transaction_date')
+    available_txs = period_filter(available_txs, 'transaction_date', archive=is_archived_date(sale.sale_date))
 
     # Хайлтын параметрүүд
     q_desc      = request.GET.get('q_desc', '').strip()
@@ -3169,10 +3594,14 @@ def sale_detail(request, sale_id):
 
     # Хуваарилах үлдэгдэл дүнгүй гүйлгээнүүдийг жагсаалтаас хасах
     available_tx_list = []
+    remaining = sale.total_amount - (sale.paid_amount or Decimal('0'))
     for tx in available_txs:
         tx.available_for_link = get_tx_available_for_sale(tx)
         if tx.available_for_link > 0:
+            tx.is_exact = remaining > 0 and tx.available_for_link == remaining
+            tx.days_apart = abs((tx.transaction_date - sale.sale_date).days) if sale.sale_date else 0
             available_tx_list.append(tx)
+    available_tx_list.sort(key=lambda t: (not t.is_exact, t.days_apart))
 
     # Холбогдсон гүйлгээнүүд (partial болон legacy full link хоёуланг харуулна)
     linked_allocations = list(
@@ -3209,8 +3638,20 @@ def sale_detail(request, sale_id):
         code__startswith='7', is_active=True
     ).order_by('code')
 
+    # Энэ борлуулалттай холбоотой журналын бичилтүүд (орлого, өртөг, төлбөр)
+    entry_q = Q(related_sale=sale) | Q(id__in=[t.accounting_entry_id for t in linked_txs if t.accounting_entry_id])
+    if sale.sale_number:
+        entry_q |= Q(description__contains=sale.sale_number) | Q(entry_number__contains=sale.sale_number)
+    journal_entries = (AccountingEntry.objects.filter(entry_q)
+                       .select_related('debit_account', 'credit_account').distinct().order_by('entry_date', 'id'))
+
     context = {
         'sale':             sale,
+        'remaining':        remaining,
+        'paid_percent':     min(int(sale.paid_amount / sale.total_amount * 100), 100) if sale.total_amount else 0,
+        'journal_entries':  journal_entries,
+        # Бүрэн төлөгдсөн бол холбох хэсгийг хураана (хайлт хийсэн бол нээнэ)
+        'link_open':        remaining > 0 or show_all,
         'linked_txs':       linked_txs,
         'tx_page_obj':      tx_page_obj,
         'tx_paginator':     tx_paginator,
@@ -3235,6 +3676,9 @@ def sale_link_bank(request, sale_id):
     if request.method != 'POST':
         return redirect('main:sale_detail', sale_id=sale_id)
     sale = get_object_or_404(Sale, pk=sale_id)
+    _denied = archived_denied(request, sale.sale_date, 'main:sale_list')
+    if _denied:
+        return _denied
     tx_id  = request.POST.get('transaction_id', '').replace(',', '').strip()
     action = request.POST.get('action', 'link')  # link | unlink
     redirect_to_return = request.POST.get('redirect_to_return') == '1'
@@ -3579,9 +4023,100 @@ def sale_link_expense(request, sale_id):
     return redirect(back_url)
 
 
+def _auto_cash_transactions(sale):
+    """Борлуулалт бүртгэхэд автоматаар үүссэн кассын орлогын гүйлгээ ("Барааны борлуулалт SAL-...")."""
+    if not sale.sale_number:
+        return BankTransaction.objects.none()
+    return BankTransaction.objects.filter(
+        account_type='CASH', bank_name='CASH_REGISTER',
+        sale_allocations__sale=sale,
+        description__startswith=f'Барааны борлуулалт {sale.sale_number}',
+    ).distinct()
+
+
+def _sale_external_links(sale):
+    """Борлуулалтыг засахад саад болох гадны холболтууд (текстийн жагсаалт).
+
+    Банкны/кассын гүйлгээ, POS сэттлмэнт, зардлын холболтыг эхлээд таслах шаардлагатай —
+    эс бөгөөс дагалдах журнал, төлбөр зөрнө.
+    """
+    reasons = []
+    auto_ids = set(_auto_cash_transactions(sale).values_list('id', flat=True))
+    for alloc in sale.payment_allocations.select_related('transaction'):
+        if alloc.transaction_id in auto_ids:
+            continue
+        tx = alloc.transaction
+        kind = 'POS сэттлмэнт' if 'СЕТТЛЕМЕНТ' in (tx.description or '') else ('Кассын гүйлгээ' if tx.account_type == 'CASH' else 'Банкны гүйлгээ')
+        reasons.append(f'{kind} {tx.transaction_date:%Y-%m-%d} · {alloc.amount:,.0f}₮')
+    for tx in BankTransaction.objects.filter(income_sale=sale).exclude(id__in=auto_ids):
+        reasons.append(f'Банкны гүйлгээ {tx.transaction_date:%Y-%m-%d} · {tx.income_amount:,.0f}₮')
+    if sale.expense_accounting_entry_id:
+        reasons.append('Дотоод хэрэгцээний зардлын холболт')
+    if sale.items.exists() and not sale.stock_movements.exists():
+        reasons.append('Хуучин бүртгэл (барааны хөдөлгөөн борлуулалттай холбогдоогүй)')
+    return reasons
+
+
+def _reverse_sale_effects(sale):
+    """Борлуулалт бүртгэхэд үүссэн дагалдах бичлэгүүдийг буцаана.
+
+    Барааны хөдөлгөөн, автомат кассын гүйлгээ, борлуулалтын журнал (орлого, өртөг) устна.
+    Гадны гүйлгээнд холбогдсон журналд хүрэхгүй.
+    """
+    for tx in _auto_cash_transactions(sale):
+        tx.accounting_entry = None
+        tx.save(update_fields=['accounting_entry'])
+        tx.delete()
+    for entry in AccountingEntry.objects.filter(related_sale=sale):
+        if BankTransaction.objects.filter(accounting_entry=entry).exists():
+            continue
+        entry.delete()
+    StockMovement.objects.filter(sale=sale).delete()
+
+
+_SALE_METHOD_CODES = {
+    'Касс': 'CASH', 'Харилцах': 'BANK', 'Касс + Харилцах': 'MIXED',
+    'Зээлээр': 'CREDIT', 'Дотоод хэрэгцээ': 'INTERNAL', 'POS': 'POS',
+}
+
+
+def _sale_edit_data(sale):
+    """Засах формыг урьдчилан бөглөх өгөгдөл."""
+    method = _SALE_METHOD_CODES.get(sale.expected_payment_method, '')
+    cash_account = bank_account = None
+    cash_amount = Decimal('0')
+    for entry in AccountingEntry.objects.filter(related_sale=sale).select_related('debit_account'):
+        code = entry.debit_account.code
+        if code.startswith(('100', '101')):
+            cash_account, cash_amount = entry.debit_account_id, cash_amount + entry.debit_amount
+        elif code.startswith('110'):
+            bank_account = entry.debit_account_id
+    if sale.customer_id:
+        customer = {'id': str(sale.customer_id), 'name': sale.customer.name}
+    else:
+        customer = None
+    return {
+        'sale_id': sale.id,
+        'sale_number': sale.sale_number,
+        'date': sale.sale_date.isoformat() if sale.sale_date else '',
+        'items': [
+            {'product_id': it.product_id, 'name': it.product.name, 'quantity': it.quantity, 'price': float(it.unit_price)}
+            for it in sale.items.select_related('product')
+        ],
+        'customer': customer,
+        'payment_method': method,
+        'cash_account': cash_account,
+        'bank_account': bank_account,
+        'pos_bank_account': sale.pos_bank_account_id,
+        'cash_amount': float(cash_amount),
+        'cash_record': 'new' if _auto_cash_transactions(sale).exists() else 'none',
+        'notes': sale.notes or '',
+    }
+
+
 @login_required
 def sale_finance_edit(request, sale_id):
-    """Борлуулалтын мэдээллийг засах (finance/sales хэсгийн Sale загвар)"""
+    """Борлуулалт засах — бүртгэх формтой ижил. Хадгалахад дагалдах бичлэгүүдийг дахин үүсгэнэ."""
     profile = request.user.profile
     user = request.user
     has_access = (
@@ -3594,72 +4129,64 @@ def sale_finance_edit(request, sale_id):
         messages.error(request, 'Энэ борлуулалтыг засах эрх танд байхгүй.')
         return redirect('main:sale_list')
 
-    sale = get_object_or_404(Sale, pk=sale_id)
+    sale = get_object_or_404(Sale.objects.select_related('customer'), pk=sale_id)
+    _denied = archived_denied(request, sale.sale_date, 'main:sale_list')
+    if _denied:
+        return _denied
+
+    return_to = (request.POST.get('return_to') or request.GET.get('return_to') or '').strip()
+    if not (return_to.startswith('/') and not return_to.startswith('//')):
+        return_to = ''
+    locked_reasons = _sale_external_links(sale)
 
     if request.method == 'POST':
-        with transaction.atomic():
-            sale_date = request.POST.get('sale_date', '').strip()
-            customer_id = request.POST.get('customer_id', '').strip()
-            status = request.POST.get('status', '').strip()
-            salesperson_name = request.POST.get('salesperson_name', '').strip()
-            expected_payment_method = request.POST.get('expected_payment_method', '').strip()
-            notes = request.POST.get('notes', '').strip()
+        try:
+            with transaction.atomic():
+                if locked_reasons:
+                    # Санхүүгийн хэсэг түгжээтэй — зөвхөн үйлчлүүлэгч, тэмдэглэл
+                    customer_value = request.POST.get('counterparty', '').replace(',', '').strip()
+                    if customer_value.startswith('p:'):
+                        customer_profile = get_object_or_404(UserProfile, id=customer_value[2:])
+                        cp, _ = _get_or_create_counterparty_for_profile(customer_profile)
+                        customer_value = str(cp.id)
+                    counterparty, _name = _resolve_sale_counterparty(
+                        counterparty_id=customer_value,
+                        customer_name_manual=request.POST.get('customer_name_manual', '').strip(),
+                    )
+                    sale.customer = counterparty
+                    sale.notes = request.POST.get('notes', '').strip()
+                    sale.save(update_fields=['customer', 'notes', 'updated_at'])
+                else:
+                    _reverse_sale_effects(sale)
+                    _process_multi_sale(request, existing_sale=sale)
+            messages.success(request, f'"{sale.sale_number}" борлуулалт шинэчлэгдлээ.')
+            detail_url = reverse('main:sale_detail', args=[sale.id])
+            return redirect(f'{detail_url}?return_to={quote(return_to)}' if return_to else detail_url)
+        except Exception as e:
+            messages.error(request, f'Алдаа гарлаа: {e}')
+            return redirect(request.get_full_path())
 
-            if sale_date:
-                sale.sale_date = sale_date
-            if customer_id:
-                try:
-                    sale.customer = Counterparty.objects.get(pk=int(customer_id))
-                except (Counterparty.DoesNotExist, ValueError):
-                    sale.customer = None
-            else:
-                sale.customer = None
-            if status in dict(Sale.STATUS_CHOICES):
-                sale.status = status
-            sale.salesperson_name = salesperson_name
-            sale.expected_payment_method = expected_payment_method
-            sale.notes = notes
-
-            # ── Бараануудыг шинэчлэх ──────────────────────────────────────
-            from main.models import SaleItem
-            items = sale.items.all()
-            for item in items:
-                product_id = request.POST.get(f'item_{item.id}_product', '').strip()
-                qty_raw    = request.POST.get(f'item_{item.id}_qty', '').strip()
-                price_raw  = request.POST.get(f'item_{item.id}_price', '').strip()
-
-                if product_id and qty_raw and price_raw:
-                    try:
-                        product = Product.objects.get(pk=int(product_id))
-                        qty   = int(qty_raw)
-                        price = Decimal(price_raw.replace(',', ''))
-                        if qty > 0 and price >= 0:
-                            item.product    = product
-                            item.quantity   = qty
-                            item.unit_price = price
-                            item.save()   # total_price auto-calc by model.save()
-                    except (Product.DoesNotExist, ValueError, Exception):
-                        pass  # буруу утга орвол бараар хэвээр үлдэнэ
-
-            # Нийт дүнг дахин тооцоолох
-            sale.total_amount = sale.items.aggregate(s=Sum('total_price'))['s'] or Decimal('0')
-            sale.save()
-
-        messages.success(request, f'"{sale.sale_number}" борлуулалтын мэдээлэл амжилттай шинэчлэгдлээ.')
-        return redirect('main:sale_detail', sale_id=sale.id)
-
-    customers = Counterparty.objects.filter(
-        counterparty_type__in=['CUSTOMER', 'BOTH'], is_active=True
-    ).order_by('name')
-    products = Product.objects.filter(is_active=True).order_by('name')
-
-    context = {
-        'sale': sale,
-        'customers': customers,
-        'status_choices': Sale.STATUS_CHOICES,
-        'products': products,
-    }
-    return render(request, 'main/sale_finance_edit.html', context)
+    context = _multi_sale_form_context(request, sale=sale)
+    # Энэ борлуулалтын барааны тоог үлдэгдэлд буцааж нэмнэ (засахад өөрийнх нь тоо саад болохгүй)
+    own_qty = {}
+    for item in sale.items.all():
+        own_qty[item.product_id] = own_qty.get(item.product_id, 0) + item.quantity
+    known = {p['id'] for p in context['products_data']}
+    for p in context['products_data']:
+        if p['id'] in own_qty and not locked_reasons:
+            p['current_stock'] += own_qty[p['id']]
+    for product in Product.objects.filter(id__in=set(own_qty) - known):  # идэвхгүй болсон бараа
+        context['products_data'].append({
+            'id': product.id, 'name': product.name, 'selling_price': float(product.selling_price),
+            'current_stock': product.current_stock + own_qty[product.id],
+        })
+    context.update({
+        'edit_sale': sale,
+        'edit_data': _sale_edit_data(sale),
+        'locked_reasons': locked_reasons,
+        'return_to': return_to,
+    })
+    return render(request, 'main/sale_form_multi.html', context)
 
 
 @login_required
@@ -3682,6 +4209,12 @@ def sale_finance_delete(request, sale_id):
         return redirect('main:sale_list')
 
     sale = get_object_or_404(Sale, pk=sale_id)
+
+    _denied = archived_denied(request, sale.sale_date, 'main:sale_list')
+
+    if _denied:
+
+        return _denied
     sale_number = sale.sale_number
 
     return_to = request.POST.get('return_to', '').strip()
@@ -3697,6 +4230,8 @@ def sale_finance_delete(request, sale_id):
     )
 
     with transaction.atomic():
+        # Барааны хөдөлгөөн, автомат кассын гүйлгээ, борлуулалтын журналыг буцаана
+        _reverse_sale_effects(sale)
         SalePaymentAllocation.objects.filter(sale=sale).delete()
         BankTransaction.objects.filter(income_sale=sale).update(income_sale=None)
         sale.delete()
@@ -3961,13 +4496,42 @@ def import_bank_transactions_view(request):
             if result:
                 print(f"✅ Импорт амжилттай: {result}")
                 skipped_msg = f', Давхардсан (алгассан): {result["skipped"]}' if result["skipped"] > 0 else ''
+                statement_msg = ''
+                if result.get('bank'):
+                    statement_msg = f'{result["bank"]} хуулга'
+                    if result.get('statement_account'):
+                        statement_msg += f' (данс {result["statement_account"]}'
+                        statement_msg += f', {result["period"]})' if result.get('period') else ')'
+                    statement_msg += '\n'
                 messages.success(
                     request, 
                     f'✓ Амжилттай импортлолоо!\n'
+                    f'{statement_msg}'
                     f'Банкны данс: {bank_account.code} - {bank_account.name}\n'
                     f'Үүссэн гүйлгээ: {result["created"]}{skipped_msg}, '
                     f'Дансны үлдэгдэл: {result["final_balance"]:,.0f}₮'
                 )
+                for warning in result.get('warnings', [])[:10]:
+                    messages.warning(request, warning)
+                # "Импортлох үед шууд холбох" загварууд (банкны шимтгэл гэх мэт)
+                from .auto_link import apply_auto_rules, find_matches
+                auto_linked = apply_auto_rules(request.user, bank_account=bank_account)
+                if auto_linked:
+                    messages.success(request, f'⚡ {auto_linked} гүйлгээ загвараар автоматаар холбогдлоо (банкны шимтгэл гэх мэт).')
+                review_count = len(find_matches())
+                if review_count:
+                    messages.info(request, f'⚡ {review_count} гүйлгээ загварт таарч байна — "Автомат холбох" товчоор шалгаж хадгална уу.')
+                # POS сэттлмэнт орж ирсэн бол тулгах хуудас руу шууд
+                from . import pos_settlement as pos
+                pos_rows = [r for r in pos.build_rows() if not r.is_linked]
+                if pos_rows:
+                    ready = sum(1 for r in pos_rows if r.is_matched)
+                    messages.info(
+                        request,
+                        f'💳 POS сэттлмэнт: {ready} нь борлуулалттай тэнцэж холбоход бэлэн, '
+                        f'{len(pos_rows) - ready} нь зөрүүтэй.'
+                    )
+                    return redirect('main:pos_settlement_list')
                 # Амжилттай импортлосон бол гүйлгээний жагсаалт руу
                 return redirect('main:bank_transaction_list')
             else:
@@ -4056,6 +4620,7 @@ def journal_list(request):
         # Нэмэлт хуваарилалтын entry-г дангаар харуулахгүй
         entries = entries.filter(split_source__isnull=True)
 
+    entries = period_filter(entries, 'entry_date', archive=wants_archive(request))
     entries = entries.order_by('-entry_date', '-entry_number')
 
     # Хайлт
@@ -4216,6 +4781,13 @@ def journal_create(request):
     if request.method == 'POST':
         entry_number = request.POST.get('entry_number')
         entry_date = request.POST.get('entry_date')
+        try:
+            _period_error = closed_period_error(request, datetime.strptime(entry_date or '', '%Y-%m-%d').date())
+        except ValueError:
+            _period_error = None
+        if _period_error:
+            messages.error(request, _period_error)
+            return redirect('main:journal_create')
         debit_account_id = request.POST.get('debit_account')
         credit_account_id = request.POST.get('credit_account')
         amount = request.POST.get('amount')
@@ -4289,6 +4861,12 @@ def journal_delete(request, entry_id):
     
     entry = get_object_or_404(AccountingEntry, id=entry_id)
     
+    _denied = archived_denied(request, entry.entry_date, 'main:journal_list')
+    
+    if _denied:
+    
+        return _denied
+    
     if request.method == 'POST':
         entry_number = entry.entry_number
         entry.delete()
@@ -4317,6 +4895,12 @@ def journal_unlink_transactions(request, entry_id):
         return redirect('main:journal_list')
 
     entry = get_object_or_404(AccountingEntry, id=entry_id)
+
+    _denied = archived_denied(request, entry.entry_date, 'main:journal_list')
+
+    if _denied:
+
+        return _denied
 
     return_to = request.POST.get('return_to', request.GET.get('return_to', '')).strip()
     if return_to and (not return_to.startswith('/') or return_to.startswith('//')):
@@ -4435,8 +5019,8 @@ def chart_of_accounts_list(request):
 @login_required
 def chart_account_create(request):
     """Шинэ данс үүсгэх"""
-    # Нягтлан бодогчийн эрх шалгах
-    if not request.user.profile.is_accountant:
+    # Нягтлан бодогч эсвэл superuser
+    if not (request.user.profile.is_accountant or request.user.is_superuser):
         messages.error(request, 'Данс үүсгэх эрх танд байхгүй.')
         return redirect('main:chart_of_accounts_list')
     
@@ -4626,6 +5210,120 @@ def get_bank_accounts_api(request):
 # БАНКНЫ ГҮЙЛГЭЭНИЙ УДИРДЛАГА
 # ========================================
 
+def _apply_bank_transaction_filters(transactions, params):
+    """Банкны гүйлгээний жагсаалтын шүүлтүүдийг queryset-д хэрэглэнэ.
+
+    params: request.GET эсвэл return_to URL-аас задалсан QueryDict
+    """
+    from django.db.models import Q
+
+    # Банкны дансаар шүүх
+    bank_account_id = params.get('bank_account')
+    if bank_account_id:
+        transactions = transactions.filter(bank_account_id=bank_account_id)
+    
+    # Эсрэг дансаар шүүх
+    offset_account_id = params.get('offset_account')
+    if offset_account_id:
+        transactions = transactions.filter(offset_account_id=offset_account_id)
+    
+    # Ерөнхий хайлт: утга, харилцагчийн нэр/данс (Кирилл том/жижиг ялгахгүй).
+    # Тоо бичвэл тухайн дүнтэй гүйлгээ ч олдоно.
+    search_description = (params.get('description') or '').strip()
+    if search_description:
+        search_q = (
+            Q(description__iucontains=search_description) |
+            Q(counterparty_name__iucontains=search_description) |
+            Q(counterparty_account__contains=search_description)
+        )
+        amount_text = search_description.replace(',', '').replace('₮', '').strip()
+        if amount_text.replace('.', '', 1).isdigit():
+            amount_value = Decimal(amount_text)
+            search_q |= Q(income_amount=amount_value) | Q(expense_amount=amount_value)
+        transactions = transactions.filter(search_q)
+
+    # Боловсруулалтын статусаар шүүх
+    is_processed = params.get('is_processed')
+    if is_processed == 'false':
+        transactions = transactions.filter(is_processed=False)
+    elif is_processed == 'true':
+        transactions = transactions.filter(is_processed=True)
+    
+    # Огноогоор шүүх
+    date_from = params.get('date_from')
+    date_to = params.get('date_to')
+    if date_from:
+        transactions = transactions.filter(transaction_date__gte=date_from)
+    if date_to:
+        transactions = transactions.filter(transaction_date__lte=date_to)
+
+    # Орлого/Зарлагаар шүүх
+    transaction_type = params.get('transaction_type')
+    if transaction_type == 'income':
+        transactions = transactions.filter(income_amount__gt=0)
+    elif transaction_type == 'expense':
+        transactions = transactions.filter(expense_amount__gt=0)
+
+    # Орлогын төрлөөр шүүх
+    income_type = params.get('income_type')
+    if income_type:
+        transactions = transactions.filter(income_type=income_type)
+
+    # Зарлагын төрлөөр шүүх
+    expense_type = params.get('expense_type')
+    if expense_type:
+        transactions = transactions.filter(expense_type=expense_type)
+
+    # Банкны нэрээр шүүх
+    bank_name = params.get('bank_name')
+    if bank_name:
+        transactions = transactions.filter(bank_name=bank_name)
+
+    # Дүнгийн хязгаараар шүүх (гүйлгээ бүр зөвхөн орлого эсвэл зарлагатай тул
+    # тэг биш талыг нь харгалзан шүүнэ)
+    amount_min = params.get('amount_min')
+    amount_max = params.get('amount_max')
+    if amount_min:
+        try:
+            amount_min_val = Decimal(amount_min)
+            transactions = transactions.filter(
+                Q(income_amount__gte=amount_min_val) | Q(expense_amount__gte=amount_min_val)
+            )
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+    if amount_max:
+        try:
+            amount_max_val = Decimal(amount_max)
+            transactions = transactions.filter(
+                Q(income_amount__gt=0, income_amount__lte=amount_max_val) |
+                Q(expense_amount__gt=0, expense_amount__lte=amount_max_val)
+            )
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+
+    # Сараар шүүх (сурагчийн төлбөрийн сар)
+    # Тайлбар: USE_THOUSAND_SEPARATOR тохиргоо идэвхтэй тул template дээр {{ он }}
+    # мэт бүхэл тоог таслалтай ("2,026") гаргаж болох тул цэвэрлэж авна.
+    filter_month = params.get('filter_month')
+    filter_year = params.get('filter_year')
+    if filter_month:
+        filter_month = filter_month.replace(',', '').strip()
+    if filter_year:
+        filter_year = filter_year.replace(',', '').strip()
+    if filter_month:
+        try:
+            transactions = transactions.filter(income_month=int(filter_month))
+        except (ValueError, TypeError):
+            pass
+    if filter_year:
+        try:
+            transactions = transactions.filter(income_year=int(filter_year))
+        except (ValueError, TypeError):
+            pass
+
+    return transactions
+
+
 @login_required
 def bank_transaction_list(request):
     """Банкны гүйлгээний жагсаалт - эсрэг данс холбох, журналд оруулах"""
@@ -4660,110 +5358,44 @@ def bank_transaction_list(request):
         'sale_allocations__sale__customer'
     ).order_by('-transaction_date', '-id')
     
-    # Банкны дансаар шүүх
+    # Систем эхлэх огнооноос өмнөх гүйлгээ архивд — зөвхөн superuser ?archive=1-ээр харна
+    archive_mode = wants_archive(request)
+    transactions = period_filter(transactions, 'transaction_date', archive=archive_mode)
+    transactions = _apply_bank_transaction_filters(transactions, request.GET)
+
+    # Template-д сонгогдсон шүүлтүүдийг буцааж харуулах
     bank_account_id = request.GET.get('bank_account')
-    if bank_account_id:
-        transactions = transactions.filter(bank_account_id=bank_account_id)
-    
-    # Эсрэг дансаар шүүх
     offset_account_id = request.GET.get('offset_account')
-    if offset_account_id:
-        transactions = transactions.filter(offset_account_id=offset_account_id)
-    
-    # Тайлбараар хайх (SQLite-д Cyrillic case-insensitive ажиллахгүй)
     search_description = request.GET.get('description')
-    if search_description:
-        search_upper = search_description.upper()
-        search_lower = search_description.lower()
-        transactions = transactions.filter(
-            Q(description__contains=search_description) |
-            Q(description__contains=search_upper) |
-            Q(description__contains=search_lower)
-        )
-    
-    # Боловсруулалтын статусаар шүүх
     is_processed = request.GET.get('is_processed')
-    if is_processed == 'false':
-        transactions = transactions.filter(is_processed=False)
-    elif is_processed == 'true':
-        transactions = transactions.filter(is_processed=True)
-    
-    # Огноогоор шүүх
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
-    if date_from:
-        transactions = transactions.filter(transaction_date__gte=date_from)
-    if date_to:
-        transactions = transactions.filter(transaction_date__lte=date_to)
-
-    # Орлого/Зарлагаар шүүх
     transaction_type = request.GET.get('transaction_type')
-    if transaction_type == 'income':
-        transactions = transactions.filter(income_amount__gt=0)
-    elif transaction_type == 'expense':
-        transactions = transactions.filter(expense_amount__gt=0)
-
-    # Орлогын төрлөөр шүүх
     income_type = request.GET.get('income_type')
-    if income_type:
-        transactions = transactions.filter(income_type=income_type)
-
-    # Зарлагын төрлөөр шүүх
     expense_type = request.GET.get('expense_type')
-    if expense_type:
-        transactions = transactions.filter(expense_type=expense_type)
-
-    # Банкны нэрээр шүүх
     bank_name = request.GET.get('bank_name')
-    if bank_name:
-        transactions = transactions.filter(bank_name=bank_name)
-
-    # Дүнгийн хязгаараар шүүх (гүйлгээ бүр зөвхөн орлого эсвэл зарлагатай тул
-    # тэг биш талыг нь харгалзан шүүнэ)
     amount_min = request.GET.get('amount_min')
     amount_max = request.GET.get('amount_max')
-    if amount_min:
-        try:
-            amount_min_val = Decimal(amount_min)
-            transactions = transactions.filter(
-                Q(income_amount__gte=amount_min_val) | Q(expense_amount__gte=amount_min_val)
-            )
-        except (InvalidOperation, ValueError, TypeError):
-            pass
-    if amount_max:
-        try:
-            amount_max_val = Decimal(amount_max)
-            transactions = transactions.filter(
-                Q(income_amount__gt=0, income_amount__lte=amount_max_val) |
-                Q(expense_amount__gt=0, expense_amount__lte=amount_max_val)
-            )
-        except (InvalidOperation, ValueError, TypeError):
-            pass
-
-    # Сараар шүүх (сурагчийн төлбөрийн сар)
-    # Тайлбар: USE_THOUSAND_SEPARATOR тохиргоо идэвхтэй тул template дээр {{ он }}
-    # мэт бүхэл тоог таслалтай ("2,026") гаргаж болох тул цэвэрлэж авна.
-    filter_month = request.GET.get('filter_month')
-    filter_year = request.GET.get('filter_year')
-    if filter_month:
-        filter_month = filter_month.replace(',', '').strip()
-    if filter_year:
-        filter_year = filter_year.replace(',', '').strip()
-    if filter_month:
-        try:
-            transactions = transactions.filter(income_month=int(filter_month))
-        except (ValueError, TypeError):
-            pass
-    if filter_year:
-        try:
-            transactions = transactions.filter(income_year=int(filter_year))
-        except (ValueError, TypeError):
-            pass
+    filter_month = (request.GET.get('filter_month') or '').replace(',', '').strip()
+    filter_year = (request.GET.get('filter_year') or '').replace(',', '').strip()
 
     # Статистик тооцоолох
     total_count = transactions.count()
     unprocessed_count = transactions.filter(is_processed=False).count()
     processed_count = transactions.filter(is_processed=True).count()
+
+    # Төлөвийн товчнууд дээрх тоо: төлөвөөс бусад шүүлтийг хэрэглэсэн үеийн тоо
+    params_without_status = request.GET.copy()
+    params_without_status.pop('is_processed', None)
+    status_base = _apply_bank_transaction_filters(
+        period_filter(BankTransaction.objects.filter(account_type='BANK'), 'transaction_date', archive=archive_mode),
+        params_without_status,
+    )
+    status_counts = {
+        'all': status_base.count(),
+        'false': status_base.filter(is_processed=False).count(),
+        'true': status_base.filter(is_processed=True).count(),
+    }
 
     # Шүүлтэд тохирсон бүх гүйлгээний нийт дүн (хөл мөрөнд харуулах)
     amount_totals = transactions.aggregate(
@@ -4792,8 +5424,83 @@ def bank_transaction_list(request):
     current_year = date_obj.today().year
     year_choices = list(range(current_year - 3, current_year + 2))
 
+    # Стандарт жагсаалтад ороогүй (гараар нэмсэн) орлогын төрлүүд
+    standard_income_codes = {code for code, _ in BankTransaction.INCOME_TYPE_CHOICES}
+    custom_income_types = [
+        t for t in BankTransaction.objects.exclude(income_type__isnull=True).exclude(income_type='')
+        .values_list('income_type', flat=True).distinct().order_by('income_type')
+        if t not in standard_income_codes
+    ]
+    income_type_choices = list(BankTransaction.INCOME_TYPE_CHOICES) + [(t, t) for t in custom_income_types]
+
+    # Хуудаслалтын холбоос: page-ээс бусад, хоосон биш параметрүүд
+    page_params = request.GET.copy()
+    page_params.pop('page', None)
+    for key in [k for k, v in page_params.items() if not str(v).strip()]:
+        page_params.pop(key, None)
+    page_query = page_params.urlencode()
+
+    # Идэвхтэй шүүлтүүдийг chip хэлбэрээр харуулах (× дарахад тухайн шүүлтийг хасна)
+    def remove_url(*keys):
+        remaining = request.GET.copy()
+        for key in keys + ('page',):
+            remaining.pop(key, None)
+        query = remaining.urlencode()
+        return '?' + query if query else request.path
+
+    def label_from(choices, value):
+        return dict(choices).get(value, value)
+
+    active_filters = []
+    if search_description:
+        active_filters.append({'label': 'Хайлт', 'value': f'"{search_description}"', 'url': remove_url('description')})
+    if is_processed in ('true', 'false'):
+        active_filters.append({'label': 'Төлөв', 'value': 'Холбогдсон' if is_processed == 'true' else 'Холбоогүй', 'url': remove_url('is_processed')})
+    if transaction_type in ('income', 'expense'):
+        active_filters.append({'label': 'Төрөл', 'value': 'Орлого' if transaction_type == 'income' else 'Зарлага', 'url': remove_url('transaction_type')})
+    if date_from or date_to:
+        active_filters.append({'label': 'Огноо', 'value': f'{date_from or "…"} – {date_to or "…"}', 'url': remove_url('date_from', 'date_to')})
+    if bank_account_id:
+        acc = bank_accounts.filter(id=bank_account_id).first() if str(bank_account_id).isdigit() else None
+        active_filters.append({'label': 'Данс', 'value': f'{acc.code} {acc.name}' if acc else bank_account_id, 'url': remove_url('bank_account')})
+    if bank_name:
+        active_filters.append({'label': 'Банк', 'value': label_from(BankTransaction.BANK_CHOICES, bank_name), 'url': remove_url('bank_name')})
+    if offset_account_id:
+        acc = all_accounts.filter(id=offset_account_id).first() if str(offset_account_id).isdigit() else None
+        active_filters.append({'label': 'Эсрэг данс', 'value': f'{acc.code} {acc.name}' if acc else offset_account_id, 'url': remove_url('offset_account')})
+    if income_type:
+        active_filters.append({'label': 'Орлогын төрөл', 'value': label_from(income_type_choices, income_type), 'url': remove_url('income_type')})
+    if expense_type:
+        active_filters.append({'label': 'Зарлагын төрөл', 'value': label_from(BankTransaction.EXPENSE_TYPE_CHOICES, expense_type), 'url': remove_url('expense_type')})
+    if amount_min or amount_max:
+        if amount_min and amount_max and amount_min == amount_max:
+            amount_label = f'{amount_min}₮'
+        else:
+            amount_label = f'{amount_min or "0"} – {amount_max or "∞"}₮'
+        active_filters.append({'label': 'Дүн', 'value': amount_label, 'url': remove_url('amount_min', 'amount_max')})
+    if filter_month or filter_year:
+        active_filters.append({'label': 'Төлбөрийн сар', 'value': f'{filter_year or "…"} / {filter_month or "…"}', 'url': remove_url('filter_month', 'filter_year')})
+
+    # "Дэлгэрэнгүй шүүлт" доторх идэвхтэй шүүлтийн тоо
+    advanced_keys = ['bank_account', 'bank_name', 'offset_account', 'income_type', 'expense_type',
+                     'amount_min', 'amount_max', 'filter_month', 'filter_year']
+    advanced_count = sum(1 for key in advanced_keys if request.GET.get(key))
+
     context = {
         'transactions': page_obj,
+        'status_counts': status_counts,
+        'archive_mode': archive_mode,
+        'auto_link_count': 0 if archive_mode else len(find_auto_link_matches()),
+        'can_view_archive': can_view_archive(request.user),
+        'books_start_date': get_books_start_date(),
+        # Архивт сурагчийн төлбөрт холбох шаардлагатай (холбоогүй орлого) гүйлгээ
+        'archive_pending_count': (
+            period_filter(BankTransaction.objects.filter(account_type='BANK', is_processed=False, income_amount__gt=0),
+                          'transaction_date', archive=True).count()
+            if can_view_archive(request.user) else 0
+        ),
+        'active_filters': active_filters,
+        'advanced_count': advanced_count,
         'bank_accounts': bank_accounts,
         'all_accounts': all_accounts,
         'total_count': total_count,
@@ -4805,10 +5512,12 @@ def bank_transaction_list(request):
         'page_obj': page_obj,
         'is_paginated': page_obj.has_other_pages(),
         # Dropdown сонголтууд
-        'income_type_choices': BankTransaction.INCOME_TYPE_CHOICES,
+        'income_type_choices': income_type_choices,
         'expense_type_choices': BankTransaction.EXPENSE_TYPE_CHOICES,
         'bank_choices': BankTransaction.BANK_CHOICES,
         'year_choices': year_choices,
+        'month_choices': [str(m) for m in range(1, 13)],
+        'page_query': page_query,
         # Филтерийн утгууд (form-д харуулах)
         'selected_bank_account': bank_account_id,
         'selected_offset_account': offset_account_id,
@@ -4851,6 +5560,15 @@ def link_bank_transaction_to_journal(request, transaction_id):
     # Гүйлгээ авах (банк болон кассын гүйлгээ хоёуланд зориулна)
     transaction = get_object_or_404(BankTransaction, id=transaction_id)
 
+    # Систем эхлэх огнооноос өмнөх (архивын) гүйлгээ: зөвхөн superuser, зөвхөн сурагчийн төлбөр
+    is_archived_tx = is_archived_date(transaction.transaction_date)
+    if is_archived_tx and not can_view_archive(user):
+        messages.error(
+            request,
+            f'Энэ гүйлгээ систем эхлэх огнооноос ({get_books_start_date():%Y-%m-%d}) өмнөх тул архивд орсон.'
+        )
+        return redirect('main:bank_transaction_list')
+
     # Автоматаар үүссэн кассын эсрэг мөр — холболтыг эх гүйлгээ хариуцна
     if transaction.transfer_source_id:
         messages.info(
@@ -4864,6 +5582,47 @@ def link_bank_transaction_to_journal(request, transaction_id):
     return_to = (request.POST.get('return_to') or request.GET.get('return_to', '')).strip()
     if return_to and (not return_to.startswith('/') or return_to.startswith('//')):
         return_to = ''
+
+    # Алдаа гарвал энэ хуудас руу return_to-г алдалгүй буцна
+    self_url = reverse('main:link_bank_transaction_to_journal', args=[transaction_id])
+    if return_to:
+        self_url += '?' + urlencode({'return_to': return_to})
+
+    def next_unprocessed_queryset():
+        """Жагсаалтын ижил шүүлтэд хамаарах, холбогдоогүй бусад гүйлгээ."""
+        qs = BankTransaction.objects.filter(
+            account_type=transaction.account_type,
+            is_processed=False,
+            transfer_source__isnull=True,
+        ).exclude(id=transaction.id)
+        # Архивын гүйлгээ бол архив дотроо, шинэ үеийнх бол шинэ үе дотроо
+        qs = period_filter(qs, 'transaction_date', archive=is_archived_tx)
+        if return_to:
+            parsed = urlparse(return_to)
+            if parsed.path == reverse('main:bank_transaction_list'):
+                qs = _apply_bank_transaction_filters(qs, QueryDict(parsed.query))
+        return qs.order_by('-transaction_date', '-id')
+
+    def after_save_redirect():
+        """Хадгалсны дараа: 'Хадгалаад дараагийнх' бол дараагийн холбогдоогүй гүйлгээ рүү."""
+        if request.POST.get('after_save') == 'next':
+            qs = next_unprocessed_queryset()
+            # Жагсаалтын дарааллаар одоогийнхоос доош байгаа эхнийх, байхгүй бол эхнээс нь
+            next_tx = qs.filter(
+                Q(transaction_date__lt=transaction.transaction_date) |
+                Q(transaction_date=transaction.transaction_date, id__lt=transaction.id)
+            ).first() or qs.first()
+            if next_tx:
+                next_url = reverse('main:link_bank_transaction_to_journal', args=[next_tx.id])
+                if return_to:
+                    next_url += '?' + urlencode({'return_to': return_to})
+                return redirect(next_url)
+            messages.info(request, 'Энэ шүүлтэд холбогдоогүй гүйлгээ үлдсэнгүй.')
+        if return_to:
+            return redirect(return_to)
+        if transaction.account_type == 'CASH':
+            return redirect('main:cash_transaction_list')
+        return redirect('main:bank_transaction_list')
 
     def recalc_sale_paid_amount(sale_obj):
         """Борлуулалтын paid_amount-г legacy + partial allocation-аар дахин тооцоолно"""
@@ -4996,6 +5755,9 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
         # Хоёр харилцахын гүйлгээг дотоод шилжүүлэг болгон холбох (тусдаа мини-форм)
         transfer_target_id = request.POST.get('link_transfer_target', '').replace(',', '').strip()
+        if is_archived_tx and transfer_target_id:
+            messages.error(request, 'Архивын гүйлгээг зөвхөн сурагчийн төлбөрт холбоно.')
+            return redirect(self_url)
         if transfer_target_id:
             _post_return = request.POST.get('return_to', '').strip()
             _effective_return = _post_return if (_post_return and _post_return.startswith('/') and not _post_return.startswith('//')) else return_to
@@ -5042,9 +5804,16 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
         offset_account_id = request.POST.get('offset_account')
 
+        if is_archived_tx and not (
+            transaction.income_amount > 0 and request.POST.get('income_type') == 'STUDENT_PAYMENT'
+            and not request.POST.get('new_income_type', '').strip()
+        ):
+            messages.error(request, 'Архивын гүйлгээг зөвхөн "Сурагчийн төлбөр" төрлөөр холбоно.')
+            return redirect(self_url)
+
         if not offset_account_id:
             messages.error(request, 'Эсрэг данс сонгоно уу.')
-            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+            return redirect(self_url)
 
         try:
             offset_account = ChartOfAccounts.objects.get(id=offset_account_id)
@@ -5080,24 +5849,24 @@ def link_bank_transaction_to_journal(request, transaction_id):
                         if mixed_sale_enabled:
                             if not mixed_sale_id:
                                 messages.error(request, 'Барааны төлбөрийн борлуулалт сонгоно уу.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
                             try:
                                 mixed_sale_amount = Decimal(mixed_sale_amount_raw or '0')
                             except Exception:
                                 messages.error(request, 'Барааны төлбөрийн дүн буруу байна.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                             if mixed_sale_amount <= 0:
                                 messages.error(request, 'Барааны төлбөрийн дүн 0-ээс их байх ёстой.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
                             if mixed_sale_amount > transaction.income_amount:
                                 messages.error(request, 'Барааны төлбөрийн дүн гүйлгээний дүнгээс их байж болохгүй.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                             mixed_sale_obj = Sale.objects.filter(id=mixed_sale_id).first()
                             if not mixed_sale_obj:
                                 messages.error(request, 'Сонгосон борлуулалт олдсонгүй.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                             paid_legacy_other = BankTransaction.objects.filter(
                                 income_sale=mixed_sale_obj
@@ -5116,14 +5885,14 @@ def link_bank_transaction_to_journal(request, transaction_id):
                             remaining_for_sale = mixed_sale_obj.total_amount - (paid_legacy_other + paid_alloc_other)
                             if remaining_for_sale <= 0:
                                 messages.error(request, 'Сонгосон борлуулалтын төлбөр бүрэн холбогдсон байна.')
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                             if mixed_sale_amount > remaining_for_sale:
                                 messages.error(
                                     request,
                                     f'Сонгосон борлуулалтад нэмээд {remaining_for_sale:,.0f}₮ хүртэл холбож болно.'
                                 )
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                         target_student_amount = transaction.income_amount - mixed_sale_amount
 
@@ -5164,7 +5933,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
                         if allocation_parse_error:
                             messages.error(request, 'Хуваарилалтын мэдээлэл буруу байна. Дахин шалгаад оруулна уу.')
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         if total_allocated > target_student_amount:
                             messages.error(
@@ -5172,7 +5941,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                 f'Сургалтын хуваарилалтын дүн ({total_allocated:,.0f}₮) '
                                 f'зөвшөөрөгдөх дүнгээс ({target_student_amount:,.0f}₮) их байна.'
                             )
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         allocations_saved = len(parsed_allocations)
 
@@ -5182,7 +5951,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                     request,
                                     f'Сургалтын төлбөрийн {target_student_amount:,.0f}₮ дүнг хуваарилалтаар бүрэн холбоно уу.'
                                 )
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
                         else:
                             # Нийт дүн шалгах
                             if total_allocated != target_student_amount:
@@ -5191,7 +5960,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                                     f'Хуваарилалтын нийт дүн ({total_allocated:,.0f}₮) '
                                     f'сургалтын төлбөрийн дүнтэй ({target_student_amount:,.0f}₮) тэнцүү байх ёстой.'
                                 )
-                                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                                return redirect(self_url)
 
                         # Бүх шалгалтыг давсны дараа л хуучныг устгаж, шинийг үүсгэнэ
                         PaymentAllocation.objects.filter(transaction=transaction).delete()
@@ -5226,12 +5995,12 @@ def link_bank_transaction_to_journal(request, transaction_id):
                         sale_id = request.POST.get('sale')
                         if not sale_id:
                             messages.error(request, 'Барааны борлуулалтын төрөл сонгосон тул борлуулалтын баримт заавал сонгоно уу.')
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         sale_obj = Sale.objects.filter(id=sale_id).first()
                         if not sale_obj:
                             messages.error(request, 'Сонгосон борлуулалт олдсонгүй.')
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         paid_legacy_other = BankTransaction.objects.filter(
                             income_sale=sale_obj
@@ -5250,14 +6019,14 @@ def link_bank_transaction_to_journal(request, transaction_id):
                         remaining_for_sale = sale_obj.total_amount - (paid_legacy_other + paid_alloc_other)
                         if remaining_for_sale <= 0:
                             messages.error(request, 'Сонгосон борлуулалтын төлбөр бүрэн холбогдсон байна.')
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         if transaction.income_amount > remaining_for_sale:
                             messages.error(
                                 request,
                                 f'Энэ гүйлгээнээс сонгосон борлуулалтад {remaining_for_sale:,.0f}₮-с их холбож болохгүй.'
                             )
-                            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                            return redirect(self_url)
 
                         transaction.income_sale_id = sale_id
                         transaction.income_student = None
@@ -5332,7 +6101,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
 
             if split_errors:
                 messages.error(request, 'Нэмэлт хуваарилалтын алдаа: ' + '; '.join(split_errors))
-                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                return redirect(self_url)
 
             total_amount = transaction.income_amount if transaction.income_amount > 0 else transaction.expense_amount
             if total_split >= total_amount:
@@ -5340,7 +6109,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     request,
                     f'Нэмэлт хуваарилалтын нийт дүн ({total_split:,.0f}₮) гүйлгээний нийт дүн ({total_amount:,.0f}₮)-с их буюу тэнцүү байж болохгүй.'
                 )
-                return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+                return redirect(self_url)
 
             # Журналын бичилт үүсгэх
             from .import_bank_transactions import (
@@ -5475,12 +6244,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     request,
                     f'✓ Борлуулалт холбогдож, журналын бичилт үүслээ!'
                 )
-                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
-                    return redirect(return_to)
-                if transaction.account_type == 'CASH':
-                    return redirect('main:cash_transaction_list')
-                else:
-                    return redirect('main:bank_transaction_list')
+                return after_save_redirect()
 
             # Энэ нэг гүйлгээний журнал үүсгэх (offset_account аргаар)
             result = regenerate_accounting_entries([transaction], request.user)
@@ -5492,12 +6256,7 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     f'журналын бичилт үүслээ!'
                 )
                 # Банк эсвэл кассын жагсаалт руу буцах
-                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
-                    return redirect(return_to)
-                if transaction.account_type == 'CASH':
-                    return redirect('main:cash_transaction_list')
-                else:
-                    return redirect('main:bank_transaction_list')
+                return after_save_redirect()
             else:
                 messages.warning(
                     request,
@@ -5505,18 +6264,13 @@ def link_bank_transaction_to_journal(request, transaction_id):
                     'Admin хэсгээс "Журналын бичилт үүсгэх" үйлдлийг ашиглана уу.'
                 )
                 # Банк эсвэл кассын жагсаалт руу буцах
-                if return_to and return_to.startswith('/') and not return_to.startswith('//'):
-                    return redirect(return_to)
-                if transaction.account_type == 'CASH':
-                    return redirect('main:cash_transaction_list')
-                else:
-                    return redirect('main:bank_transaction_list')
+                return after_save_redirect()
                 
         except ChartOfAccounts.DoesNotExist:
             messages.error(request, 'Сонгосон данс олдсонгүй.')
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
-            return redirect('main:link_bank_transaction_to_journal', transaction_id=transaction_id)
+            return redirect(self_url)
     
     # GET хүсэлт - форм харуулах
     # Бүх идэвхтэй дансуудыг харуулах
@@ -5533,7 +6287,15 @@ def link_bank_transaction_to_journal(request, transaction_id):
     equity_accounts = all_accounts.filter(code__startswith='3')
     
     # Орлогын ангилалд хэрэгтэй өгөгдөл
-    students = UserProfile.objects.filter(role=UserRole.STUDENT).select_related('user').order_by('first_name', 'last_name')
+    students = list(
+        UserProfile.objects.filter(role=UserRole.STUDENT).select_related('user')
+        .prefetch_related(Prefetch(
+            'enrollments',
+            queryset=Enrollment.objects.filter(is_active=True).exclude(status='CANCELLED').select_related('course'),
+            to_attr='open_enrollments',
+        ))
+        .order_by('first_name', 'last_name')
+    )
     courses = Course.objects.filter(is_active=True).order_by('level', 'name')
     months = [(i, f'{i}-р сар') for i in range(1, 13)]
 
@@ -5560,9 +6322,11 @@ def link_bank_transaction_to_journal(request, transaction_id):
     )
 
     # Бүх цуцлагдаагүй борлуулалтыг авах (Банкны холбоо шүүлтүүрт зориулж бүгдийг дамжуулна)
+    # Гүйлгээтэй ижил үеийн (шинэ үе / архив) борлуулалт; кассын гүйлгээнд "Касс", банкных бол "Харилцах"
+    sale_method = 'Касс' if transaction.account_type == 'CASH' else 'Харилцах'
     sales = list(
-        Sale.objects.exclude(status='CANCELLED')
-        .filter(expected_payment_method__icontains='Харилцах')
+        period_filter(Sale.objects.exclude(status='CANCELLED'), 'sale_date', archive=is_archived_tx)
+        .filter(expected_payment_method__icontains=sale_method)
         .select_related('customer')
         .order_by('-sale_date')
     )
@@ -5579,7 +6343,13 @@ def link_bank_transaction_to_journal(request, transaction_id):
     # remaining_for_link тооцоолол (харуулах зорилгоор)
     for sale in sales:
         sale.remaining_for_link = sale.total_amount - sale.paid_amount if hasattr(sale, 'paid_amount') else sale.total_amount
-    
+    # Санал: холбогдоогүй, үлдэгдэл нь гүйлгээний дүнтэй тэнцүү борлуулалт — огноо ойр нь эхэнд
+    tx_amount = transaction.income_amount or Decimal('0')
+    for sale in sales:
+        sale.is_suggested = (not sale.is_linked and tx_amount > 0 and sale.remaining_for_link == tx_amount)
+        sale.days_apart = abs((sale.sale_date - transaction.transaction_date).days) if sale.sale_date else 9999
+    sales.sort(key=lambda x: (not x.is_suggested, x.days_apart if x.is_suggested else 0))
+
     # Жагсаалтаас орж ирэхэд орлогын төрлийг урьдчилан сонгож болно
     income_type_codes = {code for code, _ in BankTransaction.INCOME_TYPE_CHOICES}
     initial_income_type = request.GET.get('income_type', '').strip()
@@ -5626,11 +6396,11 @@ def link_bank_transaction_to_journal(request, transaction_id):
         else:
             candidates_qs = BankTransaction.objects.filter(account_type='BANK', expense_amount=transaction.income_amount)
 
-        candidates_qs = candidates_qs.exclude(
+        candidates_qs = period_filter(candidates_qs.exclude(
             bank_account_id=transaction.bank_account_id
         ).filter(
             accounting_entry__isnull=True
-        ).select_related('bank_account')
+        ), 'transaction_date', archive=is_archived_tx).select_related('bank_account')
 
         if tf_desc:
             candidates_qs = candidates_qs.filter(
@@ -5649,6 +6419,111 @@ def link_bank_transaction_to_journal(request, transaction_id):
             )
 
         transfer_candidates = list(candidates_qs.order_by('-transaction_date')[:30])
+
+    # ===== Хуудасны JS-д зориулсан өгөгдөл (json_script) =====
+    from .bank_link_suggestions import (
+        suggest_students, suggest_month, type_defaults, account_indicator_map, counterparty_history,
+        clean_text, normalize_account, suggest_pending_payments,
+    )
+    is_income = transaction.income_amount > 0
+    student_suggestions = suggest_students(transaction, students) if is_income else []
+    pending_suggestions = suggest_pending_payments(transaction, student_suggestions) if is_income else []
+    counterparty_hint = counterparty_history(transaction)
+    students_by_id = {s.id: s for s in students}
+
+    link_data = {
+        'is_income': is_income,
+        'amount': float(transaction.income_amount if is_income else transaction.expense_amount),
+        'bank_account_label': f'{transaction.bank_account.code} - {transaction.bank_account.name}' if transaction.bank_account else '',
+        'suggested_month': suggest_month(transaction),
+        'type_defaults': type_defaults(),
+        'account_indicator_map': account_indicator_map(is_income),
+        'accounts': [{'id': a.id, 'code': a.code, 'name': a.name} for a in all_accounts],
+        'courses': [{'id': c.id, 'label': f'{c.name} ({c.get_level_display()})'} for c in courses],
+        'students': [
+            {
+                'id': s.id,
+                'name': s.name_first_display,
+                'phone': s.phone or '',
+                'search': ' '.join(filter(None, [
+                    s.name_first_display, s.full_name, s.mongolian_name, s.phone,
+                    s.user.username, s.user.email,
+                ])).lower(),
+                'courses': [
+                    {'id': e.course_id, 'label': f'{e.course.name} ({e.course.get_level_display()})'}
+                    for e in s.open_enrollments
+                ],
+            }
+            for s in students
+        ],
+        'student_suggestions': [
+            {**sug, 'name': students_by_id[sug['id']].name_first_display, 'phone': students_by_id[sug['id']].phone or ''}
+            for sug in student_suggestions if sug['id'] in students_by_id
+        ],
+        'pending_payments': [
+            {
+                'id': p.id,
+                'student': p.student_id,
+                'name': p.student.name_first_display,
+                'course': p.course_id,
+                'course_label': p.course.name,
+                'month_year': f'{p.year:04d}-{p.month:02d}',
+                'amount': float(p.amount),
+                'paid_date': p.paid_date.strftime('%Y-%m-%d'),
+                'payer_name': p.payer_name,
+                'comment': p.comment,
+                'reasons': item['reasons'],
+                'strong': item['strong'],
+            }
+            for item in pending_suggestions
+            for p in [item['pending']]
+        ],
+        'existing_allocations': [
+            {
+                'student': a.student_id,
+                'course': a.course_id,
+                'course_label': a.course.name,
+                'month_year': f'{a.year:04d}-{a.month:02d}',
+                'amount': float(a.amount),
+            }
+            for a in existing_allocations
+        ],
+        'existing_splits': [
+            {'account': sp.account_id, 'amount': float(sp.amount), 'description': sp.description or ''}
+            for sp in existing_splits
+        ],
+        'counterparty_hint': {
+            'income_type': counterparty_hint['income_type'],
+            'account': counterparty_hint['account_id'],
+            'indicator': counterparty_hint['indicator_id'],
+        } if counterparty_hint else None,
+    }
+
+    # Анхны сонгогдох төрөл: хадгалсан төрөл → шилжүүлэг → URL → өмнөх гүйлгээ → сурагчийн санал
+    if transfer_link or tf_search_active:
+        initial_mode = 'transfer'
+    elif not is_income:
+        initial_mode = 'EXPENSE'
+    elif transaction.income_type:
+        initial_mode = transaction.income_type
+    elif initial_income_type:
+        initial_mode = initial_income_type
+    elif any(p['strong'] for p in link_data['pending_payments']):
+        initial_mode = 'STUDENT_PAYMENT'
+    elif counterparty_hint and counterparty_hint['income_type']:
+        initial_mode = counterparty_hint['income_type']
+    elif link_data['student_suggestions'] and link_data['student_suggestions'][0]['strong']:
+        initial_mode = 'STUDENT_PAYMENT'
+    else:
+        initial_mode = ''
+    if is_archived_tx:
+        initial_mode = 'STUDENT_PAYMENT' if is_income else ''
+    link_data['initial_mode'] = initial_mode
+    link_data['saved_account'] = transaction.offset_account_id
+    link_data['saved_indicator'] = transaction.cash_flow_indicator_id
+
+    # Энэ шүүлтэд холбогдоогүй үлдсэн гүйлгээний тоо ("Хадгалаад дараагийнх" товчинд)
+    remaining_unprocessed = next_unprocessed_queryset().count()
 
     context = {
         'transaction': transaction,
@@ -5673,7 +6548,16 @@ def link_bank_transaction_to_journal(request, transaction_id):
         'tf_desc': tf_desc,
         'tf_date_from': tf_date_from,
         'tf_date_to': tf_date_to,
-        'return_to': request.GET.get('return_to', ''),
+        'return_to': return_to,
+        'link_data': link_data,
+        # Нэмэлт хуваарилалтын модель (BankTransactionSplit) устгагдсан бол хэсгийг нуух
+        'splits_supported': hasattr(transaction, 'extra_splits'),
+        'is_archived_tx': is_archived_tx,
+        'books_start_date': get_books_start_date(),
+        'counterparty_name': clean_text(transaction.counterparty_name),
+        'counterparty_account': normalize_account(transaction.counterparty_account),
+        'counterparty_hint': counterparty_hint,
+        'remaining_unprocessed': remaining_unprocessed,
     }
 
     return render(request, 'main/link_bank_transaction.html', context)
@@ -5701,6 +6585,9 @@ def classify_income(request, transaction_id):
     
     # Гүйлгээ авах
     transaction = get_object_or_404(BankTransaction, id=transaction_id)
+    _denied = archived_denied(request, transaction.transaction_date, 'main:bank_transaction_list')
+    if _denied:
+        return _denied
     
     # Зөвхөн орлогын гүйлгээг ангилна
     if transaction.income_amount == 0:
@@ -5879,7 +6766,10 @@ def classify_income(request, transaction_id):
 
 
 # Төлбөрийн хуудас - тусдаа файлаас импортлох
-from .views_payments import student_payments, update_payment_comment
+from .views_payments import (
+    student_payments, pending_payment_create, pending_payment_delete,
+    payment_cell_note_save, payment_discount_save,
+)
 
 
 @login_required
@@ -5917,10 +6807,16 @@ def get_student_courses(request, student_id):
 
 @login_required
 def cash_transaction_create(request):
-    """Кассын гүйлгээ шинээр оруулах"""
+    """Кассын гүйлгээ шинээр оруулах.
+
+    - Орлого/Зарлага чиглэл + нэг дүн
+    - Алдаа гарвал оруулсан утгууд хадгалагдана
+    - Ангилал сонгоход өмнө нь хэрэглэсэн эсрэг данс, мөнгөн гүйлгээний үзүүлэлтийг санал болгоно
+    - "Хадгалаад шинийг нэмэх" — огноо, касс, чиглэлийг хадгалж дараагийн гүйлгээг шууд оруулна
+    """
     profile = request.user.profile
     user = request.user
-    
+
     # Эрх шалгах: админ, нягтлан бодогч, Менежер бүлэг эсвэл касс үүсгэх эрхтэй
     has_access = (
         profile.is_admin or
@@ -5929,194 +6825,245 @@ def cash_transaction_create(request):
         user.groups.filter(name='Менежер').exists() or
         user.has_perm('main.add_banktransaction')
     )
-    
     if not has_access:
         messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
         return redirect('main:dashboard')
-    
-    if request.method == 'POST':
-        try:
-            # Мэдээлэл цуглуулах
-            transaction_date_str = request.POST.get('transaction_date')
-            cash_account_code = request.POST.get('cash_account')
-            income_amount = request.POST.get('income_amount') or 0
-            expense_amount = request.POST.get('expense_amount') or 0
-            description = request.POST.get('description')
-            offset_account_id = request.POST.get('offset_account')
-            income_type = request.POST.get('income_type')
-            expense_type = request.POST.get('expense_type')
-            cash_flow_indicator_id = request.POST.get('cash_flow_indicator')
-            
-            # Утга шалгах
-            if not transaction_date_str or not cash_account_code or not description:
-                messages.error(request, 'Огноо, кассын данс, тайлбар заавал бөглөнө үү.')
-                raise ValueError("Required fields missing")
-            
-            # Огноог date объект болгох
-            from datetime import datetime
-            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
-            
-            # Орлого эсвэл зарлага заавал байх
-            income_dec = Decimal(income_amount) if income_amount else Decimal('0')
-            expense_dec = Decimal(expense_amount) if expense_amount else Decimal('0')
-            
-            if income_dec == 0 and expense_dec == 0:
-                messages.error(request, 'Орлого эсвэл зарлага заавал бөглөнө үү.')
-                raise ValueError("Amount required")
-            
-            if income_dec > 0 and expense_dec > 0:
-                messages.error(request, 'Орлого эсвэл зарлага аль нэгийг л бөглөнө үү (хоёуланг биш).')
-                raise ValueError("Both amounts entered")
-            
-            # Касс дансыг олох
-            cash_account = ChartOfAccounts.objects.get(code=cash_account_code)
-            
-            # Эсрэг данс (сонголттой)
-            offset_account = None
-            if offset_account_id:
-                offset_account = ChartOfAccounts.objects.get(id=offset_account_id)
-                
-                # Эсрэг данс сонгосон бол мөнгөн гүйлгээний үзүүлэлт заавал сонгох
-                if not cash_flow_indicator_id:
-                    messages.error(request, 'Эсрэг данс сонгосон бол мөнгөн гүйлгээний үзүүлэлт заавал сонгоно уу.')
-                    raise ValueError("Cash flow indicator required")
-            
-            # Сурагчийн төлбөрийн хуваарилалтын нийт дүн шалгах
-            total_allocated = Decimal('0')
-            if income_type == 'STUDENT_PAYMENT':
-                i = 0
-                while f'allocations[{i}][student]' in request.POST:
-                    amount = request.POST.get(f'allocations[{i}][amount]')
-                    if amount:
-                        total_allocated += Decimal(amount)
-                    i += 1
-                
-                # Нийт дүн тэнцүү эсэхийг шалгах
-                if total_allocated > 0 and total_allocated != income_dec:
-                    messages.error(request, 
-                        f'Хуваарилалтын нийт дүн ({total_allocated:,.0f}₮) '
-                        f'орлогын дүнтэй ({income_dec:,.0f}₮) тэнцүү байх ёстой.')
-                    raise ValueError("Allocation amount mismatch")
-            
-            # Кассын гүйлгээ үүсгэх
-            transaction = BankTransaction.objects.create(
-                account_type='CASH',
-                bank_name='CASH_REGISTER',
-                bank_account=cash_account,
-                transaction_date=transaction_date,
-                income_amount=income_dec,
-                expense_amount=expense_dec,
-                description=description,
-                offset_account=offset_account,
-                cash_flow_indicator_id=cash_flow_indicator_id if cash_flow_indicator_id else None,
-                income_type=income_type if income_type else '',
-                expense_type=expense_type if expense_type else '',
-                is_processed=False  # Эхлээд False, дараа нь журнал үүсгэсний дараа True болно
-            )
-            
-            # Сурагчийн төлбөр бол allocations оруулах
-            allocation_count = 0
-            if income_type == 'STUDENT_PAYMENT':
-                i = 0
-                while f'allocations[{i}][student]' in request.POST:
-                    student_id = request.POST.get(f'allocations[{i}][student]')
-                    course_id = request.POST.get(f'allocations[{i}][course]')
-                    month = request.POST.get(f'allocations[{i}][month]')
-                    year = request.POST.get(f'allocations[{i}][year]')
-                    amount = request.POST.get(f'allocations[{i}][amount]')
-                    
-                    if student_id and course_id and month and year and amount:
-                        student = UserProfile.objects.get(id=student_id)
-                        course = Course.objects.get(id=course_id)
-                        
-                        PaymentAllocation.objects.create(
-                            transaction=transaction,
-                            student=student,
-                            course=course,
-                            month=int(month),
-                            year=int(year),
-                            amount=Decimal(amount)
-                        )
-                        allocation_count += 1
-                    i += 1
-            
-            # Эсрэг данс байвал журналд холбох, үгүй бол зөвхөн гүйлгээ хадгалах
-            if offset_account:
-                from .import_bank_transactions import regenerate_accounting_entries
-                result = regenerate_accounting_entries([transaction], request.user)
-                
-                if result > 0:
-                    if income_type == 'STUDENT_PAYMENT' and allocation_count > 0:
-                        messages.success(request, 
-                            f'Кассын орлого амжилттай бүртгэгдэж, журналд холбогдлоо '
-                            f'({allocation_count} хуваарилалт).')
-                    else:
-                        messages.success(request, 'Кассын гүйлгээ амжилттай бүртгэгдэж, журналд холбогдлоо.')
-                else:
-                    messages.warning(request, 'Гүйлгээ бүртгэгдсэн боловч журнал үүсгэхэд алдаа гарлаа.')
-            else:
-                # Эсрэг данс байхгүй - зөвхөн гүйлгээ хадгалагдлаа
-                if income_type == 'STUDENT_PAYMENT' and allocation_count > 0:
-                    messages.success(request, 
-                        f'Кассын орлого амжилттай бүртгэгдлээ ({allocation_count} хуваарилалт). '
-                        f'Журналд холбохын тулд эсрэг данс сонгоод засна уу.')
-                else:
-                    messages.success(request, 
-                        'Кассын гүйлгээ амжилттай бүртгэгдлээ. '
-                        'Журналд холбохын тулд эсрэг данс сонгоод засна уу.')
-            
-            return redirect('main:cash_transaction_list')
-            
-        except ChartOfAccounts.DoesNotExist:
-            messages.error(request, 'Сонгосон данс олдсонгүй.')
-        except UserProfile.DoesNotExist:
-            messages.error(request, 'Сонгосон сурагч олдсонгүй.')
-        except Course.DoesNotExist:
-            messages.error(request, 'Сонгосон анги олдсонгүй.')
-        except ValueError as e:
-            # Validation алдаануудыг аль хэдийн messages-д нэмсэн
-            pass
-        except Exception as e:
-            messages.error(request, f'Алдаа гарлаа: {str(e)}')
-    
-    # GET request - форм харуулах
-    # Кассын дансууд (100x, 101x код)
-    from django.db.models import Q
-    cash_accounts = ChartOfAccounts.objects.filter(
+
+    cash_accounts = list(ChartOfAccounts.objects.filter(
         Q(code__startswith='100') | Q(code__startswith='101'),
         is_active=True
-    ).order_by('code')
-    
-    # Бүх идэвхтэй данс (эсрэг данс сонгох)
-    accounts = ChartOfAccounts.objects.filter(is_active=True).order_by('code')
-    
-    # Мөнгөн гүйлгээний үзүүлэлтүүд
-    cash_flow_indicators = CashFlowIndicator.objects.filter(is_active=True).order_by('code')
-    
-    # Сурагчид
+    ).order_by('code'))
+
+    # Анхны утгууд (GET: "Хадгалаад шинийг нэмэх"-ээс ирсэн утгууд)
+    form = {
+        'direction': request.GET.get('direction') if request.GET.get('direction') in ('income', 'expense') else 'income',
+        'transaction_date': request.GET.get('date') or timezone.localdate().strftime('%Y-%m-%d'),
+        'cash_account': request.GET.get('cash_account') or (str(cash_accounts[0].id) if len(cash_accounts) == 1 else ''),
+        'amount': '',
+        'description': '',
+        'counterparty_name': '',
+        'income_type': '',
+        'expense_type': '',
+        'offset_account': '',
+        'cash_flow_indicator': '',
+    }
+    allocations_data = []
+    errors = []
+    duplicate = None
+
+    if request.method == 'POST':
+        for key in form:
+            form[key] = request.POST.get(key, '').strip()
+        if form['direction'] not in ('income', 'expense'):
+            form['direction'] = 'income'
+        is_income = form['direction'] == 'income'
+
+        # Сурагчийн хуваарилалтууд — мөр устгагдсан ч индекс алгасалгүй бүгдийг уншина
+        indexes = sorted({
+            int(m.group(1)) for key in request.POST
+            for m in [re.match(r'^allocations\[(\d+)\]\[', key)] if m
+        })
+        for i in indexes:
+            row = {k: request.POST.get(f'allocations[{i}][{k}]', '').strip()
+                   for k in ('student', 'course', 'period', 'amount')}
+            if any(row.values()):
+                allocations_data.append(row)
+
+        transaction_date = _parse_report_date(form['transaction_date'])
+        amount = _parse_report_amount(form['amount'])
+        cash_account = next((a for a in cash_accounts if str(a.id) == form['cash_account']), None)
+        offset_account = None
+        if form['offset_account']:
+            offset_account = ChartOfAccounts.objects.filter(id=form['offset_account'], is_active=True).first()
+            if not offset_account:
+                errors.append('Сонгосон эсрэг данс олдсонгүй.')
+
+        if not transaction_date:
+            errors.append('Огноо буруу байна.')
+        else:
+            period_error = closed_period_error(request, transaction_date)
+            if period_error:
+                errors.append(period_error)
+        if not cash_account:
+            errors.append('Кассын данс сонгоно уу.')
+        if amount is None or amount <= 0:
+            errors.append('Дүн 0-ээс их байх ёстой.')
+        if not form['description']:
+            errors.append('Гүйлгээний утга бөглөнө үү.')
+        if offset_account and not form['cash_flow_indicator']:
+            errors.append('Эсрэг данс сонгосон бол мөнгөн гүйлгээний үзүүлэлт сонгоно уу.')
+
+        income_type = form['income_type'] if is_income else ''
+        expense_type = '' if is_income else form['expense_type']
+
+        # Сурагчийн төлбөрийн хуваарилалт шалгах
+        allocations = []
+        if is_income and income_type == 'STUDENT_PAYMENT':
+            students = UserProfile.objects.in_bulk([a['student'] for a in allocations_data if a['student'].isdigit()])
+            courses = Course.objects.in_bulk([a['course'] for a in allocations_data if a['course'].isdigit()])
+            for n, a in enumerate(allocations_data, 1):
+                student = students.get(int(a['student'])) if a['student'].isdigit() else None
+                course = courses.get(int(a['course'])) if a['course'].isdigit() else None
+                alloc_amount = _parse_report_amount(a['amount'])
+                period = re.match(r'^(\d{4})-(\d{2})$', a['period'])
+                if not (student and course and period and alloc_amount and alloc_amount > 0):
+                    errors.append(f'Хуваарилалт #{n}: сурагч, анги, сар, дүнг бүрэн бөглөнө үү.')
+                    continue
+                allocations.append({
+                    'student': student, 'course': course, 'amount': alloc_amount,
+                    'year': int(period.group(1)), 'month': int(period.group(2)),
+                })
+            total_allocated = sum((a['amount'] for a in allocations), Decimal('0'))
+            if allocations and amount and total_allocated != amount:
+                errors.append(
+                    f'Хуваарилалтын нийт дүн ({total_allocated:,.0f}₮) орлогын дүнтэй ({amount:,.0f}₮) тэнцүү байх ёстой.')
+
+        # Харилцагч: бүртгэлтэй нэртэй таарвал холбоно, үгүй бол нэрийг нь хадгална
+        counterparty = None
+        if form['counterparty_name']:
+            wanted = form['counterparty_name'].casefold()
+            counterparty = next(
+                (c for c in Counterparty.objects.only('id', 'name') if c.name.strip().casefold() == wanted), None)
+
+        # Давхардал: ижил огноо, касс, дүн, утгатай гүйлгээ байгаа эсэх
+        if not errors and request.POST.get('confirm_duplicate') != '1':
+            duplicate = BankTransaction.objects.filter(
+                account_type='CASH', bank_account=cash_account, transaction_date=transaction_date,
+                description=form['description'],
+                **({'income_amount': amount} if is_income else {'expense_amount': amount})
+            ).first()
+            if duplicate:
+                errors.append('Ижил огноо, дүн, утгатай гүйлгээ аль хэдийн бүртгэгдсэн байна. '
+                              'Давхар биш бол "Тийм, хадгал" дарна уу.')
+
+        if not errors:
+            try:
+                with transaction.atomic():
+                    tx = BankTransaction.objects.create(
+                        account_type='CASH',
+                        bank_name='CASH_REGISTER',
+                        bank_account=cash_account,
+                        transaction_date=transaction_date,
+                        income_amount=amount if is_income else Decimal('0'),
+                        expense_amount=Decimal('0') if is_income else amount,
+                        description=form['description'],
+                        counterparty=counterparty,
+                        counterparty_name='' if counterparty else form['counterparty_name'],
+                        offset_account=offset_account,
+                        cash_flow_indicator_id=form['cash_flow_indicator'] or None,
+                        income_type=income_type,
+                        expense_type=expense_type,
+                        imported_by=user,
+                        is_processed=False,  # Журнал үүссэний дараа True болно
+                    )
+                    for a in allocations:
+                        PaymentAllocation.objects.create(transaction=tx, **a)
+            except Exception as e:
+                errors.append(f'Алдаа гарлаа: {e}')
+            else:
+                kind = 'орлого' if is_income else 'зарлага'
+                msg = f'Кассын {kind} {amount:,.0f}₮ бүртгэгдлээ'
+                if allocations:
+                    msg += f' ({len(allocations)} хуваарилалт)'
+                if offset_account:
+                    from .import_bank_transactions import regenerate_accounting_entries
+                    if regenerate_accounting_entries([tx], user) > 0:
+                        messages.success(request, msg + ', журналд холбогдлоо.')
+                    else:
+                        messages.warning(request, msg + ', гэвч журнал үүсгэхэд алдаа гарлаа.')
+                else:
+                    messages.success(request, msg + '. Журналд холбохын тулд эсрэг данс сонгоно уу.')
+
+                if request.POST.get('save_action') == 'save_new':
+                    query = urlencode({
+                        'date': form['transaction_date'],
+                        'cash_account': form['cash_account'],
+                        'direction': form['direction'],
+                    })
+                    return redirect(f"{reverse('main:cash_transaction_create')}?{query}")
+                return redirect(f"{reverse('main:cash_transaction_list')}?order=desc&highlight={tx.id}")
+
+    # Кассын дансны одоогийн үлдэгдэл
+    flows = dict(
+        (row['bank_account_id'], (row['inc'] or Decimal('0')) - (row['exp'] or Decimal('0')))
+        for row in period_filter(BankTransaction.objects.filter(
+            account_type='CASH', bank_account__in=cash_accounts), 'transaction_date'
+        ).values('bank_account_id').annotate(inc=Sum('income_amount'), exp=Sum('expense_amount'))
+    )
+    for account in cash_accounts:
+        account.current_balance = (account.opening_balance or Decimal('0')) + flows.get(account.id, Decimal('0'))
+
+    recent_qs = BankTransaction.objects.filter(account_type='CASH').select_related(
+        'offset_account', 'counterparty').order_by('-id')
+
+    # Ангилал бүрийн хамгийн сүүлд хэрэглэсэн эсрэг данс, үзүүлэлт (ухаалаг санал)
+    category_defaults = {}
+    for tx in recent_qs.filter(offset_account__isnull=False)[:500]:
+        key = f'in:{tx.income_type}' if tx.income_amount > 0 else f'out:{tx.expense_type}'
+        if key not in category_defaults:
+            category_defaults[key] = {
+                'offset_account': str(tx.offset_account_id),
+                'cash_flow_indicator': str(tx.cash_flow_indicator_id or ''),
+            }
+
+    recent_descriptions = []
+    for desc in recent_qs.values_list('description', flat=True)[:300]:
+        desc = (desc or '').strip()
+        if desc and desc not in recent_descriptions:
+            recent_descriptions.append(desc)
+        if len(recent_descriptions) >= 40:
+            break
+
     students = UserProfile.objects.filter(role=UserRole.STUDENT).order_by('first_name', 'last_name')
-    
+
     context = {
+        'form': form,
+        'errors': errors,
+        'duplicate': duplicate,
         'cash_accounts': cash_accounts,
-        'accounts': accounts,
-        'cash_flow_indicators': cash_flow_indicators,
-        'students': students,
+        'accounts': ChartOfAccounts.objects.filter(is_active=True).order_by('code'),
+        'cash_flow_indicators': CashFlowIndicator.objects.filter(is_active=True).order_by('code'),
+        'counterparty_names': Counterparty.objects.order_by('name').values_list('name', flat=True),
+        'recent_descriptions': recent_descriptions,
+        'recent_transactions': recent_qs[:6],
         'income_types': BankTransaction.INCOME_TYPE_CHOICES,
         'expense_types': BankTransaction.EXPENSE_TYPE_CHOICES,
+        'student_options': [
+            {'id': s.id, 'name': f"{s.full_name or s.user.username}{f' ({s.phone})' if s.phone else ''}"}
+            for s in students.select_related('user')
+        ],
+        'allocations_data': allocations_data,
+        'category_defaults': category_defaults,
     }
-    
     return render(request, 'main/cash_transaction_create.html', context)
+
+
+def _parse_report_amount(value):
+    try:
+        return Decimal(value.replace(',', '').replace(' ', '')) if value else None
+    except InvalidOperation:
+        return None
+
+
+def _parse_report_date(value):
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date() if value else None
+    except ValueError:
+        return None
 
 
 @login_required
 def cash_transaction_list(request):
-    """Кассын гүйлгээний жагсаалт"""
-    from django.core.paginator import Paginator
-    
+    """Кассын бүртгэл (тайлан хэлбэрээр): Огноо, Гүйлгээний утга, Харилцагч, Орлого, Зарлага, Үлдэгдэл, Үйлдэл.
+
+    Үлдэгдэл нь кассын бодит үлдэгдэл (эхний үлдэгдэл + бүх гүйлгээ) тул
+    утга/харилцагч/төрлөөр шүүсэн ч мөр бүрийн үлдэгдэл зөв харагдана.
+    """
+    import csv
+    from django.http import HttpResponse
+
     profile = request.user.profile
     user = request.user
-    
-    # Эрх шалгах: админ, нягтлан бодогч, менежер роль эсвэл касс харах эрхтэй
     has_access = (
         profile.is_admin or
         profile.is_accountant or
@@ -6124,117 +7071,205 @@ def cash_transaction_list(request):
         user.is_superuser or
         user.has_perm('main.view_banktransaction')
     )
-    
     if not has_access:
         messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
         return redirect('main:dashboard')
-    
-    # Зөвхөн кассын гүйлгээ
-    transactions = BankTransaction.objects.filter(
-        account_type='CASH'
-    ).select_related(
-        'bank_account', 'offset_account', 'income_sale',
-        'accounting_entry__debit_account', 'accounting_entry__credit_account'
-    ).prefetch_related(
-        'allocations__student', 'allocations__course', 'sale_allocations__sale'
-    ).order_by('-transaction_date', '-id')
 
-    # Кассын дансаар шүүх
-    cash_account_id = request.GET.get('cash_account')
-    if cash_account_id:
-        transactions = transactions.filter(bank_account_id=cash_account_id)
-    
-    # Огноогоор шүүх
-    date_from = request.GET.get('date_from')
-    date_to = request.GET.get('date_to')
+    f = {
+        'cash_account': request.GET.get('cash_account', ''),
+        'date_from': request.GET.get('date_from', ''),
+        'date_to': request.GET.get('date_to', ''),
+        'direction': request.GET.get('direction', ''),        # income / expense
+        'q': request.GET.get('q', '').strip(),
+        'counterparty': request.GET.get('counterparty', ''),
+        'category': request.GET.get('category', ''),          # in:<income_type> / out:<expense_type>
+        'offset_account': request.GET.get('offset_account', ''),
+        'amount_min': request.GET.get('amount_min', '').strip(),
+        'amount_max': request.GET.get('amount_max', '').strip(),
+        'linked': request.GET.get('linked', ''),              # linked / unlinked
+        'order': 'desc' if request.GET.get('order') == 'desc' else 'asc',
+    }
+    archive = wants_archive(request)
+    date_from = _parse_report_date(f['date_from'])
+    date_to = _parse_report_date(f['date_to'])
+    if not date_from:
+        f['date_from'] = ''
+    if not date_to:
+        f['date_to'] = ''
+    amount_min = _parse_report_amount(f['amount_min'])
+    amount_max = _parse_report_amount(f['amount_max'])
+
+    # Кассын дансууд (100x, 101x код + кассын гүйлгээнд хэрэглэгдсэн)
+    cash_accounts = ChartOfAccounts.objects.filter(
+        (Q(code__startswith='100') | Q(code__startswith='101')) & Q(is_active=True) |
+        Q(banktransaction__account_type='CASH')
+    ).distinct().order_by('code')
+    if f['cash_account']:
+        scope_accounts = [a for a in cash_accounts if str(a.id) == f['cash_account']]
+    else:
+        scope_accounts = list(cash_accounts)
+    scope_ids = [a.id for a in scope_accounts]
+
+    # Бүх кассын гүйлгээ (шинэ үе, эсвэл superuser-ийн архив) — үлдэгдэл тооцоход
+    all_qs = period_filter(
+        BankTransaction.objects.filter(account_type='CASH', bank_account_id__in=scope_ids),
+        'transaction_date', archive=archive
+    )
+
+    # Эхний үлдэгдэл = дансны эхний үлдэгдэл + эхлэх огнооноос өмнөх цэвэр урсгал
+    # (архивт дансны эхний үлдэгдэл хамаарахгүй тул 0-ээс эхэлнэ)
+    if archive:
+        opening_balance = Decimal('0')
+    else:
+        opening_balance = sum((a.opening_balance or Decimal('0') for a in scope_accounts), Decimal('0'))
     if date_from:
-        transactions = transactions.filter(transaction_date__gte=date_from)
+        before = all_qs.filter(transaction_date__lt=date_from).aggregate(
+            inc=Sum('income_amount'), exp=Sum('expense_amount'))
+        opening_balance += (before['inc'] or Decimal('0')) - (before['exp'] or Decimal('0'))
+
+    period_qs = all_qs
+    if date_from:
+        period_qs = period_qs.filter(transaction_date__gte=date_from)
     if date_to:
-        transactions = transactions.filter(transaction_date__lte=date_to)
-    
-    # Статистик
-    total_count = transactions.count()
-    total_income = transactions.aggregate(Sum('income_amount'))['income_amount__sum'] or 0
-    total_expense = transactions.aggregate(Sum('expense_amount'))['expense_amount__sum'] or 0
-    cash_balance = total_income - total_expense
-    
-    # Pagination
-    paginator = Paginator(transactions, 50)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+        period_qs = period_qs.filter(transaction_date__lte=date_to)
 
-    # Annotate each transaction on the current page with linked/unlinked document counts
-    for tx in page_obj.object_list:
-        try:
-            alloc_count = tx.allocations.count()
-        except Exception:
-            alloc_count = 0
-        try:
-            sale_alloc_count = tx.sale_allocations.count()
-        except Exception:
-            sale_alloc_count = 0
-        income_sale_flag = 1 if getattr(tx, 'income_sale_id', None) else 0
-        accounting_flag = 1 if getattr(tx, 'accounting_entry_id', None) else 0
+    # Нэмэлт шүүлтүүд (үлдэгдлийн тооцоонд нөлөөлөхгүй)
+    filtered_qs = period_qs
+    if f['direction'] == 'income':
+        filtered_qs = filtered_qs.filter(income_amount__gt=0)
+    elif f['direction'] == 'expense':
+        filtered_qs = filtered_qs.filter(expense_amount__gt=0)
+    # Текстээр хайлтыг доор Python-оор хийнэ (SQLite icontains кирилл том/жижиг үсэг ялгадаг)
+    search = f['q'].casefold()
+    if f['counterparty']:
+        filtered_qs = filtered_qs.filter(counterparty_id=f['counterparty'])
+    if f['category'].startswith('in:'):
+        filtered_qs = filtered_qs.filter(income_amount__gt=0, income_type=f['category'][3:])
+    elif f['category'].startswith('out:'):
+        filtered_qs = filtered_qs.filter(expense_amount__gt=0, expense_type=f['category'][4:])
+    if f['offset_account']:
+        filtered_qs = filtered_qs.filter(offset_account_id=f['offset_account'])
+    if amount_min is not None or amount_max is not None:
+        filtered_qs = filtered_qs.annotate(_amount=F('income_amount') + F('expense_amount'))
+        if amount_min is not None:
+            filtered_qs = filtered_qs.filter(_amount__gte=amount_min)
+        if amount_max is not None:
+            filtered_qs = filtered_qs.filter(_amount__lte=amount_max)
+    if f['linked'] == 'linked':
+        filtered_qs = filtered_qs.filter(accounting_entry__isnull=False)
+    elif f['linked'] == 'unlinked':
+        filtered_qs = filtered_qs.filter(accounting_entry__isnull=True)
 
-        tx.linked_docs_count = alloc_count + sale_alloc_count + income_sale_flag + accounting_flag
+    secondary_filtered = any(f[k] for k in (
+        'direction', 'q', 'counterparty', 'category', 'offset_account', 'amount_min', 'amount_max', 'linked'))
+    matching_ids = set(filtered_qs.values_list('id', flat=True)) if secondary_filtered else None
 
-        # Determine if there's unlinked amount that could be allocated/linked
-        try:
-            available = tx.available_income_amount if getattr(tx, 'income_amount', 0) > 0 else 0
-        except Exception:
-            available = 0
-        tx.unlinked_docs_count = 1 if available and available > 0 else 0
+    transactions = period_qs.select_related(
+        'bank_account', 'counterparty', 'income_student', 'offset_account', 'accounting_entry'
+    ).prefetch_related('allocations__student', 'sale_allocations').order_by('transaction_date', 'transaction_time', 'id')
 
-    # Aggregate counts: number of transactions that have any linked document, and number without
-    from django.db.models import Q
-    linked_tx_q = Q(allocations__isnull=False) | Q(sale_allocations__isnull=False) | Q(income_sale__isnull=False) | Q(accounting_entry__isnull=False)
-    # distinct because joins may duplicate
-    linked_tx_count = transactions.filter(linked_tx_q).distinct().count()
-    unlinked_tx_count = total_count - linked_tx_count
-
-    # Also keep earlier document-level aggregates if needed
-    total_allocations = PaymentAllocation.objects.filter(transaction__in=transactions).count()
-    total_sale_allocations = SalePaymentAllocation.objects.filter(transaction__in=transactions).count()
-    total_income_sales = transactions.filter(income_sale__isnull=False).count()
-    total_accounting = transactions.filter(accounting_entry__isnull=False).count()
-    total_linked_docs = total_allocations + total_sale_allocations + total_income_sales + total_accounting
-
-    # Count transactions that still have available income amount (unlinked potential per transaction)
-    total_unlinked_docs = 0
-    for t in transactions:
-        try:
-            if getattr(t, 'available_income_amount', 0) and t.available_income_amount > 0:
-                total_unlinked_docs += 1
-        except Exception:
+    rows = []
+    running = opening_balance
+    total_income = Decimal('0')
+    total_expense = Decimal('0')
+    for tx in transactions:
+        income = tx.income_amount or Decimal('0')
+        expense = tx.expense_amount or Decimal('0')
+        running += income - expense
+        if matching_ids is not None and tx.id not in matching_ids:
             continue
 
-    # Count transactions that are income vs expense
-    income_tx_count = transactions.filter(income_amount__gt=0).count()
-    expense_tx_count = transactions.filter(expense_amount__gt=0).count()
+        if tx.counterparty_id:
+            counterparty_label = tx.counterparty.name
+        elif tx.counterparty_name:
+            counterparty_label = tx.counterparty_name
+        elif tx.income_student_id:
+            counterparty_label = tx.income_student.full_name
+        else:
+            names = []
+            for alloc in tx.allocations.all():
+                name = alloc.student.full_name if alloc.student_id else ''
+                if name and name not in names:
+                    names.append(name)
+            counterparty_label = ', '.join(names) or tx.counterparty_account
 
-    # Кассын дансууд (100x, 101x код)
-    from django.db.models import Q
-    cash_accounts = ChartOfAccounts.objects.filter(
-        Q(code__startswith='100') | Q(code__startswith='101'),
-        is_active=True
-    ).order_by('code')
+        if search:
+            haystack = ' '.join([
+                tx.description, tx.counterparty_name, tx.counterparty_account, tx.reference_number,
+                tx.payment_comment, counterparty_label or '',
+                tx.counterparty.name if tx.counterparty_id else '',
+                (tx.income_student.full_name or '') if tx.income_student_id else '',
+                *((a.student.full_name or '') for a in tx.allocations.all() if a.student_id),
+            ]).casefold()
+            if search not in haystack:
+                continue
+
+        total_income += income
+        total_expense += expense
+        rows.append({
+            'tx': tx,
+            'counterparty': counterparty_label,
+            'income': income,
+            'expense': expense,
+            'balance': running,
+            'has_links': bool(
+                tx.accounting_entry_id or tx.income_sale_id or
+                tx.allocations.all() or tx.sale_allocations.all()
+            ),
+        })
+    closing_balance = running
+
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"kass_tailan_{f['date_from'] or 'start'}_{f['date_to'] or 'now'}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write('﻿')  # Excel-д кирилл зөв харагдуулна
+        writer = csv.writer(response)
+        writer.writerow(['Огноо', 'Кассын данс', 'Гүйлгээний утга', 'Харилцагч', 'Орлого', 'Зарлага', 'Үлдэгдэл'])
+        writer.writerow([f['date_from'], '', 'Эхний үлдэгдэл', '', '', '', f'{opening_balance:.2f}'])
+        for r in rows:
+            tx = r['tx']
+            writer.writerow([
+                tx.transaction_date.strftime('%Y-%m-%d'),
+                tx.bank_account.code,
+                tx.description,
+                r['counterparty'],
+                f"{r['income']:.2f}" if r['income'] else '',
+                f"{r['expense']:.2f}" if r['expense'] else '',
+                f"{r['balance']:.2f}",
+            ])
+        writer.writerow(['', '', 'Нийт', '', f'{total_income:.2f}', f'{total_expense:.2f}', f'{closing_balance:.2f}'])
+        return response
+
+    if f['order'] == 'desc':
+        rows.reverse()
+
+    counterparties = Counterparty.objects.filter(
+        banktransaction__account_type='CASH'
+    ).distinct().order_by('name')
+    offset_accounts = ChartOfAccounts.objects.filter(
+        bank_transactions_offset__account_type='CASH'
+    ).distinct().order_by('code')
 
     context = {
-        'transactions': page_obj,
+        'rows': rows,
+        'f': f,
         'cash_accounts': cash_accounts,
-        'total_count': total_count,
+        'counterparties': counterparties,
+        'offset_accounts': offset_accounts,
+        'income_type_choices': BankTransaction.INCOME_TYPE_CHOICES,
+        'expense_type_choices': BankTransaction.EXPENSE_TYPE_CHOICES,
+        'opening_balance': opening_balance,
+        'closing_balance': closing_balance,
         'total_income': total_income,
         'total_expense': total_expense,
-        'cash_balance': cash_balance,
-        'page_obj': page_obj,
-        'total_linked_docs': total_linked_docs,
-        'total_unlinked_docs': total_unlinked_docs,
-        'linked_tx_count': linked_tx_count,
-        'unlinked_tx_count': unlinked_tx_count,
-        'income_tx_count': income_tx_count,
-        'expense_tx_count': expense_tx_count,
+        'net_flow': total_income - total_expense,
+        'row_count': len(rows),
+        'secondary_filtered': secondary_filtered,
+        'books_start_date': get_books_start_date(),
+        'export_query': request.GET.urlencode(),
+        'highlight_tx': request.GET.get('highlight', ''),
     }
-
     return render(request, 'main/cash_transaction_list.html', context)
 
 
@@ -6259,6 +7294,9 @@ def cash_transaction_edit(request, transaction_id):
     
     # Гүйлгээг авах
     transaction = get_object_or_404(BankTransaction, id=transaction_id, account_type='CASH')
+    _denied = archived_denied(request, transaction.transaction_date, 'main:cash_transaction_list')
+    if _denied:
+        return _denied
     # Preserve return_to so we can redirect back to the same list page (pagination)
     return_to = request.GET.get('return_to', request.POST.get('return_to', '')).strip()
 
@@ -6300,6 +7338,9 @@ def cash_transaction_edit(request, transaction_id):
             # Огноог date объект болгох
             from datetime import datetime
             transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+            _period_error = closed_period_error(request, transaction_date)
+            if _period_error:
+                raise ValueError(_period_error)
             
             # Орлого эсвэл зарлага заавал байх
             income_dec = Decimal(income_amount) if income_amount else Decimal('0')
@@ -6463,6 +7504,9 @@ def cash_transaction_delete(request, transaction_id):
     
     # Гүйлгээг авах
     transaction = get_object_or_404(BankTransaction, id=transaction_id, account_type='CASH')
+    _denied = archived_denied(request, transaction.transaction_date, 'main:cash_transaction_list')
+    if _denied:
+        return _denied
     
     if request.method == 'POST':
         # Автоматаар үүссэн эсрэг мөрийг шууд устгахыг хориглоно
@@ -6545,6 +7589,9 @@ def purchase_create(request):
             
                 total_amount = quantity * price
                 transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                _period_error = closed_period_error(request, transaction_date)
+                if _period_error:
+                    raise ValueError(_period_error)
                 
                 # 1. StockMovement үүсгэх
                 movement = StockMovement(
@@ -6599,7 +7646,7 @@ def purchase_create(request):
                     counterparty.save()
                     
                     inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    payable_account = ChartOfAccounts.objects.filter(code='2101').first()
+                    payable_account = ChartOfAccounts.objects.filter(code='310101').first()  # Дансны өглөг
                     
                     if inventory_account and payable_account:
                         _, entry_number = next_entry_number(
@@ -6635,315 +7682,598 @@ def purchase_create(request):
         'cash_accounts': cash_accounts,
         'bank_accounts': bank_accounts,
         'suppliers': suppliers,
-        'payment_methods': StockMovement.PAYMENT_METHOD_CHOICES,
+        'payment_methods': SINGLE_PAYMENT_METHODS,
     }
     return render(request, 'main/purchase_form.html', context)
 
 
-@login_required
-def purchase_create_multi(request):
-    """Олон бараа худалдан авалт бүртгэх"""
-    from datetime import datetime
-    profile = request.user.profile
-    user = request.user
-    
-    # Эрх шалгах
-    has_access = (
-        profile.is_admin or 
-        profile.role == UserRole.ACCOUNTANT or 
+# Худалдан авалтын олон бараатай формын төлбөрийн хэлбэрүүд (+ бараа хувиргалт)
+PURCHASE_PAYMENT_METHODS = [c for c in StockMovement.PAYMENT_METHOD_CHOICES
+                            if c[0] in ('CASH', 'BANK', 'MIXED', 'CREDIT', 'CONVERSION')]
+MATERIAL_CATEGORY_NAME = 'Бэлдэц'
+_PURCHASE_CASH_PREFIX = 'Барааны худалдан авалт'
+
+
+def _purchase_access(user, perm):
+    profile = user.profile
+    return (
+        profile.is_admin or
+        profile.role == UserRole.ACCOUNTANT or
         user.is_superuser or
-        user.has_perm('main.add_purchase')
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm(perm)
     )
-    if not has_access:
-        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
-        return redirect('main:inventory_list')
-    
-    if request.method == 'POST':
+
+
+def _resolve_purchase_supplier(counterparty_id, supplier_name_manual):
+    """Нийлүүлэгчийг жагсаалтаас эсвэл гараас бичсэн нэрээс шийднэ (шинэ бол нийлүүлэгч үүснэ)."""
+    supplier_name_manual = (supplier_name_manual or '').strip()
+    if counterparty_id:
+        counterparty = Counterparty.objects.get(id=counterparty_id)
+    elif supplier_name_manual:
+        counterparty, _ = Counterparty.objects.get_or_create(
+            name=supplier_name_manual,
+            defaults={'counterparty_type': 'SUPPLIER', 'is_active': True},
+        )
+    else:
+        return None, ''
+
+    update_fields = []
+    if counterparty.counterparty_type == 'CUSTOMER':
+        counterparty.counterparty_type = 'BOTH'
+        update_fields.append('counterparty_type')
+    if not counterparty.is_active:
+        counterparty.is_active = True
+        update_fields.append('is_active')
+    if update_fields:
+        counterparty.save(update_fields=update_fields)
+    return counterparty, counterparty.name
+
+
+def _parse_material_rows(post):
+    """Бараа хувиргалтад зарцуулсан бэлдэц: material_<product_id> = тоо."""
+    rows = []
+    for key, value in post.items():
+        match = re.fullmatch(r'material_(\d+)', key)
+        raw = (value or '').replace(',', '').strip()
+        if not match or not raw:
+            continue
         try:
-            with transaction.atomic():
-                # Ерөнхий мэдээлэл
-                payment_method = request.POST.get('payment_method')
-                bank_account_ids = [v for v in request.POST.getlist('bank_account') if v.strip()]
-                bank_account_id = bank_account_ids[0].replace(',', '').strip() if bank_account_ids else ''
-                counterparty_id = request.POST.get('counterparty', '').replace(',', '').strip()
-                bank_transaction_id = request.POST.get('bank_transaction', '').replace(',', '').strip()
-                reference_number = request.POST.get('reference_number', '')
-                notes = request.POST.get('notes', '')
-                transaction_date_str = request.POST.get('transaction_date')
-                transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
-                
-                # Барааны мэдээлэл боловсруулах
-                product_ids = []
-                row_num = 1
-                while True:
-                    product_key = f'product_{row_num}'
-                    if product_key not in request.POST or not request.POST.get(product_key):
-                        break
-                    
-                    product_id = request.POST.get(product_key, '').replace(',', '').strip()
-                    quantity = int(request.POST.get(f'quantity_{row_num}', '0').replace(',', ''))
-                    price = Decimal(request.POST.get(f'price_{row_num}', '0').replace(',', ''))
-                    
-                    if product_id and quantity > 0 and price > 0:
-                        product_ids.append({
-                            'product_id': product_id,
-                            'quantity': quantity,
-                            'price': price
-                        })
-                    
-                    row_num += 1
-                
-                if not product_ids:
-                    raise Exception('Дор хаяж 1 бараа нэмнэ үү!')
-                
-                # Нийлүүлэгч
-                counterparty = None
-                supplier_name = ''
-                if counterparty_id:
-                    counterparty = Counterparty.objects.get(id=counterparty_id)
-                    supplier_name = counterparty.name
-                
-                # Бараа бүрийг бүртгэх
-                total_expense = Decimal('0')
-                movements_created = []
-                
-                for item in product_ids:
-                    product = Product.objects.get(id=item['product_id'])
-                    quantity = item['quantity']
-                    price = item['price']
-                    
-                    item_total = quantity * price
-                    total_expense += item_total
-                    
-                    # StockMovement үүсгэх
-                    movement = StockMovement.objects.create(
-                        product=product,
-                        movement_type='IN',
-                        quantity=quantity,
-                        price=price,
-                        payment_method=payment_method,
-                        reference_number=reference_number,
-                        notes=notes,
-                        customer_name=supplier_name,
-                        counterparty=counterparty,
-                        created_by=request.user
-                    )
-                    movements_created.append(movement)
-                
-                # Журналын бичилт үүсгэх
-                if payment_method in ['CASH', 'BANK']:
-                    if not bank_account_id:
-                        raise Exception('Касс/Банкны данс сонгоно уу!')
-                    bank_account = ChartOfAccounts.objects.get(id=bank_account_id)
-                    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    
-                    if not inventory_account:
-                        raise Exception('150101-Бараа материалын данс олдсонгүй!')
-                    
-                    _, entry_number = next_entry_number(
-                        f"PUR-{transaction_date.strftime('%Y%m%d')}-"
-                    )
-                    
-                    # Худалдан авалтын бичилт
-                    entry = AccountingEntry.objects.create(
-                        entry_number=entry_number,
-                        entry_date=transaction_date,
-                        debit_account=inventory_account,
-                        credit_account=bank_account,
-                        debit_amount=total_expense,
-                        credit_amount=total_expense,
-                        description=f"Худалдан авалт ({len(product_ids)} бараа) - {reference_number}",
-                        created_by=request.user
-                    )
-                    
-                    # Банкны гүйлгээтэй холбох
-                    if bank_transaction_id:
-                        try:
-                            bank_txn = BankTransaction.objects.get(id=bank_transaction_id)
-                            bank_txn.accounting_entry = entry
-                            bank_txn.is_processed = True
-                            bank_txn.save()
-                        except BankTransaction.DoesNotExist:
-                            pass
-                    
-                    # Эхний movement-д холбох
-                    if movements_created:
-                        movements_created[0].accounting_entry = entry
-                        movements_created[0].bank_account = bank_account
-                        movements_created[0].save()
-                
-                elif payment_method == 'CREDIT' and counterparty:
-                    counterparty.balance += total_expense
-                    counterparty.save()
-                    
-                    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    payable_account = ChartOfAccounts.objects.filter(code='2101').first()
-                    
-                    if inventory_account and payable_account:
-                        _, entry_number = next_entry_number(
-                            f"PUR-{transaction_date.strftime('%Y%m%d')}-"
-                        )
-                        
-                        entry = AccountingEntry.objects.create(
-                            entry_number=entry_number,
-                            entry_date=transaction_date,
-                            debit_account=inventory_account,
-                            credit_account=payable_account,
-                            debit_amount=total_expense,
-                            credit_amount=total_expense,
-                            description=f"Худалдан авалт зээлээр ({len(product_ids)} бараа) - {reference_number}",
-                            created_by=request.user
-                        )
-                        
-                        if movements_created:
-                            movements_created[0].accounting_entry = entry
-                            movements_created[0].save()
-                
-                messages.success(request, f'{len(product_ids)} бараа амжилттай худалдаж авлаа! Нийт: {total_expense:,.0f}₮')
-                return redirect('main:purchase_list')
-        
-        except Exception as e:
-            messages.error(request, f'Алдаа гарлаа: {str(e)}')
-    
-    # Template-руу өгөгдөл дамжуулах
+            quantity = int(raw)
+        except ValueError:
+            raise Exception('Бэлдэцийн тоо бүхэл тоо байх ёстой!')
+        if quantity < 0:
+            raise Exception('Бэлдэцийн тоо сөрөг байж болохгүй!')
+        if quantity > 0:
+            rows.append({'product_id': int(match.group(1)), 'quantity': quantity})
+    return rows
+
+
+def _auto_purchase_cash_transactions(purchase):
+    """Худалдан авалт бүртгэхэд автоматаар үүссэн кассын зарлагын гүйлгээ."""
+    return BankTransaction.objects.filter(
+        account_type='CASH', bank_name='CASH_REGISTER',
+        accounting_entry__related_purchase=purchase,
+        description__startswith=_PURCHASE_CASH_PREFIX,
+    )
+
+
+def _reverse_purchase_effects(purchase):
+    """Баримтаас үүссэн бүх бичлэгийг буцаана: барааны хөдөлгөөн, журнал, автомат кассын гүйлгээ, өглөг.
+
+    Гараар холбосон банк/кассын гүйлгээ устахгүй — журнал нь устаж, холбоогүй болно.
+    """
+    for tx in _auto_purchase_cash_transactions(purchase):
+        tx.accounting_entry = None
+        tx.save(update_fields=['accounting_entry'])
+        tx.delete()
+    for entry in AccountingEntry.objects.filter(related_purchase=purchase):
+        entry.delete()
+    if purchase.payment_method == 'CREDIT' and purchase.supplier_id:
+        supplier = Counterparty.objects.get(id=purchase.supplier_id)
+        supplier.balance -= purchase.total_amount
+        supplier.save()
+    StockMovement.objects.filter(purchase=purchase).delete()
+
+
+def _local_date(value):
+    return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+
+
+def _ensure_purchase_document(movement):
+    """Баримтгүй хуучин худалдан авалтыг баримтад оруулна.
+
+    Олон бараатай хуучин бүртгэлийг (нэг хэрэглэгч, ижил төлбөр/нийлүүлэгч/тэмдэглэл,
+    10 секундын дотор үүссэн) нэг баримт болгож бүлэглэнэ.
+    """
+    from datetime import timedelta
+    if movement.purchase_id:
+        return movement.purchase
+    group = list(StockMovement.objects.filter(
+        movement_type='IN', purchase__isnull=True,
+        created_by_id=movement.created_by_id, payment_method=movement.payment_method,
+        counterparty_id=movement.counterparty_id, notes=movement.notes,
+        created_at__gte=movement.created_at - timedelta(seconds=10),
+        created_at__lte=movement.created_at + timedelta(seconds=10),
+    ).order_by('id')) or [movement]
+    entries = AccountingEntry.objects.filter(id__in=[m.accounting_entry_id for m in group if m.accounting_entry_id])
+    first_entry = entries.order_by('entry_date').first()
+    references = {m.reference_number for m in group}
+    total = sum((m.total_amount for m in group), Decimal('0'))
+    purchase = Purchase.objects.create(
+        kind='PURCHASE',
+        supplier=movement.counterparty,
+        purchase_date=first_entry.entry_date if first_entry else _local_date(movement.created_at),
+        payment_method=movement.payment_method,
+        reference_number=references.pop() if len(references) == 1 else '',
+        status='RECEIVED' if movement.payment_method == 'CREDIT' else 'COMPLETED',
+        total_amount=total,
+        paid_amount=total if movement.payment_method in ('CASH', 'BANK', 'MIXED') else Decimal('0'),
+        notes=movement.notes,
+        created_by=movement.created_by,
+    )
+    StockMovement.objects.filter(id__in=[m.id for m in group]).update(purchase=purchase)
+    entries.update(related_purchase=purchase)
+    return purchase
+
+
+def _process_multi_purchase(request, existing_purchase=None, keep_created_at=None):
+    """Олон бараатай худалдан авалт / бараа хувиргалтын формыг хадгална.
+
+    transaction.atomic() дотор дуудна. Засахдаа эхлээд _reverse_purchase_effects() дуудна.
+    Алдаа гарвал Exception шиднэ. Буцаах: (purchase, item_count, total)
+    """
+    from datetime import datetime
+    payment_method = request.POST.get('payment_method', '')
+    if payment_method not in dict(PURCHASE_PAYMENT_METHODS):
+        raise Exception('Төлбөрийн хэлбэр сонгоно уу!')
+    is_conversion = payment_method == 'CONVERSION'
+    cash_account_id = request.POST.get('cash_account', '').replace(',', '').strip()
+    bank_account_id = request.POST.get('bank_account', '').replace(',', '').strip()
+    counterparty_id = request.POST.get('counterparty', '').replace(',', '').strip()
+    supplier_name_manual = request.POST.get('supplier_name_manual', '').strip()
+    bank_transaction_id = request.POST.get('bank_transaction', '').replace(',', '').strip()
+    cash_transaction_id = request.POST.get('cash_transaction', '').replace(',', '').strip()
+    create_cash_record = request.POST.get('create_cash_record') == '1'
+    reference_number = request.POST.get('reference_number', '').strip()
+    notes = request.POST.get('notes', '')
+    transaction_date = datetime.strptime(request.POST.get('transaction_date'), '%Y-%m-%d').date()
+    _period_error = closed_period_error(request, transaction_date)
+    if _period_error:
+        raise ValueError(_period_error)
+
+    # 1. Бараанууд (хувиргалтад: гарц бараа) — устгасан/хоосон мөрийг алгасна
+    rows = _parse_sale_rows(request.POST)
+    if not rows:
+        raise Exception('Хийсэн (гарц) бараа сонгоно уу!' if is_conversion else 'Дор хаяж 1 бараа сонгоно уу!')
+    material_rows = _parse_material_rows(request.POST) if is_conversion else []
+    if is_conversion and not material_rows:
+        raise Exception('Зарцуулсан бэлдэцийн тоог оруулна уу!')
+    products_by_id = Product.objects.in_bulk(
+        [int(r['product_id']) for r in rows] + [r['product_id'] for r in material_rows])
+
+    items = []
+    for row in rows:
+        product = products_by_id.get(int(row['product_id']))
+        if not product:
+            raise Exception('Сонгосон бараа олдсонгүй!')
+        if row['quantity'] <= 0:
+            raise Exception(f'{product.name}: тоо ширхэг 0-ээс их байх ёстой!')
+        if not is_conversion and row['price'] <= 0:
+            raise Exception(f'{product.name}: үнэ оруулна уу!')
+        items.append({'product': product, 'quantity': row['quantity'], 'price': row['price']})
+
+    output_ids = {item['product'].id for item in items}
+    materials = []
+    materials_cost = Decimal('0')
+    for row in material_rows:
+        product = products_by_id.get(row['product_id'])
+        if not product:
+            raise Exception('Сонгосон бэлдэц олдсонгүй!')
+        if product.id in output_ids:
+            raise Exception(f'{product.name}: гарц бараа өөрөө бэлдэц байж болохгүй!')
+        if product.current_stock < row['quantity']:
+            raise Exception(f'{product.name}: Үлдэгдэл хүрэлцэхгүй! Одоо: {product.current_stock}')
+        materials.append({'product': product, 'quantity': row['quantity'], 'price': product.purchase_price})
+        materials_cost += row['quantity'] * product.purchase_price
+
+    unit_cost = None
+    if is_conversion:
+        # Гарц барааны нэгж өртөг = зарцуулсан бэлдэцийн өртөг / гарц барааны нийт тоо
+        unit_cost = (materials_cost / sum(item['quantity'] for item in items)).quantize(Decimal('0.01'))
+        for item in items:
+            item['price'] = unit_cost
+        total_expense = materials_cost
+    else:
+        total_expense = sum((item['quantity'] * item['price'] for item in items), Decimal('0'))
+
+    # 2. Нийлүүлэгч
+    counterparty, supplier_name = (None, '') if is_conversion else \
+        _resolve_purchase_supplier(counterparty_id, supplier_name_manual)
+    if payment_method == 'CREDIT' and not counterparty:
+        raise Exception('Зээлээр авахад нийлүүлэгч заавал сонгоно уу!')
+
+    # 3. Төлбөрийн задаргаа: бэлэн / данс
+    cash_amount = Decimal('0')
+    bank_amount = Decimal('0')
+    if payment_method == 'CASH':
+        cash_amount = total_expense
+    elif payment_method == 'BANK':
+        bank_amount = total_expense
+    elif payment_method == 'MIXED':
+        try:
+            cash_amount = Decimal(request.POST.get('cash_amount', '0').replace(',', '').strip() or 0)
+        except InvalidOperation:
+            raise Exception('Бэлэн мөнгөний дүн буруу байна!')
+        if cash_amount <= 0 or cash_amount >= total_expense:
+            raise Exception(f'Бэлэн дүн 0-ээс их, нийт дүнгээс ({total_expense:,.0f}₮) бага байх ёстой!')
+        bank_amount = total_expense - cash_amount
+
+    cash_account = bank_account = None
+    if cash_amount > 0:
+        if not cash_account_id:
+            raise Exception('Касс сонгоно уу!')
+        cash_account = ChartOfAccounts.objects.get(id=cash_account_id)
+    if bank_amount > 0:
+        if not bank_account_id:
+            raise Exception('Банкны данс сонгоно уу!')
+        bank_account = ChartOfAccounts.objects.get(id=bank_account_id)
+
+    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
+    if payment_method in ('CASH', 'BANK', 'MIXED') and not inventory_account:
+        raise Exception('150101-Бараа материалын данс олдсонгүй!')
+
+    # 4. Баримт
+    purchase = existing_purchase or Purchase(created_by=request.user)
+    purchase.kind = 'CONVERSION' if is_conversion else 'PURCHASE'
+    purchase.supplier = counterparty
+    purchase.purchase_date = transaction_date
+    purchase.payment_method = payment_method
+    purchase.reference_number = reference_number
+    purchase.notes = notes
+    purchase.status = 'RECEIVED' if payment_method == 'CREDIT' else 'COMPLETED'
+    purchase.total_amount = total_expense
+    purchase.paid_amount = total_expense if payment_method in ('CASH', 'BANK', 'MIXED') else Decimal('0')
+    purchase.save()
+
+    # 5. Барааны хөдөлгөөн: гарц/худалдан авсан бараа IN, зарцуулсан бэлдэц OUT
+    movement_ref = reference_number or purchase.purchase_number
+    movements_created = []
+    for movement_type, rows_ in (('IN', items), ('OUT', materials)):
+        for item in rows_:
+            movements_created.append(StockMovement.objects.create(
+                product=item['product'],
+                movement_type=movement_type,
+                quantity=item['quantity'],
+                price=item['price'],
+                payment_method=payment_method,
+                reference_number=movement_ref,
+                notes=notes,
+                customer_name=supplier_name,
+                counterparty=counterparty,
+                purchase=purchase,
+                created_by=request.user,
+            ))
+    if keep_created_at:  # засахад анхны бүртгэсэн огноо хэвээр
+        StockMovement.objects.filter(purchase=purchase).update(created_at=keep_created_at)
+
+    if is_conversion and request.POST.get('update_cost') == '1' and unit_cost > 0:
+        Product.objects.filter(id__in=output_ids).update(purchase_price=unit_cost)
+
+    item_count = len(items)
+    entry_stem = f"PUR-{transaction_date.strftime('%Y%m%d')}-"
+    label = f"{purchase.purchase_number} ({item_count} бараа)" + (f" - {supplier_name}" if supplier_name else '') + \
+            (f" - {reference_number}" if reference_number else '')
+
+    def create_entry(credit_account, amount, description):
+        _, number = next_entry_number(entry_stem)
+        return AccountingEntry.objects.create(
+            entry_number=number,
+            entry_date=transaction_date,
+            debit_account=inventory_account,
+            credit_account=credit_account,
+            debit_amount=amount,
+            credit_amount=amount,
+            description=description,
+            related_purchase=purchase,
+            created_by=request.user,
+        )
+
+    def link_transaction(tx, entry):
+        tx.accounting_entry = entry
+        tx.offset_account = inventory_account
+        tx.expense_type = 'PRODUCT_PURCHASE'
+        tx.is_processed = True
+        tx.save()
+
+    if payment_method in ('CASH', 'BANK', 'MIXED'):
+        cash_entry = bank_entry = None
+        if cash_amount > 0:
+            cash_entry = create_entry(cash_account, cash_amount, f"Худалдан авалт бэлнээр {label}")
+        if bank_amount > 0:
+            bank_entry = create_entry(bank_account, bank_amount, f"Худалдан авалт дансаар {label}")
+
+        # Банкны зарлагын гүйлгээтэй холбох
+        if bank_entry and bank_transaction_id:
+            bank_tx = BankTransaction.objects.filter(
+                id=bank_transaction_id, expense_amount__gt=0, accounting_entry__isnull=True
+            ).first()
+            if bank_tx:
+                link_transaction(bank_tx, bank_entry)
+
+        # Кассын бүртгэл: байгаа зарлагатай холбох эсвэл шинээр үүсгэх
+        if cash_entry:
+            cash_tx = None
+            if cash_transaction_id:
+                cash_tx = BankTransaction.objects.filter(
+                    id=cash_transaction_id, account_type='CASH', expense_amount__gt=0,
+                    accounting_entry__isnull=True,
+                ).first()
+            if cash_tx:
+                link_transaction(cash_tx, cash_entry)
+            elif create_cash_record:
+                BankTransaction.objects.create(
+                    account_type='CASH',
+                    bank_name='CASH_REGISTER',
+                    bank_account=cash_account,
+                    transaction_date=transaction_date,
+                    expense_amount=cash_amount,
+                    description=f"{_PURCHASE_CASH_PREFIX} {label}",
+                    counterparty=counterparty,
+                    counterparty_name=supplier_name,
+                    expense_type='PRODUCT_PURCHASE',
+                    offset_account=inventory_account,
+                    accounting_entry=cash_entry,
+                    is_processed=True,
+                )
+
+        movements_created[0].accounting_entry = cash_entry or bank_entry
+        movements_created[0].bank_account = cash_account or bank_account
+        movements_created[0].save()
+
+    elif payment_method == 'CREDIT':
+        counterparty.balance += total_expense
+        counterparty.save()
+        payable_account = ChartOfAccounts.objects.filter(code='310101').first()  # Дансны өглөг
+        if inventory_account and payable_account:
+            movements_created[0].accounting_entry = create_entry(
+                payable_account, total_expense, f"Худалдан авалт зээлээр {label}")
+            movements_created[0].save()
+
+    return purchase, item_count, total_expense
+
+
+def _purchase_form_context(request, purchase=None):
+    """Худалдан авалт / бараа хувиргалтын формын өгөгдөл (бүртгэх болон засах горим)."""
     products = Product.objects.filter(is_active=True)
-    
-    # JavaScript-д ашиглахад хялбар байдлаар products list үүсгэх
-    import json
-    products_json = json.dumps([
+    if purchase:  # идэвхгүй болсон ч энэ баримтад орсон бараа
+        products = Product.objects.filter(Q(is_active=True) | Q(movements__purchase=purchase)).distinct()
+    products_data = [
         {
-            'id': p.id,
-            'name': p.name,
-            'purchase_price': float(p.purchase_price),
-            'current_stock': p.current_stock
+            'id': p.id, 'name': p.name, 'purchase_price': float(p.purchase_price),
+            'current_stock': p.current_stock, 'category_id': p.category_id, 'unit': p.get_unit_display(),
         }
-        for p in products
-    ], ensure_ascii=False)
-    
-    cash_accounts = ChartOfAccounts.objects.filter(code__startswith='100', is_active=True)
-    bank_accounts = ChartOfAccounts.objects.filter(code__startswith='110', is_active=True)
-    suppliers = Counterparty.objects.filter(counterparty_type__in=['SUPPLIER', 'BOTH'], is_active=True)
-    
-    # Холбогдоогүй банкны зарлагын гүйлгээнүүд
-    unlinked_transactions = BankTransaction.objects.filter(
-        expense_amount__gt=0,  # Зарлагын гүйлгээ
-        accounting_entry__isnull=True  # Санхүүгийн бичилттэй холбогдоогүй
-    ).select_related('bank_account').order_by('-transaction_date')[:100]  # Сүүлийн 100
-    
-    # JavaScript-д ашиглахад хялбар байдлаар transactions list үүсгэх
-    transactions_json = json.dumps([
+        for p in products.select_related('category').order_by('name')
+    ]
+    categories = list(ProductCategory.objects.filter(is_active=True).order_by('name'))
+    material_category = next((c for c in categories if c.name.lower() == MATERIAL_CATEGORY_NAME.lower()), None)
+
+    # Нийлүүлэгч хайх: нийлүүлэгчид эхэнд, дараа нь бусад харилцагч
+    suppliers_data = []
+    counterparties = Counterparty.objects.filter(is_active=True).order_by('name')
+    for c in sorted(counterparties, key=lambda c: c.counterparty_type not in ('SUPPLIER', 'BOTH')):
+        search_parts = [c.name, c.contact_person, c.phone, c.email, c.address,
+                        c.registration_number, c.tax_number, c.notes]
+        suppliers_data.append({
+            'id': str(c.id),
+            'name': c.name,
+            'info': ' · '.join(x for x in [c.contact_person, c.phone, c.get_counterparty_type_display()] if x),
+            'search': ' '.join(x for x in search_parts if x).lower(),
+        })
+
+    # Холбогдоогүй банк/кассын зарлагын гүйлгээ (+ засах үед энэ баримттай холбоотой нь)
+    unlinked = Q(accounting_entry__isnull=True)
+    if purchase:
+        unlinked |= Q(accounting_entry__related_purchase=purchase)
+    archived = bool(purchase and is_archived_date(purchase.purchase_date))
+    unlinked_transactions = period_filter(
+        BankTransaction.objects.filter(unlinked, expense_amount__gt=0, transfer_source__isnull=True),
+        'transaction_date', archive=archived,
+    ).select_related('bank_account').order_by('-transaction_date')[:300]
+    transactions_data = [
         {
             'id': t.id,
             'bank_account_id': t.bank_account.id if t.bank_account else None,
+            'account_type': t.account_type,
             'transaction_date': t.transaction_date.strftime('%Y-%m-%d'),
             'description': t.description,
             'expense_amount': float(t.expense_amount),
-            'counterparty_name': t.counterparty_name or ''
+            'counterparty_name': t.counterparty_name or '',
         }
         for t in unlinked_transactions
-    ], ensure_ascii=False)
-    
-    context = {
-        'products': products,
-        'products_json': products_json,
-        'cash_accounts': cash_accounts,
-        'bank_accounts': bank_accounts,
-        'suppliers': suppliers,
-        'payment_methods': StockMovement.PAYMENT_METHOD_CHOICES,
-        'unlinked_transactions': unlinked_transactions,
-        'transactions_json': transactions_json,
+    ]
+
+    return {
+        'products_data': products_data,
+        'categories_data': [{'id': c.id, 'name': c.name} for c in categories],
+        'material_category_id': material_category.id if material_category else None,
+        'suppliers_data': suppliers_data,
+        'transactions_data': transactions_data,
+        'cash_accounts': ChartOfAccounts.objects.filter(
+            Q(code__startswith='100') | Q(code__startswith='101'), is_active=True
+        ).order_by('code'),
+        'bank_accounts': ChartOfAccounts.objects.filter(code__startswith='110', is_active=True).order_by('code'),
+        'payment_methods': PURCHASE_PAYMENT_METHODS,
+        'can_add_category': _purchase_access(request.user, 'main.add_productcategory'),
     }
+
+
+def _purchase_edit_data(purchase):
+    """Засах формыг урьдчилан бөглөх өгөгдөл."""
+    entries = list(AccountingEntry.objects.filter(related_purchase=purchase).select_related('credit_account'))
+    cash_account = bank_account = None
+    cash_amount = Decimal('0')
+    for entry in entries:
+        code = entry.credit_account.code
+        if code.startswith(('100', '101')):
+            cash_account, cash_amount = entry.credit_account_id, cash_amount + entry.credit_amount
+        elif code.startswith('110'):
+            bank_account = entry.credit_account_id
+    linked = BankTransaction.objects.filter(accounting_entry__in=entries)
+    auto_ids = set(_auto_purchase_cash_transactions(purchase).values_list('id', flat=True))
+    bank_tx = linked.exclude(account_type='CASH').first()
+    cash_tx = linked.filter(account_type='CASH').exclude(id__in=auto_ids).first()
+    movements = list(purchase.stock_movements.select_related('product').order_by('id'))
+    return {
+        'purchase_number': purchase.purchase_number,
+        'date': purchase.purchase_date.isoformat(),
+        'items': [
+            {'product_id': m.product_id, 'name': m.product.name, 'quantity': m.quantity, 'price': float(m.price)}
+            for m in movements if m.movement_type == 'IN'
+        ],
+        'materials': {str(m.product_id): m.quantity for m in movements if m.movement_type == 'OUT'},
+        'supplier': {'id': str(purchase.supplier_id), 'name': purchase.supplier.name} if purchase.supplier_id else None,
+        'payment_method': purchase.payment_method,
+        'cash_account': cash_account,
+        'bank_account': bank_account,
+        'cash_amount': float(cash_amount),
+        'bank_transaction': bank_tx.id if bank_tx else None,
+        'cash_transaction': cash_tx.id if cash_tx else None,
+        'cash_record': 'new' if auto_ids else ('existing' if cash_tx else 'none'),
+        'reference_number': purchase.reference_number,
+        'notes': purchase.notes,
+    }
+
+
+@login_required
+def purchase_create_multi(request):
+    """Олон бараа худалдан авалт / бараа хувиргалт бүртгэх
+
+    Борлуулалтын формтой ижил дараалал: огноо → бараа → нийлүүлэгч → төлбөрийн хэлбэр → (касс бол) кассын бүртгэл.
+    Бараа хувиргалт: гарц бараа (ж: лаа) орлого болж, зарцуулсан бэлдэц зарлага болно.
+    """
+    if not _purchase_access(request.user, 'main.add_purchase'):
+        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
+        return redirect('main:inventory_list')
+
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                purchase, item_count, total = _process_multi_purchase(request)
+                if purchase.kind == 'CONVERSION':
+                    messages.success(request, f'Бараа хувиргалт {purchase.purchase_number} бүртгэгдлээ! Бэлдэцийн өртөг: {total:,.0f}₮')
+                else:
+                    messages.success(request, f'{item_count} бараа амжилттай худалдаж авлаа! Нийт: {total:,.0f}₮')
+                return redirect('main:purchase_list')
+        except Exception as e:
+            messages.error(request, f'Алдаа гарлаа: {str(e)}')
+
+    context = _purchase_form_context(request)
+    context['initial_mode'] = 'CONVERSION' if request.GET.get('mode') == 'conversion' else ''
     return render(request, 'main/purchase_form_multi.html', context)
 
 
 @login_required
 def purchase_edit(request, movement_id):
-    """Худалдан авалт засах"""
-    profile = request.user.profile
-    user = request.user
-    
-    has_access = (
-        profile.is_admin or 
-        profile.role == UserRole.ACCOUNTANT or 
-        user.is_superuser or
-        user.groups.filter(name='Менежер').exists() or
-        user.has_perm('main.change_stockmovement')
-    )
-    if not has_access:
+    """Худалдан авалт засах — бүртгэх формтой ижил. Хадгалахад бүх дагалдах бичлэгийг дахин үүсгэнэ."""
+    if not _purchase_access(request.user, 'main.change_stockmovement'):
         messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
         return redirect('main:purchase_list')
-    
-    movement = get_object_or_404(StockMovement, id=movement_id, movement_type='IN')
-    
+
+    # Худалдан авалтын мөр эсвэл хувиргалтын бэлдэцийн мөр
+    movement = get_object_or_404(StockMovement, Q(movement_type='IN') | Q(purchase__isnull=False), id=movement_id)
+    _denied = archived_denied(request, movement.created_at, 'main:purchase_list')
+    if _denied:
+        return _denied
+
+    with transaction.atomic():
+        purchase = _ensure_purchase_document(movement)
+    edit_data = _purchase_edit_data(purchase)
+
     if request.method == 'POST':
         try:
             with transaction.atomic():
-                # Шинэ өгөгдөл
-                quantity = int(request.POST.get('quantity'))
-                price = Decimal(request.POST.get('price'))
-                notes = request.POST.get('notes', '')
-                
-                # StockMovement шинэчлэх (current_stock @property тул автоматаар тооцоологдоно)
-                movement.quantity = quantity
-                movement.price = price
-                movement.notes = notes
-                movement.save()
-                
-                # Журналын бичилт шинэчлэх (хэрэв байвал)
-                if movement.accounting_entry:
-                    total_amount = quantity * price
-                    movement.accounting_entry.debit_amount = total_amount
-                    movement.accounting_entry.credit_amount = total_amount
-                    movement.accounting_entry.description = f"Худалдан авалт (засварласан): {movement.product.name} x{quantity}"
-                    movement.accounting_entry.save()
-                
-                messages.success(request, 'Худалдан авалт амжилттай засагдлаа!')
-                return redirect('main:purchase_list')
-                
+                keep_created_at = purchase.stock_movements.order_by('created_at') \
+                    .values_list('created_at', flat=True).first()
+                _reverse_purchase_effects(purchase)
+                _process_multi_purchase(request, existing_purchase=purchase, keep_created_at=keep_created_at)
+            messages.success(request, f'"{purchase.purchase_number}" {purchase.get_kind_display().lower()} шинэчлэгдлээ.')
+            return redirect('main:purchase_list')
         except Exception as e:
-            messages.error(request, f'Алдаа гарлаа: {str(e)}')
-    
-    context = {
-        'movement': movement,
-        'is_edit': True,
-    }
-    return render(request, 'main/purchase_edit.html', context)
+            messages.error(request, f'Алдаа гарлаа: {e}')
+            return redirect(request.get_full_path())
+
+    context = _purchase_form_context(request, purchase=purchase)
+    # Энэ баримтын нөлөөг үлдэгдлээс хасна (засахад өөрийнх нь тоо саад болохгүй)
+    own_delta = {}
+    for m in purchase.stock_movements.all():
+        own_delta[m.product_id] = own_delta.get(m.product_id, 0) + (m.quantity if m.movement_type == 'IN' else -m.quantity)
+    for p in context['products_data']:
+        p['current_stock'] -= own_delta.get(p['id'], 0)
+    context.update({'edit_purchase': purchase, 'edit_data': edit_data})
+    return render(request, 'main/purchase_form_multi.html', context)
 
 
 @login_required
 def purchase_delete(request, movement_id):
-    """Худалдан авалт устгах"""
-    profile = request.user.profile
-    user = request.user
-    
-    has_access = (
-        profile.is_admin or 
-        profile.role == UserRole.ACCOUNTANT or 
-        user.is_superuser or
-        user.groups.filter(name='Менежер').exists() or
-        user.has_perm('main.delete_stockmovement')
-    )
-    if not has_access:
+    """Худалдан авалт устгах — баримтыг бүхэлд нь (бүх бараа, журнал, кассын бичлэг) буцаана."""
+    if not _purchase_access(request.user, 'main.delete_stockmovement'):
         messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
         return redirect('main:purchase_list')
-    
+
     movement = get_object_or_404(StockMovement, id=movement_id, movement_type='IN')
-    
+    _denied = archived_denied(request, movement.created_at, 'main:purchase_list')
+    if _denied:
+        return _denied
+
+    with transaction.atomic():
+        purchase = _ensure_purchase_document(movement)
+
     if request.method == 'POST':
         try:
             with transaction.atomic():
-                # current_stock нь @property тул тусад нь өөрчлөх шаардлагагүй —
-                # StockMovement устсаны дараа автоматаар тооцоологдоно.
-                movement.delete()
-                
-                messages.success(request, 'Худалдан авалт амжилттай устгагдлаа!')
-                return redirect('main:purchase_list')
-                
+                number = purchase.purchase_number
+                _reverse_purchase_effects(purchase)
+                purchase.delete()
+            messages.success(request, f'"{number}" амжилттай устгагдлаа!')
+            return redirect('main:purchase_list')
         except Exception as e:
             messages.error(request, f'Алдаа гарлаа: {str(e)}')
-    
-    context = {'movement': movement}
+
+    context = {
+        'movement': movement,
+        'purchase': purchase,
+        'movements': purchase.stock_movements.select_related('product').order_by('movement_type', 'id'),
+        'entries': AccountingEntry.objects.filter(related_purchase=purchase).select_related('debit_account', 'credit_account'),
+        'auto_cash_count': _auto_purchase_cash_transactions(purchase).count(),
+    }
     return render(request, 'main/purchase_delete.html', context)
+
+
+@login_required
+def product_category_create(request):
+    """Барааны ангилал шинээр нэмэх (AJAX). Ижил нэртэй байвал түүнийг буцаана."""
+    import json
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST хүсэлт шаардлагатай'})
+    if not _purchase_access(request.user, 'main.add_productcategory'):
+        return JsonResponse({'success': False, 'error': 'Ангилал нэмэх эрх танд байхгүй'})
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = request.POST
+    name = (data.get('name') or '').strip()[:100]
+    if not name:
+        return JsonResponse({'success': False, 'error': 'Ангиллын нэр оруулна уу'})
+    # SQLite-ийн iexact кирилл үсгийн том/жижгийг ялгадаг тул Python-д харьцуулна
+    category = next((c for c in ProductCategory.objects.all() if c.name.strip().lower() == name.lower()), None)
+    created = category is None
+    if created:
+        category = ProductCategory.objects.create(name=name)
+    elif not category.is_active:
+        category.is_active = True
+        category.save(update_fields=['is_active'])
+    return JsonResponse({'success': True, 'id': category.id, 'name': category.name, 'created': created})
 
 
 def _get_salesperson_display_name(user):
@@ -6959,12 +8289,20 @@ def _get_salesperson_display_name(user):
     return user.get_full_name() or user.username
 
 
+# 'Бэлэн + Данс' зөвхөн олон бараатай борлуулалтын хуудсанд дэмжигдэнэ
+# POS нь зөвхөн олон бараатай борлуулалтын формд (сэттлмэнттэй тулгадаг)
+SINGLE_PAYMENT_METHODS = [c for c in StockMovement.PAYMENT_METHOD_CHOICES if c[0] not in ('MIXED', 'POS')]
+
+
 def _get_sale_payment_method_label(payment_method):
     return {
         'CASH': 'Касс',
         'BANK': 'Харилцах',
         'BANK_PENDING': 'Харилцах',
+        'MIXED': 'Касс + Харилцах',
         'CREDIT': 'Зээлээр',
+        'INTERNAL': 'Дотоод хэрэгцээ',
+        'POS': 'POS',
     }.get(payment_method, '')
 
 
@@ -7001,12 +8339,12 @@ def _resolve_sale_counterparty(counterparty_id, customer_name_manual):
 
 
 def _create_sale_record(*, transaction_date, counterparty, salesperson, notes,
-                        payment_method, created_by, items, bank_transaction=None):
+                        payment_method, created_by, items, bank_transaction=None, existing_sale=None):
     total_amount = sum(item['quantity'] * item['price'] for item in items)
     # BANK_PENDING: мөнгө ирээгүй, дараа банкаас холбоно
-    paid_amount = total_amount if payment_method in ['CASH', 'BANK'] else Decimal('0')
+    paid_amount = total_amount if payment_method in ['CASH', 'BANK', 'MIXED'] else Decimal('0')
 
-    sale = Sale.objects.create(
+    fields = dict(
         customer=counterparty,
         sale_date=transaction_date,
         status='PAID' if paid_amount >= total_amount and total_amount > 0 else 'DRAFT',
@@ -7014,10 +8352,22 @@ def _create_sale_record(*, transaction_date, counterparty, salesperson, notes,
         paid_amount=paid_amount,
         payment_date=transaction_date if paid_amount > 0 else None,
         notes=notes,
-        salesperson_name=_get_salesperson_display_name(salesperson),
         expected_payment_method=_get_sale_payment_method_label(payment_method),
-        created_by=created_by,
     )
+    if existing_sale:
+        # Засах: дугаар, хүлээн авсан хүн, үүсгэсэн хэрэглэгч хэвээр; бараануудыг шинээр бичнэ
+        sale = existing_sale
+        for key, value in fields.items():
+            setattr(sale, key, value)
+        sale.pos_bank_account = None
+        sale.save()
+        sale.items.all().delete()
+    else:
+        sale = Sale.objects.create(
+            salesperson_name=_get_salesperson_display_name(salesperson),
+            created_by=created_by,
+            **fields,
+        )
 
     for item in items:
         SaleItem.objects.create(
@@ -7077,6 +8427,9 @@ def sale_create(request):
                 
                 total_amount = quantity * price
                 transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                _period_error = closed_period_error(request, transaction_date)
+                if _period_error:
+                    raise ValueError(_period_error)
                 
                 if product.current_stock < quantity:
                     raise Exception(f'Үлдэгдэл хүрэлцэхгүй! Одоо: {product.current_stock}')
@@ -7133,7 +8486,7 @@ def sale_create(request):
                     # Өртөг бичилт
                     cost_of_goods = quantity * product.purchase_price
                     inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
+                    cogs_account = ChartOfAccounts.objects.filter(code='610101').first()  # Борлуулсан бүтээгдэхүүний өртөг
                     
                     if inventory_account and cogs_account:
                         AccountingEntry.objects.create(
@@ -7152,7 +8505,7 @@ def sale_create(request):
                     counterparty.balance -= total_amount
                     counterparty.save()
                     
-                    receivable_account = ChartOfAccounts.objects.filter(code='1201').first()
+                    receivable_account = ChartOfAccounts.objects.filter(code='120101').first()  # Дансны авлага
                     revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
                     
                     if receivable_account and revenue_account:
@@ -7174,7 +8527,7 @@ def sale_create(request):
                         
                         cost_of_goods = quantity * product.purchase_price
                         inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                        cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
+                        cogs_account = ChartOfAccounts.objects.filter(code='610101').first()  # Борлуулсан бүтээгдэхүүний өртөг
                         
                         if inventory_account and cogs_account:
                             AccountingEntry.objects.create(
@@ -7225,323 +8578,361 @@ def sale_create(request):
         'bank_accounts': bank_accounts,
         'customers': customers,
         'manager_users': manager_users,
-        'payment_methods': StockMovement.PAYMENT_METHOD_CHOICES,
+        'payment_methods': SINGLE_PAYMENT_METHODS,
     }
     return render(request, 'main/sale_form.html', context)
 
 
-@login_required
-def sale_create_multi(request):
-    """Олон бараа борлуулалт бүртгэх"""
-    from datetime import datetime
-    profile = request.user.profile
-    user = request.user
-    
-    # Эрх шалгах
-    has_access = (
-        profile.is_admin or 
-        profile.role == UserRole.ACCOUNTANT or 
-        user.is_superuser or
-        user.has_perm('main.add_sale')
-    )
-    if not has_access:
-        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
-        return redirect('main:inventory_list')
-    
-    if request.method == 'POST':
+def _get_or_create_counterparty_for_profile(profile):
+    """Сурагч/ажилтанд холбогдсон харилцагчийг олох, байхгүй бол үүсгэх"""
+    existing = Counterparty.objects.filter(profile=profile).first()
+    if existing:
+        return existing, False
+
+    name = profile.full_name
+    counterparty = Counterparty.objects.filter(name=name, profile__isnull=True).first()
+    created = False
+    if counterparty is None:
+        unique_name = name
+        if Counterparty.objects.filter(name=unique_name).exists():
+            unique_name = f"{name} ({profile.phone or profile.id})"
+        counterparty = Counterparty.objects.create(
+            name=unique_name,
+            counterparty_type='CUSTOMER',
+            phone=profile.phone,
+            email=profile.user.email or '',
+            address=profile.address,
+        )
+        created = True
+    counterparty.profile = profile
+    counterparty.save(update_fields=['profile', 'updated_at'])
+    return counterparty, created
+
+
+def _parse_sale_rows(post):
+    """product_N / quantity_N / price_N мөрүүдийг уншина (дундаас устгасан мөрийн дугаарыг алгасна)"""
+    row_ids = sorted({
+        int(match.group(1))
+        for key in post.keys()
+        for match in [re.match(r'^product_(\d+)$', key)]
+        if match
+    })
+    rows = []
+    for row_id in row_ids:
+        product_id = post.get(f'product_{row_id}', '').replace(',', '').strip()
+        if not product_id:
+            continue  # Хоосон (сүүлийн) мөр
         try:
-            with transaction.atomic():
-                # Ерөнхий мэдээлэл
-                payment_method = request.POST.get('payment_method')
-                bank_account_ids = [v for v in request.POST.getlist('bank_account') if v.strip()]
-                bank_account_id = bank_account_ids[0].replace(',', '').strip() if bank_account_ids else ''
-                counterparty_id = request.POST.get('counterparty', '').replace(',', '').strip()
-                salesperson_id = request.POST.get('salesperson', '').replace(',', '').strip()
-                bank_transaction_id = request.POST.get('bank_transaction', '').replace(',', '').strip()
-                reference_number = request.POST.get('reference_number', '')
-                notes = request.POST.get('notes', '')
-                transaction_date_str = request.POST.get('transaction_date')
-                transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
-                
-                # Барааны мэдээлэл боловсруулах
-                product_ids = []
-                row_num = 1
-                while True:
-                    product_key = f'product_{row_num}'
-                    if product_key not in request.POST or not request.POST.get(product_key):
-                        break
-                    
-                    product_id = request.POST.get(product_key, '').replace(',', '').strip()
-                    quantity = int(request.POST.get(f'quantity_{row_num}', '0').replace(',', ''))
-                    price = Decimal(request.POST.get(f'price_{row_num}', '0').replace(',', ''))
-                    
-                    if product_id and quantity > 0 and price > 0:
-                        product_ids.append({
-                            'product_id': product_id,
-                            'quantity': quantity,
-                            'price': price
-                        })
-                    
-                    row_num += 1
-                
-                if not product_ids:
-                    raise Exception('Дор хаяж 1 бараа нэмнэ үү!')
-                
-                # Борлуулагч
-                salesperson = None
-                if salesperson_id:
-                    salesperson = User.objects.get(id=salesperson_id)
-                
-                # Үйлчлүүлэгч
-                customer_name_manual = request.POST.get('customer_name_manual', '').strip()
-                counterparty, customer_name = _resolve_sale_counterparty(
-                    counterparty_id=counterparty_id,
-                    customer_name_manual=customer_name_manual,
+            quantity = int(post.get(f'quantity_{row_id}', '0').replace(',', '') or 0)
+            price = Decimal(post.get(f'price_{row_id}', '0').replace(',', '') or 0)
+        except (ValueError, InvalidOperation):
+            raise Exception(f'{len(rows) + 1}-р барааны тоо эсвэл үнэ буруу байна!')
+        rows.append({'product_id': product_id, 'quantity': quantity, 'price': price})
+    return rows
+
+
+@login_required
+def _process_multi_sale(request, existing_sale=None):
+    """Олон бараатай борлуулалтын формыг хадгална (шинэ эсвэл засах).
+
+    transaction.atomic() дотор дуудна. Алдаа гарвал Exception шиднэ.
+    Буцаах: (sale, item_count, total_revenue)
+    """
+    from datetime import datetime
+    payment_method = request.POST.get('payment_method', '')
+    if payment_method not in dict(StockMovement.PAYMENT_METHOD_CHOICES):
+        raise Exception('Төлбөрийн хэлбэр сонгоно уу!')
+    cash_account_id = request.POST.get('cash_account', '').replace(',', '').strip()
+    bank_account_id = request.POST.get('bank_account', '').replace(',', '').strip()
+    pos_bank_account_id = request.POST.get('pos_bank_account', '').replace(',', '').strip()
+    customer_value = request.POST.get('counterparty', '').replace(',', '').strip()
+    customer_name_manual = request.POST.get('customer_name_manual', '').strip()
+    bank_transaction_id = request.POST.get('bank_transaction', '').replace(',', '').strip()
+    cash_transaction_id = request.POST.get('cash_transaction', '').replace(',', '').strip()
+    create_cash_record = request.POST.get('create_cash_record') == '1'
+    reference_number = request.POST.get('reference_number', '')
+    notes = request.POST.get('notes', '')
+    transaction_date = datetime.strptime(request.POST.get('transaction_date'), '%Y-%m-%d').date()
+    _period_error = closed_period_error(request, transaction_date)
+    if _period_error:
+        raise ValueError(_period_error)
+    salesperson = request.user  # Борлуулагч = нэвтэрсэн хэрэглэгч
+
+    # 1. Бараанууд
+    rows = _parse_sale_rows(request.POST)
+    if not rows:
+        raise Exception('Дор хаяж 1 бараа сонгоно уу!')
+
+    products_by_id = Product.objects.in_bulk([int(r['product_id']) for r in rows])
+    qty_by_product = {}
+    sale_items = []
+    total_revenue = Decimal('0')
+    total_cost = Decimal('0')
+    for row in rows:
+        product = products_by_id.get(int(row['product_id']))
+        if not product:
+            raise Exception('Сонгосон бараа олдсонгүй!')
+        if row['quantity'] <= 0:
+            raise Exception(f'{product.name}: тоо ширхэг 0-ээс их байх ёстой!')
+        if row['price'] < 0 or (row['price'] == 0 and payment_method != 'INTERNAL'):
+            raise Exception(f'{product.name}: үнэ оруулна уу!')
+        qty_by_product[product.id] = qty_by_product.get(product.id, 0) + row['quantity']
+        total_revenue += row['quantity'] * row['price']
+        total_cost += row['quantity'] * product.purchase_price
+        sale_items.append({'product': product, 'quantity': row['quantity'], 'price': row['price']})
+
+    # Нэг бараа хэд хэдэн мөрөнд байсан ч нийлбэрээр нь үлдэгдэл шалгана
+    for product_id, qty in qty_by_product.items():
+        product = products_by_id[product_id]
+        if product.current_stock < qty:
+            raise Exception(f'{product.name}: Үлдэгдэл хүрэлцэхгүй! Одоо: {product.current_stock}')
+
+    # 2. Үйлчлүүлэгч (харилцагч эсвэл сурагч/ажилтан "p:<id>")
+    counterparty_id = customer_value
+    if customer_value.startswith('p:'):
+        customer_profile = get_object_or_404(UserProfile, id=customer_value[2:])
+        cp, _ = _get_or_create_counterparty_for_profile(customer_profile)
+        counterparty_id = str(cp.id)
+    counterparty, customer_name = _resolve_sale_counterparty(
+        counterparty_id=counterparty_id,
+        customer_name_manual=customer_name_manual,
+    )
+    if counterparty and counterparty.counterparty_type == 'SUPPLIER':
+        counterparty.counterparty_type = 'BOTH'
+        counterparty.save(update_fields=['counterparty_type'])
+    if payment_method == 'CREDIT' and not counterparty:
+        raise Exception('Зээлээр борлуулахад үйлчлүүлэгч заавал сонгоно уу!')
+
+    # 3. Төлбөрийн задаргаа: бэлэн / данс
+    cash_amount = Decimal('0')
+    bank_amount = Decimal('0')
+    if payment_method == 'CASH':
+        cash_amount = total_revenue
+    elif payment_method == 'BANK':
+        bank_amount = total_revenue
+    elif payment_method == 'MIXED':
+        try:
+            cash_amount = Decimal(request.POST.get('cash_amount', '0').replace(',', '').strip() or 0)
+        except InvalidOperation:
+            raise Exception('Бэлэн мөнгөний дүн буруу байна!')
+        if cash_amount <= 0 or cash_amount >= total_revenue:
+            raise Exception(
+                f'Бэлэн дүн 0-ээс их, нийт дүнгээс ({total_revenue:,.0f}₮) бага байх ёстой!'
+            )
+        bank_amount = total_revenue - cash_amount
+
+    cash_account = bank_account = pos_bank_account = None
+    if payment_method == 'POS':
+        # POS: мөнгө маргааш нь сэттлмэнтээр орно — орлогын журнал сэттлмэнт холбоход бичигдэнэ
+        if not pos_bank_account_id:
+            raise Exception('POS-ын банк сонгоно уу!')
+        pos_bank_account = ChartOfAccounts.objects.get(id=pos_bank_account_id)
+    if cash_amount > 0:
+        if not cash_account_id:
+            raise Exception('Касс сонгоно уу!')
+        cash_account = ChartOfAccounts.objects.get(id=cash_account_id)
+    if bank_amount > 0:
+        if not bank_account_id:
+            raise Exception('Банкны данс сонгоно уу!')
+        bank_account = ChartOfAccounts.objects.get(id=bank_account_id)
+
+    # Барааны хөдөлгөөн
+    movements_created = []
+    for item in sale_items:
+        movements_created.append(StockMovement.objects.create(
+            product=item['product'],
+            movement_type='OUT',
+            quantity=item['quantity'],
+            price=item['price'],
+            payment_method=payment_method,
+            reference_number=reference_number,
+            notes=notes,
+            customer_name=customer_name,
+            counterparty=counterparty,
+            salesperson=salesperson,
+            created_by=request.user
+        ))
+
+    bank_transaction = None
+    if bank_transaction_id and bank_amount > 0:
+        bank_transaction = BankTransaction.objects.filter(id=bank_transaction_id).first()
+
+    sale = _create_sale_record(
+        transaction_date=transaction_date,
+        counterparty=counterparty,
+        salesperson=salesperson,
+        notes=notes,
+        payment_method=payment_method,
+        created_by=request.user,
+        items=sale_items,
+        bank_transaction=bank_transaction,
+        existing_sale=existing_sale,
+    )
+    # Барааны хөдөлгөөнийг борлуулалттай холбох (засах/устгахад буцаахын тулд)
+    StockMovement.objects.filter(id__in=[m.id for m in movements_created]).update(sale=sale)
+    for movement in movements_created:  # дараа нь .save() хийгдэхэд холбоос арилахгүй
+        movement.sale = sale
+    if pos_bank_account:
+        sale.pos_bank_account = pos_bank_account
+        sale.save(update_fields=['pos_bank_account'])
+
+    item_count = len(sale_items)
+    entry_stem = f"SALE-{transaction_date.strftime('%Y%m%d')}-"
+
+    def create_entry(debit_account, credit_account, amount, description, suffix=''):
+        _, number = next_entry_number(entry_stem)
+        return AccountingEntry.objects.create(
+            entry_number=f'{number}{suffix}',
+            entry_date=transaction_date,
+            debit_account=debit_account,
+            credit_account=credit_account,
+            debit_amount=amount,
+            credit_amount=amount,
+            description=description,
+            related_sale=sale,
+            created_by=request.user
+        )
+
+    def create_cogs_entry():
+        inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
+        cogs_account = ChartOfAccounts.objects.filter(code='610101').first()  # Борлуулсан бүтээгдэхүүний өртөг
+        if inventory_account and cogs_account and total_cost > 0:
+            create_entry(cogs_account, inventory_account, total_cost,
+                         f"Борлуулалтын өртөг ({item_count} бараа) - {sale.sale_number}", '-COGS')
+
+    # Журналын бичилт
+    if payment_method in ['CASH', 'BANK', 'MIXED']:
+        revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
+        if not revenue_account:
+            raise Exception('510101-Борлуулалтын орлого данс олдсонгүй!')
+
+        cash_entry = bank_entry = None
+        if cash_amount > 0:
+            cash_entry = create_entry(cash_account, revenue_account, cash_amount,
+                                      f"Борлуулалт бэлнээр ({item_count} бараа) - {sale.sale_number}")
+        if bank_amount > 0:
+            bank_entry = create_entry(bank_account, revenue_account, bank_amount,
+                                      f"Борлуулалт дансаар ({item_count} бараа) - {sale.sale_number}")
+
+        if bank_transaction and bank_entry:
+            bank_transaction.accounting_entry = bank_entry
+            bank_transaction.is_processed = True
+            bank_transaction.save()
+
+        # Кассын бүртгэл: байгаа гүйлгээтэй холбох эсвэл шинээр үүсгэх
+        if cash_entry:
+            cash_tx = None
+            if cash_transaction_id:
+                cash_tx = BankTransaction.objects.filter(
+                    id=cash_transaction_id, account_type='CASH', accounting_entry__isnull=True
+                ).first()
+            if cash_tx:
+                cash_tx.accounting_entry = cash_entry
+                cash_tx.offset_account = revenue_account
+                cash_tx.income_type = 'PRODUCT_SALE'
+                cash_tx.is_processed = True
+                cash_tx.save()
+                SalePaymentAllocation.objects.create(
+                    transaction=cash_tx, sale=sale, amount=min(cash_amount, cash_tx.income_amount)
                 )
-                
-                # Бараа бүрийг бүртгэх
-                total_revenue = Decimal('0')
-                total_cost = Decimal('0')
-                movements_created = []
-                sale_items = []
-                
-                for item in product_ids:
-                    product = Product.objects.get(id=item['product_id'])
-                    quantity = item['quantity']
-                    price = item['price']
-                    
-                    # Үлдэгдэл шалгах
-                    if product.current_stock < quantity:
-                        raise Exception(f'{product.name}: Үлдэгдэл хүрэлцэхгүй! Одоо: {product.current_stock}')
-                    
-                    item_total = quantity * price
-                    total_revenue += item_total
-                    total_cost += quantity * product.purchase_price
-                    sale_items.append({
-                        'product': product,
-                        'quantity': quantity,
-                        'price': price,
-                    })
-                    
-                    # StockMovement үүсгэх
-                    movement = StockMovement.objects.create(
-                        product=product,
-                        movement_type='OUT',
-                        quantity=quantity,
-                        price=price,
-                        payment_method=payment_method,
-                        reference_number=reference_number,
-                        notes=notes,
-                        customer_name=customer_name,
-                        counterparty=counterparty,
-                        salesperson=salesperson,
-                        created_by=request.user
-                    )
-                    movements_created.append(movement)
-
-                bank_transaction = None
-                if bank_transaction_id:
-                    try:
-                        bank_transaction = BankTransaction.objects.get(id=bank_transaction_id)
-                    except BankTransaction.DoesNotExist:
-                        bank_transaction = None
-
-                sale = _create_sale_record(
+            elif create_cash_record:
+                cash_tx = BankTransaction.objects.create(
+                    account_type='CASH',
+                    bank_name='CASH_REGISTER',
+                    bank_account=cash_account,
                     transaction_date=transaction_date,
+                    income_amount=cash_amount,
+                    description=f"Барааны борлуулалт {sale.sale_number}"
+                                + (f" - {customer_name}" if customer_name else ''),
                     counterparty=counterparty,
-                    salesperson=salesperson,
-                    notes=notes,
-                    payment_method=payment_method,
-                    created_by=request.user,
-                    items=sale_items,
-                    bank_transaction=bank_transaction,
+                    counterparty_name=customer_name,
+                    income_type='PRODUCT_SALE',
+                    offset_account=revenue_account,
+                    accounting_entry=cash_entry,
+                    is_processed=True,
                 )
-                
-                # Журналын бичилт үүсгэх
-                if payment_method in ['CASH', 'BANK']:
-                    if not bank_account_id:
-                        raise Exception('Касс/Банкны данс сонгоно уу!')
-                    bank_account = ChartOfAccounts.objects.get(id=bank_account_id)
-                    revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
-                    
-                    if not revenue_account:
-                        raise Exception('510101-Борлуулалтын орлого данс олдсонгүй!')
-                    
-                    _, entry_number = next_entry_number(
-                        f"SALE-{transaction_date.strftime('%Y%m%d')}-"
-                    )
-                    
-                    # Орлогын бичилт
-                    entry = AccountingEntry.objects.create(
-                        entry_number=entry_number,
-                        entry_date=transaction_date,
-                        debit_account=bank_account,
-                        credit_account=revenue_account,
-                        debit_amount=total_revenue,
-                        credit_amount=total_revenue,
-                        description=f"Борлуулалт ({len(product_ids)} бараа) - {reference_number}",
-                        created_by=request.user
-                    )
-                    
-                    # Банкны гүйлгээтэй холбох
-                    if bank_transaction:
-                        bank_transaction.accounting_entry = entry
-                        bank_transaction.is_processed = True
-                        bank_transaction.save()
-                    
-                    # Эхний movement-д холбох
-                    if movements_created:
-                        movements_created[0].accounting_entry = entry
-                        movements_created[0].bank_account = bank_account
-                        movements_created[0].save()
-                    
-                    # Өртөг бичилт
-                    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
-                    
-                    if inventory_account and cogs_account:
-                        AccountingEntry.objects.create(
-                            entry_number=f"{entry_number}-COGS",
-                            entry_date=transaction_date,
-                            debit_account=cogs_account,
-                            credit_account=inventory_account,
-                            debit_amount=total_cost,
-                            credit_amount=total_cost,
-                            description=f"Борлуулалтын өртөг ({len(product_ids)} бараа) - {reference_number}",
-                            created_by=request.user
-                        )
-                
-                elif payment_method == 'CREDIT' and counterparty:
-                    counterparty.balance -= total_revenue
-                    counterparty.save()
-                    
-                    receivable_account = ChartOfAccounts.objects.filter(code='1201').first()
-                    revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
-                    
-                    if receivable_account and revenue_account:
-                        _, entry_number = next_entry_number(
-                            f"SALE-{transaction_date.strftime('%Y%m%d')}-"
-                        )
-                        
-                        entry = AccountingEntry.objects.create(
-                            entry_number=entry_number,
-                            entry_date=transaction_date,
-                            debit_account=receivable_account,
-                            credit_account=revenue_account,
-                            debit_amount=total_revenue,
-                            credit_amount=total_revenue,
-                            description=f"Борлуулалт зээлээр ({len(product_ids)} бараа) - {reference_number}",
-                            created_by=request.user
-                        )
-                        
-                        if movements_created:
-                            movements_created[0].accounting_entry = entry
-                            movements_created[0].save()
-                        
-                        # Өртөг
-                        inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                        cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
-                        
-                        if inventory_account and cogs_account:
-                            AccountingEntry.objects.create(
-                                entry_number=f"{entry_number}-COGS",
-                                entry_date=transaction_date,
-                                debit_account=cogs_account,
-                                credit_account=inventory_account,
-                                debit_amount=total_cost,
-                                credit_amount=total_cost,
-                                description=f"Борлуулалтын өртөг ({len(product_ids)} бараа) - {reference_number}",
-                                created_by=request.user
-                            )
-                
-                elif payment_method == 'BANK_PENDING':
-                    # Харилцахаар хожим орно — журнал үүсгэхгүй, банкны гүйлгээнд хожим холбоно
-                    # Зөвхөн өртгийн бичилт хийнэ (агуулах бараа гарсан)
-                    inventory_account = ChartOfAccounts.objects.filter(code='150101').first()
-                    cogs_account = ChartOfAccounts.objects.filter(code='5101').first()
-                    if inventory_account and cogs_account:
-                        _, cogs_stem = next_entry_number(
-                            f"SALE-{transaction_date.strftime('%Y%m%d')}-"
-                        )
-                        cogs_number = f"{cogs_stem}-COGS"
-                        AccountingEntry.objects.create(
-                            entry_number=cogs_number,
-                            entry_date=transaction_date,
-                            debit_account=cogs_account,
-                            credit_account=inventory_account,
-                            debit_amount=total_cost,
-                            credit_amount=total_cost,
-                            description=f"Борлуулалтын өртөг ({len(product_ids)} бараа) - {reference_number}",
-                            created_by=request.user
-                        )
+                SalePaymentAllocation.objects.create(transaction=cash_tx, sale=sale, amount=cash_amount)
 
-                # Нэмэлт хуваарилалт (SaleExtraSplit) хадгалах + журнал үүсгэх
-                # (модель устгагдсан байж болно — тиймээс хамгаалалттай)
-                try:
-                    from .models import SaleExtraSplit, BankTransactionSplit
-                except Exception:
-                    SaleExtraSplit = None
-                    BankTransactionSplit = None
-                split_index = 0
-                while SaleExtraSplit:
-                    acct_id = request.POST.get(f'sale_splits[{split_index}][account]', '').strip()
-                    amt_raw = request.POST.get(f'sale_splits[{split_index}][amount]', '').replace(',', '').strip()
-                    desc = request.POST.get(f'sale_splits[{split_index}][description]', '').strip()
-                    if not acct_id and not amt_raw:
-                        break
-                    split_index += 1
-                    if acct_id and amt_raw:
-                        try:
-                            split_amt = Decimal(amt_raw)
-                            if split_amt > 0:
-                                split_acct = ChartOfAccounts.objects.get(id=acct_id)
-                                ses = SaleExtraSplit.objects.create(
-                                    sale=sale,
-                                    account=split_acct,
-                                    amount=split_amt,
-                                    description=desc,
-                                )
-                                # BANK төлбөрийн аргаар банкны гүйлгээтэй холбосон бол
-                                # нэмэлт split-д тус бүр AccountingEntry үүсгэнэ
-                                if bank_transaction and payment_method == 'BANK':
-                                    _, split_stem = next_entry_number(
-                                        f"SALE-{transaction_date.strftime('%Y%m%d')}-"
-                                    )
-                                    split_entry_number = f"{split_stem}-SPL"
-                                    split_entry = AccountingEntry.objects.create(
-                                        entry_number=split_entry_number,
-                                        entry_date=transaction_date,
-                                        debit_account=bank_account,
-                                        credit_account=split_acct,
-                                        debit_amount=split_amt,
-                                        credit_amount=split_amt,
-                                        description=desc or f"Nemelt huvaarilalt - {reference_number}",
-                                        created_by=request.user,
-                                    )
-                                    BankTransactionSplit.objects.get_or_create(
-                                        transaction=bank_transaction,
-                                        account=split_acct,
-                                        defaults={
-                                            'amount': split_amt,
-                                            'description': desc,
-                                            'accounting_entry': split_entry,
-                                        },
-                                    )
-                        except Exception:
-                            pass
+        if movements_created:
+            movements_created[0].accounting_entry = cash_entry or bank_entry
+            movements_created[0].bank_account = cash_account or bank_account
+            movements_created[0].save()
 
-                messages.success(request, f'{len(product_ids)} бараа амжилттай борлуулагдлаа! Нийт: {total_revenue:,.0f}₮')
-                return redirect('main:sale_detail', sale_id=sale.id)
-        
-        except Exception as e:
-            messages.error(request, f'Алдаа гарлаа: {str(e)}')
-    
+        create_cogs_entry()
+
+    elif payment_method == 'CREDIT':
+        counterparty.balance -= total_revenue
+        counterparty.save()
+
+        receivable_account = ChartOfAccounts.objects.filter(code='120101').first()  # Дансны авлага
+        revenue_account = ChartOfAccounts.objects.filter(code='510101').first()
+        if receivable_account and revenue_account:
+            entry = create_entry(receivable_account, revenue_account, total_revenue,
+                                 f"Борлуулалт зээлээр ({item_count} бараа) - {reference_number}")
+            if movements_created:
+                movements_created[0].accounting_entry = entry
+                movements_created[0].save()
+        create_cogs_entry()
+
+    elif payment_method in ('BANK_PENDING', 'POS'):
+        # Харилцах / POS-оор хожим орно — зөвхөн өртгийн бичилт
+        if pos_bank_account and movements_created:
+            movements_created[0].bank_account = pos_bank_account
+            movements_created[0].save(update_fields=['bank_account'])
+        create_cogs_entry()
+
+    # Нэмэлт хуваарилалт (SaleExtraSplit) хадгалах + журнал үүсгэх
+    # (модель устгагдсан байж болно — тиймээс хамгаалалттай)
+    try:
+        from .models import SaleExtraSplit, BankTransactionSplit
+    except Exception:
+        SaleExtraSplit = None
+        BankTransactionSplit = None
+    split_index = 0
+    while SaleExtraSplit:
+        acct_id = request.POST.get(f'sale_splits[{split_index}][account]', '').strip()
+        amt_raw = request.POST.get(f'sale_splits[{split_index}][amount]', '').replace(',', '').strip()
+        desc = request.POST.get(f'sale_splits[{split_index}][description]', '').strip()
+        if not acct_id and not amt_raw:
+            break
+        split_index += 1
+        if acct_id and amt_raw:
+            try:
+                split_amt = Decimal(amt_raw)
+                if split_amt > 0:
+                    split_acct = ChartOfAccounts.objects.get(id=acct_id)
+                    SaleExtraSplit.objects.create(
+                        sale=sale,
+                        account=split_acct,
+                        amount=split_amt,
+                        description=desc,
+                    )
+                    # Банкны гүйлгээтэй холбосон бол нэмэлт split-д тус бүр AccountingEntry үүсгэнэ
+                    if bank_transaction and bank_account:
+                        split_entry = create_entry(
+                            bank_account, split_acct, split_amt,
+                            desc or f"Nemelt huvaarilalt - {reference_number}", '-SPL'
+                        )
+                        BankTransactionSplit.objects.get_or_create(
+                            transaction=bank_transaction,
+                            account=split_acct,
+                            defaults={
+                                'amount': split_amt,
+                                'description': desc,
+                                'accounting_entry': split_entry,
+                            },
+                        )
+            except Exception:
+                pass
+
+    return sale, item_count, total_revenue
+
+
+def _multi_sale_form_context(request, sale=None):
+    """Олон бараатай борлуулалтын формын өгөгдөл (бүртгэх болон засах горим)."""
     # Template-руу өгөгдөл дамжуулах
-    products = Product.objects.filter(is_active=True)
-    
-    # JavaScript-д ашиглахад хялбар байдлаар products list үүсгэх
-    import json
-    products_json = json.dumps([
+    products = Product.objects.filter(is_active=True).order_by('name')
+    products_data = [
         {
             'id': p.id,
             'name': p.name,
@@ -7549,48 +8940,105 @@ def sale_create_multi(request):
             'current_stock': p.current_stock
         }
         for p in products
-    ], ensure_ascii=False)
-    
-    cash_accounts = ChartOfAccounts.objects.filter(code__startswith='100', is_active=True)
+    ]
+
+    # Үйлчлүүлэгч хайх: харилцагчийн бүх талбар + харилцагчгүй сурагч/ажилтан
+    customers_data = []
+    for c in Counterparty.objects.filter(is_active=True).select_related('profile').order_by('name'):
+        search_parts = [c.name, c.contact_person, c.phone, c.email, c.address,
+                        c.registration_number, c.tax_number, c.notes]
+        if c.profile_id:
+            search_parts += [c.profile.last_name, c.profile.first_name, c.profile.phone]
+        customers_data.append({
+            'id': str(c.id),
+            'name': c.name,
+            'info': ' · '.join(x for x in [c.contact_person, c.phone, c.get_counterparty_type_display()] if x),
+            'search': ' '.join(x for x in search_parts if x).lower(),
+        })
+    for p in UserProfile.objects.filter(counterparty__isnull=True).select_related('user').order_by('first_name'):
+        search_parts = [p.last_name, p.first_name, p.mongolian_name, p.phone, p.user.email,
+                        p.user.username, p.address, p.facebook_name]
+        customers_data.append({
+            'id': f'p:{p.id}',
+            'name': p.full_name,
+            'info': ' · '.join(x for x in [p.phone, p.get_role_display()] if x),
+            'search': ' '.join(x for x in search_parts if x).lower(),
+        })
+
+    cash_accounts = ChartOfAccounts.objects.filter(
+        Q(code__startswith='100') | Q(code__startswith='101'), is_active=True
+    ).order_by('code')
     bank_accounts = ChartOfAccounts.objects.filter(code__startswith='110', is_active=True)
     all_accounts = ChartOfAccounts.objects.filter(is_active=True).order_by('code')
-    customers = Counterparty.objects.filter(counterparty_type__in=['CUSTOMER', 'BOTH'], is_active=True)
-    manager_users = UserProfile.objects.filter(
-        role__in=[UserRole.PRESIDENT, UserRole.DIRECTOR, UserRole.MANAGER]
-    ).select_related('user')
-    
-    # Холбогдоогүй банкны орлогын гүйлгээнүүд
-    unlinked_transactions = BankTransaction.objects.filter(
-        income_amount__gt=0,  # Орлогын гүйлгээ
-        accounting_entry__isnull=True  # Санхүүгийн бичилттэй холбогдоогүй
-    ).select_related('bank_account').order_by('-transaction_date')[:100]  # Сүүлийн 100
-    
-    # JavaScript-д ашиглахад хялбар байдлаар transactions list үүсгэх
-    transactions_json = json.dumps([
+
+    # Холбогдоогүй банк/кассын орлогын гүйлгээнүүд
+    # Борлуулалттай ижил үеийн (шинэ үе / засах үед борлуулалтын үе) холбогдоогүй орлогууд
+    archived_sale = bool(sale and is_archived_date(sale.sale_date))
+    unlinked_transactions = period_filter(BankTransaction.objects.filter(
+        income_amount__gt=0,
+        accounting_entry__isnull=True,
+        transfer_source__isnull=True,
+    ), 'transaction_date', archive=archived_sale).select_related('bank_account').order_by('-transaction_date')[:300]
+    transactions_data = [
         {
             'id': t.id,
             'bank_account_id': t.bank_account.id if t.bank_account else None,
+            'account_type': t.account_type,
             'transaction_date': t.transaction_date.strftime('%Y-%m-%d'),
             'description': t.description,
             'income_amount': float(t.income_amount),
             'counterparty_name': t.counterparty_name or ''
         }
         for t in unlinked_transactions
-    ], ensure_ascii=False)
-    
+    ]
+
     context = {
-        'products': products,
-        'products_json': products_json,
+        'products_data': products_data,
+        'customers_data': customers_data,
+        'transactions_data': transactions_data,
+        'accounts_data': [{'id': str(a.id), 'text': f'{a.code} - {a.name}'} for a in all_accounts],
         'cash_accounts': cash_accounts,
         'bank_accounts': bank_accounts,
-        'all_accounts': all_accounts,
-        'customers': customers,
-        'manager_users': manager_users,
         'payment_methods': StockMovement.PAYMENT_METHOD_CHOICES,
-        'unlinked_transactions': unlinked_transactions,
-        'transactions_json': transactions_json,
+        'default_pos_bank_id': (ChartOfAccounts.objects.filter(code='110103').values_list('id', flat=True).first()),
+        'salesperson_name': _get_salesperson_display_name(request.user),
     }
-    return render(request, 'main/sale_form_multi.html', context)
+    return context
+
+
+def sale_create_multi(request):
+    """Олон бараа борлуулалт бүртгэх
+
+    Дараалал: огноо → бараа → үйлчлүүлэгч → төлбөрийн хэлбэр → (касс бол) кассын бүртгэл.
+    Төлбөрийн хэлбэр MIXED бол бэлэн + дансаар хуваан төлнө.
+    Борлуулагч нь нэвтэрсэн хэрэглэгч.
+    """
+    from datetime import datetime
+    profile = request.user.profile
+    user = request.user
+
+    # Эрх шалгах
+    has_access = (
+        profile.is_admin or
+        profile.role == UserRole.ACCOUNTANT or
+        user.is_superuser or
+        user.has_perm('main.add_sale')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ үйлдлийг хийх эрх танд байхгүй.')
+        return redirect('main:inventory_list')
+
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                sale, item_count, total_revenue = _process_multi_sale(request)
+                messages.success(request, f'{item_count} бараа амжилттай борлуулагдлаа! Нийт: {total_revenue:,.0f}₮')
+                return redirect('main:sale_detail', sale_id=sale.id)
+
+        except Exception as e:
+            messages.error(request, f'Алдаа гарлаа: {str(e)}')
+
+    return render(request, 'main/sale_form_multi.html', _multi_sale_form_context(request))
 
 
 @login_required
@@ -7611,6 +9059,12 @@ def sale_edit(request, movement_id):
         return redirect('main:sale_list')
     
     movement = get_object_or_404(StockMovement, id=movement_id, movement_type='OUT')
+    
+    _denied = archived_denied(request, movement.created_at, 'main:inventory_list')
+    
+    if _denied:
+    
+        return _denied
     
     if request.method == 'POST':
         try:
@@ -7675,6 +9129,12 @@ def sale_delete(request, movement_id):
     
     movement = get_object_or_404(StockMovement, id=movement_id, movement_type='OUT')
     
+    _denied = archived_denied(request, movement.created_at, 'main:inventory_list')
+    
+    if _denied:
+    
+        return _denied
+    
     if request.method == 'POST':
         try:
             with transaction.atomic():
@@ -7716,8 +9176,9 @@ def inventory_summary_quantity(request):
     # Нийт худалдан авалт болон борлуулалтын тоо ширхэг
     report_data = []
     for product in products:
-        purchases_qs = StockMovement.objects.filter(product=product, movement_type='IN')
-        sales_qs = StockMovement.objects.filter(product=product, movement_type='OUT')
+        purchases_qs = current_period_movements(StockMovement.objects.all()).filter(product=product, movement_type='IN')
+        sales_qs = current_period_movements(StockMovement.objects.all()).filter(
+            product=product, movement_type='OUT').exclude(payment_method='CONVERSION')  # бэлдэцийн зарцуулалт борлуулалт биш
         
         if date_from:
             purchases_qs = purchases_qs.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
@@ -7766,7 +9227,8 @@ def inventory_summary_sales(request):
     
     report_data = []
     for product in products:
-        sales_qs = StockMovement.objects.filter(product=product, movement_type='OUT')
+        sales_qs = current_period_movements(StockMovement.objects.all()).filter(
+            product=product, movement_type='OUT').exclude(payment_method='CONVERSION')  # бэлдэцийн зарцуулалт борлуулалт биш
         
         if date_from:
             sales_qs = sales_qs.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
@@ -7819,7 +9281,7 @@ def inventory_summary_purchases(request):
     
     report_data = []
     for product in products:
-        purchases_qs = StockMovement.objects.filter(product=product, movement_type='IN')
+        purchases_qs = current_period_movements(StockMovement.objects.all()).filter(product=product, movement_type='IN')
         
         if date_from:
             purchases_qs = purchases_qs.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
@@ -7875,7 +9337,7 @@ def inventory_balance_report(request):
         # Эхний үлдэгдэл = initial_stock + хугацааны өмнөх бүх хөдөлгөөн
         opening_balance = product.initial_stock
         if date_from:
-            movements_before = StockMovement.objects.filter(
+            movements_before = current_period_movements(StockMovement.objects.all()).filter(
                 product=product,
                 created_at__lt=datetime.strptime(date_from, '%Y-%m-%d').date()
             )
@@ -7895,7 +9357,7 @@ def inventory_balance_report(request):
             opening_balance = product.initial_stock + income_before - expense_before + adjustment_before
         
         # Тухайн хугацааны хөдөлгөөн
-        movements = StockMovement.objects.filter(product=product)
+        movements = current_period_movements(StockMovement.objects.all()).filter(product=product)
         if date_from:
             movements = movements.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
         if date_to:
@@ -7984,10 +9446,10 @@ def bank_statement_report(request):
     date_from_str = request.GET.get('date_from', '')
     date_to_str = request.GET.get('date_to', '')
 
-    # Зөвхөн банкны гүйлгээ
-    base_qs = BankTransaction.objects.filter(
+    # Зөвхөн банкны гүйлгээ (систем эхлэх огнооноос хойших — өмнөхийг эхний үлдэгдэл орлоно)
+    base_qs = period_filter(BankTransaction.objects.filter(
         account_type='BANK'
-    ).select_related('bank_account', 'offset_account')
+    ), 'transaction_date').select_related('bank_account', 'offset_account')
 
     # Банкны дансаар шүүх
     if bank_account_id:
@@ -8103,7 +9565,7 @@ def counterparty_list(request):
     search = request.GET.get('search', '')
     counterparty_type = request.GET.get('type', '')
     
-    counterparties = Counterparty.objects.all().order_by('name')
+    counterparties = Counterparty.objects.select_related('profile').order_by('name')
     
     if search:
         counterparties = counterparties.filter(
@@ -8230,6 +9692,103 @@ def counterparty_delete(request, counterparty_id):
     return render(request, 'main/counterparty_confirm_delete.html', context)
 
 
+def _can_convert_people(user):
+    """Харилцагч ↔ сурагч хөрвүүлэх эрх"""
+    profile = user.profile
+    return (
+        user.is_superuser or profile.is_admin or profile.is_manager or
+        profile.is_accountant or user.groups.filter(name='Менежер').exists()
+    )
+
+
+@login_required
+@require_POST
+def counterparty_to_student(request, counterparty_id):
+    """Харилцагчийг сурагч болгох - харилцагчийн түүх хэвээр, холбогдсон сурагч үүснэ"""
+    if not _can_convert_people(request.user):
+        messages.error(request, 'Танд энэ үйлдлийг хийх эрх байхгүй байна.')
+        return redirect('main:counterparty_list')
+
+    counterparty = get_object_or_404(Counterparty, id=counterparty_id)
+
+    if counterparty.profile_id:
+        profile = counterparty.profile
+        if profile.role != UserRole.STUDENT:
+            profile.role = UserRole.STUDENT
+            profile.save()
+        messages.info(request, f'"{counterparty.name}" аль хэдийн хэрэглэгчтэй холбогдсон тул сурагч болголоо.')
+        return redirect('main:student_update', student_id=profile.id)
+
+    phone_digits = re.sub(r'\D', '', counterparty.phone or '')[-8:]
+
+    # Ижил утастай хэрэглэгч байвал шинээр үүсгэхгүй, холбоно
+    existing = None
+    if len(phone_digits) == 8:
+        existing = UserProfile.objects.filter(phone=phone_digits, counterparty__isnull=True).first()
+
+    with transaction.atomic():
+        if existing:
+            profile = existing
+            if profile.role != UserRole.STUDENT:
+                profile.role = UserRole.STUDENT
+                profile.save()
+        else:
+            base_username = f"student_{phone_digits}" if phone_digits else f"student_cp{counterparty.id}"
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}_{counter}"
+                counter += 1
+
+            user = User(username=username, email=counterparty.email or '', first_name=counterparty.name[:150])
+            if len(phone_digits) == 8:
+                user.set_password(phone_digits)
+            else:
+                user.set_unusable_password()
+            user.save()
+
+            profile = UserProfile.objects.create(
+                user=user,
+                first_name=counterparty.name[:100],
+                phone=phone_digits if len(phone_digits) == 8 else '',
+                address=counterparty.address or '',
+                role=UserRole.STUDENT,
+                is_active_student=True,
+                enrollment_date=timezone.now().date(),
+                notes=f'Харилцагчаас хөрвүүлсэн: {counterparty.name}',
+            )
+
+        counterparty.profile = profile
+        if counterparty.counterparty_type == 'SUPPLIER':
+            counterparty.counterparty_type = 'BOTH'
+        counterparty.save(update_fields=['profile', 'counterparty_type', 'updated_at'])
+
+    messages.success(request, f'"{counterparty.name}" сурагч болж бүртгэгдлээ. Мэдээллээ шалгаад ангид бүртгэнэ үү.')
+    return redirect('main:student_update', student_id=profile.id)
+
+
+@login_required
+@require_POST
+def profile_to_counterparty(request, profile_id):
+    """Сурагч/ажилтныг харилцагч болгох - хэрэглэгч хэвээр, холбогдсон харилцагч үүснэ"""
+    if not _can_convert_people(request.user):
+        messages.error(request, 'Танд энэ үйлдлийг хийх эрх байхгүй байна.')
+        return redirect('main:dashboard')
+
+    profile = get_object_or_404(UserProfile, id=profile_id)
+
+    existing = Counterparty.objects.filter(profile=profile).first()
+    if existing:
+        messages.info(request, f'Энэ хүн аль хэдийн "{existing.name}" харилцагчтай холбогдсон байна.')
+        return redirect('main:counterparty_edit', counterparty_id=existing.id)
+
+    name = profile.full_name
+    counterparty, _ = _get_or_create_counterparty_for_profile(profile)
+
+    messages.success(request, f'"{name}" харилцагчаар бүртгэгдлээ (сурагчийн мэдээлэл хэвээр).')
+    return redirect('main:counterparty_edit', counterparty_id=counterparty.id)
+
+
 @login_required
 def user_management(request):
     """Хэрэглэгчдийн удирдлага - зөвхөн админ"""
@@ -8242,11 +9801,16 @@ def user_management(request):
     
     search = request.GET.get('search', '').strip()
     if search:
+        # iucontains — Кирилл үсгийг ч том/жижиг ялгахгүй хайна (main/db_lookups.py)
         users = users.filter(
-            Q(username__icontains=search) |
-            Q(profile__mongolian_name__icontains=search) |
-            Q(profile__phone__icontains=search) |
-            Q(email__icontains=search)
+            Q(username__iucontains=search) |
+            Q(first_name__iucontains=search) |
+            Q(last_name__iucontains=search) |
+            Q(profile__first_name__iucontains=search) |
+            Q(profile__last_name__iucontains=search) |
+            Q(profile__mongolian_name__iucontains=search) |
+            Q(profile__phone__iucontains=search) |
+            Q(email__iucontains=search)
         )
     
     role = request.GET.get('role', '').strip()
@@ -8502,3 +10066,227 @@ def gallery(request):
 
 def donate(request):
     return render(request, 'main/donate.html') # эсвэл таны зориулсан template нэр
+
+@login_required
+def pos_settlement_list(request):
+    """POS картын борлуулалтыг банкны "СЕТТЛЕМЕНТ ХААВ" гүйлгээтэй тулгах"""
+    from . import pos_settlement as pos
+    profile = request.user.profile
+    user = request.user
+    has_access = (
+        profile.is_admin or
+        profile.is_accountant or
+        user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or
+        user.has_perm('main.change_banktransaction')
+    )
+    if not has_access:
+        messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
+        return redirect('main:dashboard')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        rows = {r.settlement.id: r for r in pos.build_rows()}
+        try:
+            if action == 'link_all':
+                matched = [r for r in rows.values() if r.is_matched]
+                for row in matched:
+                    pos.link_settlement(row, user)
+                messages.success(request, f'{len(matched)} сэттлмэнт холбогдлоо.' if matched else 'Тэнцсэн сэттлмэнт алга.')
+            else:
+                row = rows.get(int((request.POST.get('settlement_id') or '0').replace(',', '')))
+                if not row:
+                    raise ValueError('Сэттлмэнт олдсонгүй.')
+                if action == 'link':
+                    pos.link_settlement(row, user)
+                    messages.success(
+                        request,
+                        f'{row.business_date:%Y-%m-%d}: {len(row.sales)} борлуулалт сэттлмэнттэй холбогдож, '
+                        f'шимтгэл {row.fee:,.0f}₮ зардлаар бүртгэгдлээ.'
+                    )
+                elif action == 'unlink':
+                    pos.unlink_settlement(row)
+                    messages.success(request, f'{row.business_date:%Y-%m-%d}-ны сэттлмэнтийн холболт цуцлагдлаа.')
+        except ValueError as e:
+            messages.error(request, str(e))
+        return redirect('main:pos_settlement_list')
+
+    rows = pos.build_rows()
+    context = {
+        'rows': rows,
+        'matched_count': sum(1 for r in rows if r.is_matched),
+        'mismatch_count': sum(1 for r in rows if not r.is_linked and not r.is_matched),
+        'linked_count': sum(1 for r in rows if r.is_linked),
+        'pending_sales': pos.pending_pos_sales(rows),
+        'fee_account_code': pos.FEE_ACCOUNT_CODE,
+        'revenue_account_code': pos.REVENUE_ACCOUNT_CODE,
+    }
+    return render(request, 'main/pos_settlement_list.html', context)
+
+
+def _can_link_bank(user):
+    profile = user.profile
+    return (
+        profile.is_admin or profile.is_accountant or user.is_superuser or
+        user.groups.filter(name='Менежер').exists() or user.has_perm('main.change_banktransaction')
+    )
+
+
+def _income_type_choices():
+    standard = list(BankTransaction.INCOME_TYPE_CHOICES)
+    codes = {c for c, _ in standard}
+    custom = (BankTransaction.objects.exclude(income_type__isnull=True).exclude(income_type='')
+              .exclude(income_type__in=codes).values_list('income_type', flat=True).distinct())
+    return standard + [(t, t) for t in sorted(set(custom))]
+
+
+@login_required
+def auto_link_rules(request):
+    """Автомат холболтын загварууд — нэмэх, засах, устгах"""
+    from .models import AutoLinkRule
+    from .auto_link import candidate_transactions
+    if not _can_link_bank(request.user):
+        messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
+        return redirect('main:dashboard')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        rule_id = (request.POST.get('rule_id') or '').replace(',', '').strip()
+        rule = AutoLinkRule.objects.filter(id=rule_id).first() if rule_id else None
+
+        if action == 'delete' and rule:
+            rule.delete()
+            messages.success(request, f'"{rule.name}" загвар устгагдлаа.')
+            return redirect('main:auto_link_rules')
+        if action == 'toggle' and rule:
+            rule.is_active = not rule.is_active
+            rule.save(update_fields=['is_active', 'updated_at'])
+            return redirect('main:auto_link_rules')
+
+        # Хадгалах (шинэ эсвэл засах)
+        def dec(name):
+            raw = (request.POST.get(name) or '').replace(',', '').strip()
+            try:
+                return Decimal(raw) if raw else None
+            except InvalidOperation:
+                return None
+
+        def fk(name):
+            return (request.POST.get(name) or '').replace(',', '').strip() or None
+
+        rule = rule or AutoLinkRule(created_by=request.user)
+        rule.name = request.POST.get('name', '').strip()[:100]
+        rule.keywords = request.POST.get('keywords', '').strip()
+        direction = request.POST.get('direction')
+        rule.direction = direction if direction in dict(AutoLinkRule.DIRECTION_CHOICES) else 'EXPENSE'
+        rule.bank_account_id = fk('bank_account')
+        rule.amount_min = dec('amount_min')
+        rule.amount_max = dec('amount_max')
+        rule.offset_account_id = fk('offset_account')
+        rule.cash_flow_indicator_id = fk('cash_flow_indicator')
+        rule.income_type = request.POST.get('income_type', '').strip()[:50] if rule.direction != 'EXPENSE' else ''
+        rule.auto_apply = request.POST.get('auto_apply') == 'on'
+        rule.is_active = request.POST.get('is_active') == 'on'
+        try:
+            rule.priority = int((request.POST.get('priority') or '100').replace(',', ''))
+        except ValueError:
+            rule.priority = 100
+
+        errors = []
+        if not rule.name:
+            errors.append('Загварын нэр оруулна уу.')
+        if not rule.keyword_list:
+            errors.append('Дор хаяж нэг түлхүүр үг оруулна уу.')
+        if not rule.offset_account_id:
+            errors.append('Эсрэг данс сонгоно уу.')
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return redirect(f"{reverse('main:auto_link_rules')}?{'edit=' + str(rule.id) if rule.id else 'new=1'}")
+        rule.save()
+        messages.success(request, f'"{rule.name}" загвар хадгалагдлаа.')
+        return redirect('main:auto_link_rules')
+
+    rules = list(AutoLinkRule.objects.select_related('offset_account', 'cash_flow_indicator', 'bank_account'))
+    candidates = list(candidate_transactions())
+    for rule in rules:
+        rule.match_count = sum(1 for tx in candidates if rule.matches(tx))
+
+    # Засах эсвэл гүйлгээнээс шинэ загвар үүсгэх
+    edit_rule = None
+    edit_id = (request.GET.get('edit') or '').replace(',', '')
+    if edit_id.isdigit():
+        edit_rule = AutoLinkRule.objects.filter(id=edit_id).first()
+    prefill = {}
+    from_tx = (request.GET.get('from_tx') or '').replace(',', '')
+    if not edit_rule and from_tx.isdigit():
+        tx = BankTransaction.objects.filter(id=from_tx).first()
+        if tx:
+            words = re.sub(r'[\d:./\-]+', ' ', tx.description or '').split()
+            prefill = {
+                'name': (' '.join(words[:4]) or tx.counterparty_name or '')[:100],
+                'keywords': ' '.join(words[:4]),
+                'direction': 'INCOME' if tx.income_amount > 0 else 'EXPENSE',
+                'offset_account_id': tx.offset_account_id,
+                'cash_flow_indicator_id': tx.cash_flow_indicator_id,
+                'income_type': tx.income_type or '',
+            }
+
+    context = {
+        'rules': rules,
+        'edit_rule': edit_rule,
+        'prefill': prefill,
+        'show_form': bool(edit_rule or prefill or request.GET.get('new')),
+        'accounts': ChartOfAccounts.objects.filter(is_active=True).order_by('code'),
+        'bank_accounts': ChartOfAccounts.objects.filter(is_active=True, code__startswith='110').order_by('code'),
+        'indicators': CashFlowIndicator.objects.filter(is_active=True).order_by('code'),
+        'income_types': _income_type_choices(),
+        'direction_choices': AutoLinkRule.DIRECTION_CHOICES,
+        'candidate_count': len(candidates),
+    }
+    return render(request, 'main/auto_link_rules.html', context)
+
+
+@login_required
+def auto_link_review(request):
+    """Загварт таарсан гүйлгээнүүдийг шалгаж, засаж, нэг дор хадгалах"""
+    from .auto_link import find_matches, candidate_transactions, apply_link
+    if not _can_link_bank(request.user):
+        messages.error(request, 'Энэ хуудсыг харах эрх танд байхгүй.')
+        return redirect('main:dashboard')
+
+    if request.method == 'POST':
+        include_ids = {int(v.replace(',', '')) for v in request.POST.getlist('include') if v.replace(',', '').isdigit()}
+        candidates = {tx.id: tx for tx in candidate_transactions().filter(id__in=include_ids)}
+        accounts = ChartOfAccounts.objects.in_bulk()
+        saved, skipped = 0, 0
+        with transaction.atomic():
+            for tx_id in sorted(include_ids):
+                tx = candidates.get(tx_id)
+                raw_account = (request.POST.get(f'account_{tx_id}') or '').replace(',', '').strip()
+                account = accounts.get(int(raw_account)) if raw_account.isdigit() else None
+                if not tx or not account:
+                    skipped += 1
+                    continue
+                indicator_id = (request.POST.get(f'indicator_{tx_id}') or '').replace(',', '').strip() or None
+                income_type = request.POST.get(f'income_type_{tx_id}', '').strip()
+                apply_link(tx, account, indicator_id, income_type, request.user)
+                saved += 1
+        messages.success(request, f'{saved} гүйлгээ загвараар холбогдлоо.')
+        if skipped:
+            messages.warning(request, f'{skipped} гүйлгээ алгасагдлаа (аль хэдийн холбогдсон эсвэл данс сонгоогүй).')
+        return redirect('main:bank_transaction_list')
+
+    matches = find_matches()
+    groups = {}
+    for tx, rule in matches:
+        groups.setdefault(rule.id, {'rule': rule, 'rows': []})['rows'].append(tx)
+    accounts = ChartOfAccounts.objects.filter(is_active=True).order_by('code')
+    context = {
+        'groups': list(groups.values()),
+        'match_count': len(matches),
+        'accounts_data': [{'id': a.id, 'label': f'{a.code} - {a.name}'} for a in accounts],
+        'indicators_data': [{'id': i.id, 'label': f'{i.code} - {i.name}', 'flow': i.flow_type}
+                            for i in CashFlowIndicator.objects.filter(is_active=True).order_by('code')],
+    }
+    return render(request, 'main/auto_link_review.html', context)

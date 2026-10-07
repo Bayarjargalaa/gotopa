@@ -194,10 +194,27 @@
             <!-- Warning -->
             <div class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-500">
                 <p class="text-sm text-yellow-800">
-                    <strong>⚠️ Анхааруулга:</strong> Эрхийн өөрчлөлт шууд идэвхжинэ. Хэрэглэгч дахин нэвтрэх шаардлагагүй.
+                    <strong>⚠️ Анхааруулга:</strong> Эрхийн өөрчлөлт шууд идэвхжинэ. Хэрэглэгч дахин нэвтрэх шаардлагагүй.<br>
+                    Сурагчаас өөр эрх рүү шилжүүлбэл идэвхтэй ангийн бүртгэл нь идэвхгүй болно. Менежер/нягтлан/удирдлагаас энгийн эрх рүү шилжүүлбэл Staff эрх автоматаар хасагдана. Багшаас өөр эрх рүү шилжүүлбэл идэвхтэй ангиудаас чөлөөлөгдөнө. Ирц, төлбөрийн түүх устгагдахгүй.
                 </p>
             </div>
         </form>
+
+        <!-- Харилцагчтай холбох -->
+        <div class="mt-6 flex items-center gap-4">
+            {% if user_to_edit.profile.counterparty %}
+            <a href="{% url 'main:counterparty_edit' user_to_edit.profile.counterparty.id %}" class="text-green-700 hover:underline">
+                <i class="fas fa-handshake"></i> Харилцагч: {{ user_to_edit.profile.counterparty.name }}
+            </a>
+            {% else %}
+            <form method="post" action="{% url 'main:profile_to_counterparty' user_to_edit.profile.id %}" onsubmit="return confirm('Энэ хүнийг харилцагчаар бүртгэх үү?');">
+                {% csrf_token %}
+                <button type="submit" class="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg hover:bg-amber-200">
+                    <i class="fas fa-handshake"></i> Харилцагч болгох
+                </button>
+            </form>
+            {% endif %}
+        </div>
 
         <!-- Current Permissions Preview -->
         <div class="mt-8 p-6 bg-gray-50 rounded-lg border">

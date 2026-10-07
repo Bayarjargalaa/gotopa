@@ -4,227 +4,225 @@
 {% block title %}Банкны гүйлгээ - Готопа{% endblock %}
 
 {% block content %}
-<div class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto px-4">
+<div class="bg-gray-100 min-h-screen py-4">
+    <div class="container mx-auto px-3 sm:px-4">
         <!-- Гарчиг -->
-        <div class="mb-6 flex justify-between items-center">
-            <div>
-                <h2 class="text-3xl font-bold text-secondary">🏦 Банкны гүйлгээ</h2>
-                <p class="text-gray-600 mt-1">Импортлосон банкны хуулгууд</p>
-            </div>
-            <a href="{% url 'main:import_bank_transactions' %}" 
-               class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
-                + Хуулга импортлох
+        <div class="mb-3 flex flex-wrap justify-between items-center gap-3">
+            <h2 class="text-2xl font-bold text-secondary">🏦 Банкны гүйлгээ{% if archive_mode %} <span class="text-base font-semibold text-amber-700">· Архив</span>{% endif %}</h2>
+            <div class="flex flex-wrap gap-2">
+            {% if can_view_archive and books_start_date %}
+                {% if archive_mode %}
+                <a href="{% url 'main:bank_transaction_list' %}"
+                   class="px-4 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 whitespace-nowrap">
+                    <i class="fas fa-arrow-left mr-1"></i>Шинэ үе рүү буцах
+                </a>
+                {% else %}
+                <a href="{% url 'main:bank_transaction_list' %}?archive=1&is_processed=false&transaction_type=income"
+                   class="px-4 py-2 rounded-lg border border-amber-400 bg-amber-50 text-sm font-semibold text-amber-800 hover:bg-amber-100 whitespace-nowrap"
+                   title="Систем эхлэх огнооноос өмнөх гүйлгээ (зөвхөн superuser)">
+                    <i class="fas fa-archive mr-1"></i>Архив
+                    {% if archive_pending_count %}<span class="ml-1 px-1.5 rounded-full bg-amber-500 text-white text-xs">{{ archive_pending_count }}</span>{% endif %}
+                </a>
+                {% endif %}
+            {% endif %}
+            {% if not archive_mode %}
+            <a href="{% url 'main:auto_link_review' %}"
+               class="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap {% if auto_link_count %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}border border-gray-300 bg-white text-gray-700 hover:bg-gray-50{% endif %}"
+               title="Загварт таарсан гүйлгээг шалгаж нэг дор холбох">
+                <i class="fas fa-magic mr-1"></i>Автомат холбох{% if auto_link_count %} <span class="ml-1 px-1.5 rounded-full bg-white text-indigo-700 text-xs">{{ auto_link_count }}</span>{% endif %}
             </a>
+            {% endif %}
+            <a href="{% url 'main:import_bank_transactions' %}"
+               class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 font-semibold text-sm whitespace-nowrap">
+                <i class="fas fa-file-import mr-1"></i>Хуулга импортлох
+            </a>
+            </div>
         </div>
 
-        <!-- Филтер -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h3 class="text-sm font-semibold text-gray-500 uppercase mb-4">🔍 Шүүлт</h3>
-            <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {% if archive_mode %}
+        <div class="mb-3 px-4 py-2.5 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+            <i class="fas fa-archive mr-1"></i>
+            <strong>Архив</strong> — {{ books_start_date|date:"Y-m-d" }}-аас өмнөх гүйлгээ. Эдгээр нь шинэ үеийн үлдэгдэл, тайланд орохгүй.
+            Зөвхөн <strong>сурагчийн төлбөрт</strong> холбож болно (холбосон төлбөр "Сурагчдын төлбөр" хуудсанд шууд харагдана).
+        </div>
+        {% elif books_start_date %}
+        <div class="mb-3 text-xs text-gray-500">
+            <i class="fas fa-info-circle mr-1"></i>{{ books_start_date|date:"Y-m-d" }}-аас хойших гүйлгээ харагдаж байна (систем эхлэх огноо).
+        </div>
+        {% endif %}
 
-                <!-- Мөр 1: Үндсэн шүүлт -->
-                <!-- Банкны данс -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Банкны данс</label>
-                    <select name="bank_account" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
-                        {% for account in bank_accounts %}
-                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.bank_account == account.id|stringformat:"s" %}selected{% endif %}>
-                                {{ account.code }} - {{ account.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+        <!-- ===== Шүүлт ===== -->
+        <form method="get" id="txFilterForm" class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-3">
+            {% if archive_mode %}<input type="hidden" name="archive" value="1">{% endif %}
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Хайлт -->
+                <div class="relative flex-1 min-w-[200px]">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="search" name="description" id="txSearch" value="{{ search_description|default:'' }}" autocomplete="off"
+                           placeholder="Утга, харилцагч, данс эсвэл дүнгээр хайх..."
+                           class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary">
                 </div>
 
-                <!-- Эсрэг данс -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Эсрэг данс</label>
-                    <select name="offset_account" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
-                        {% for account in all_accounts %}
-                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.offset_account == account.id|stringformat:"s" %}selected{% endif %}>
-                                {{ account.code }} - {{ account.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+                <!-- Төлөв -->
+                <div class="seg" role="radiogroup" aria-label="Төлөв">
+                    <label><input type="radio" name="is_processed" value="" {% if not selected_is_processed %}checked{% endif %}>
+                        <span>Бүгд <b id="cnt-all">{{ status_counts.all }}</b></span></label>
+                    <label><input type="radio" name="is_processed" value="false" {% if selected_is_processed == 'false' %}checked{% endif %}>
+                        <span>Холбоогүй <b id="cnt-false" class="text-amber-600">{{ status_counts.false }}</b></span></label>
+                    <label><input type="radio" name="is_processed" value="true" {% if selected_is_processed == 'true' %}checked{% endif %}>
+                        <span>Холбогдсон <b id="cnt-true" class="text-green-600">{{ status_counts.true }}</b></span></label>
                 </div>
 
-                <!-- Тайлбар хайх -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Тайлбар хайх</label>
-                    <input type="text" name="description" value="{{ search_description|default:'' }}" 
-                           placeholder="Гүйлгээний утга..."
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                </div>
-
-                <!-- Боловсруулалтын төлөв -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Төлөв</label>
-                    <select name="is_processed" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
-                        <option value="false" {% if selected_is_processed == "false" %}selected{% endif %}>Эсрэг данс холбоогүй</option>
-                        <option value="true" {% if selected_is_processed == "true" %}selected{% endif %}>Журналд холбогдсон</option>
-                    </select>
-                </div>
-
-                <!-- Мөр 2: Орлого/Зарлага шүүлт -->
                 <!-- Орлого / Зарлага -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Орлого / Зарлага</label>
-                    <select name="transaction_type" id="transaction_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            onchange="updateTypeFilters()">
-                        <option value="">-- Бүгд --</option>
-                        <option value="income" {% if selected_transaction_type == "income" %}selected{% endif %}>📈 Орлого</option>
-                        <option value="expense" {% if selected_transaction_type == "expense" %}selected{% endif %}>📉 Зарлага</option>
-                    </select>
+                <div class="seg" role="radiogroup" aria-label="Орлого/Зарлага">
+                    <label><input type="radio" name="transaction_type" value="" {% if not selected_transaction_type %}checked{% endif %}><span>Бүгд</span></label>
+                    <label><input type="radio" name="transaction_type" value="income" {% if selected_transaction_type == 'income' %}checked{% endif %}><span><i class="fas fa-arrow-down text-green-600"></i> Орлого</span></label>
+                    <label><input type="radio" name="transaction_type" value="expense" {% if selected_transaction_type == 'expense' %}checked{% endif %}><span><i class="fas fa-arrow-up text-red-600"></i> Зарлага</span></label>
                 </div>
 
-                <!-- Орлогын төрөл -->
-                <div id="income_type_div" {% if selected_transaction_type == "expense" %}style="display:none"{% endif %}>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Орлогын төрөл</label>
-                    <select name="income_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
-                        {% for value, label in income_type_choices %}
-                            <option value="{{ value }}" {% if selected_income_type == value %}selected{% endif %}>{{ label }}</option>
+                <!-- Хугацаа -->
+                <div class="flex items-center gap-1">
+                    <select id="periodSelect" class="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white" aria-label="Хугацаа">
+                        <option value="">📅 Бүх хугацаа</option>
+                        <option value="this_month">Энэ сар</option>
+                        <option value="last_month">Өмнөх сар</option>
+                        <option value="last_30">Сүүлийн 30 хоног</option>
+                        <option value="this_year">Энэ он</option>
+                        <option value="last_year">Өмнөх он</option>
+                        <option value="custom">Огноо сонгох…</option>
+                    </select>
+                    <div id="customDates" class="hidden items-center gap-1">
+                        <input type="date" name="date_from" id="dateFrom" value="{{ date_from|default:'' }}" class="px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+                        <span class="text-gray-400">–</span>
+                        <input type="date" name="date_to" id="dateTo" value="{{ date_to|default:'' }}" class="px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <!-- Дэлгэрэнгүй шүүлт -->
+                <button type="button" id="advancedToggle" title="Дэлгэрэнгүй шүүлт"
+                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 whitespace-nowrap">
+                    <i class="fas fa-sliders-h"></i><span class="ml-1 inline md:hidden 2xl:inline">Дэлгэрэнгүй</span>
+                    <span id="advancedBadge" class="{% if not advanced_count %}hidden {% endif %}ml-1 px-1.5 rounded-full bg-primary text-white text-xs">{{ advanced_count }}</span>
+                    <i class="fas fa-chevron-down ml-1 text-xs text-gray-400"></i>
+                </button>
+            </div>
+
+            <!-- Дэлгэрэнгүй шүүлтүүд -->
+            <div id="advancedPanel" class="{% if not advanced_count %}hidden {% endif %}mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Банкны данс</label>
+                    <select name="bank_account" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Бүгд</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.bank_account == account.id|stringformat:"s" %}selected{% endif %}>{{ account.code }} - {{ account.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-
-                <!-- Зарлагын төрөл -->
-                <div id="expense_type_div" {% if selected_transaction_type == "income" %}style="display:none"{% endif %}>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Зарлагын төрөл</label>
-                    <select name="expense_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
-                        {% for value, label in expense_type_choices %}
-                            <option value="{{ value }}" {% if selected_expense_type == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <!-- Банкны нэр -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Банк</label>
-                    <select name="bank_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Бүгд --</option>
+                    <label class="block text-xs text-gray-500 mb-1">Банк</label>
+                    <select name="bank_name" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Бүгд</option>
                         {% for value, label in bank_choices %}
                             <option value="{{ value }}" {% if selected_bank_name == value %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
                 </div>
-
-                <!-- Мөр 3: Огноо ба дүн -->
-                <!-- Эхлэх огноо -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Эхлэх огноо</label>
-                    <input type="date" name="date_from" value="{{ date_from|default:'' }}" 
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                </div>
-
-                <!-- Дуусах огноо -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Дуусах огноо</label>
-                    <input type="date" name="date_to" value="{{ date_to|default:'' }}" 
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                </div>
-
-                <!-- Хамгийн бага дүн -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Хамгийн бага дүн (₮)</label>
-                    <input type="number" name="amount_min" value="{{ amount_min|default:'' }}" 
-                           placeholder="0"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                </div>
-
-                <!-- Хамгийн их дүн -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Хамгийн их дүн (₮)</label>
-                    <input type="number" name="amount_max" value="{{ amount_max|default:'' }}" 
-                           placeholder="∞"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                </div>
-
-                <!-- Мөр 4: Сар/Он шүүлт -->
-                <!-- Сар -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Төлбөрийн сар</label>
-                    <select name="filter_month" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Сар --</option>
-                        <option value="1" {% if filter_month == "1" %}selected{% endif %}>1-р сар</option>
-                        <option value="2" {% if filter_month == "2" %}selected{% endif %}>2-р сар</option>
-                        <option value="3" {% if filter_month == "3" %}selected{% endif %}>3-р сар</option>
-                        <option value="4" {% if filter_month == "4" %}selected{% endif %}>4-р сар</option>
-                        <option value="5" {% if filter_month == "5" %}selected{% endif %}>5-р сар</option>
-                        <option value="6" {% if filter_month == "6" %}selected{% endif %}>6-р сар</option>
-                        <option value="7" {% if filter_month == "7" %}selected{% endif %}>7-р сар</option>
-                        <option value="8" {% if filter_month == "8" %}selected{% endif %}>8-р сар</option>
-                        <option value="9" {% if filter_month == "9" %}selected{% endif %}>9-р сар</option>
-                        <option value="10" {% if filter_month == "10" %}selected{% endif %}>10-р сар</option>
-                        <option value="11" {% if filter_month == "11" %}selected{% endif %}>11-р сар</option>
-                        <option value="12" {% if filter_month == "12" %}selected{% endif %}>12-р сар</option>
-                    </select>
-                </div>
-
-                <!-- Он -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Төлбөрийн он</label>
-                    <select name="filter_year" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">-- Он --</option>
-                        {% for yr in year_choices %}
-                            <option value="{{ yr|stringformat:"d" }}" {% if filter_year == yr|stringformat:"s" %}selected{% endif %}>{{ yr|stringformat:"d" }}</option>
+                    <label class="block text-xs text-gray-500 mb-1">Эсрэг данс</label>
+                    <select name="offset_account" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Бүгд</option>
+                        {% for account in all_accounts %}
+                            <option value="{{ account.id|stringformat:"d" }}" {% if request.GET.offset_account == account.id|stringformat:"s" %}selected{% endif %}>{{ account.code }} - {{ account.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-
-                <!-- Хоосон -->
-                <div class="md:col-span-2"></div>
-
-                <!-- Товчнууд -->
-                <div class="md:col-span-4 flex gap-2 pt-2 border-t border-gray-100">
-                    <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90 font-medium">
-                        🔍 Хайх
-                    </button>
-                    <a href="{% url 'main:bank_transaction_list' %}" 
-                       class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 font-medium">
-                        ✕ Цэвэрлэх
-                    </a>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Дүн (₮)</label>
+                    <div class="flex items-center gap-1">
+                        <input type="number" name="amount_min" value="{{ amount_min|default:'' }}" placeholder="Доод" min="0"
+                               class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+                        <span class="text-gray-400">–</span>
+                        <input type="number" name="amount_max" value="{{ amount_max|default:'' }}" placeholder="Дээд" min="0"
+                               class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+                    </div>
                 </div>
-            </form>
-        </div>
+                <div id="incomeTypeField" {% if selected_transaction_type == 'expense' %}class="hidden"{% endif %}>
+                    <label class="block text-xs text-gray-500 mb-1">Орлогын төрөл</label>
+                    <select name="income_type" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Бүгд</option>
+                        {% for value, label in income_type_choices %}
+                            <option value="{{ value }}" {% if selected_income_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="expenseTypeField" {% if selected_transaction_type == 'income' %}class="hidden"{% endif %}>
+                    <label class="block text-xs text-gray-500 mb-1">Зарлагын төрөл</label>
+                    <select name="expense_type" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Бүгд</option>
+                        {% for value, label in expense_type_choices %}
+                            <option value="{{ value }}" {% if selected_expense_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Сурагчийн төлбөрийн он / сар</label>
+                    <div class="flex gap-1">
+                        <select name="filter_year" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                            <option value="">Он</option>
+                            {% for yr in year_choices %}
+                                <option value="{{ yr|stringformat:"d" }}" {% if filter_year == yr|stringformat:"s" %}selected{% endif %}>{{ yr|stringformat:"d" }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="filter_month" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white">
+                            <option value="">Сар</option>
+                            {% for m in month_choices %}
+                                <option value="{{ m }}" {% if filter_month == m %}selected{% endif %}>{{ m }}-р сар</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <noscript><button type="submit" class="mt-2 bg-primary text-white px-4 py-1.5 rounded text-sm">Хайх</button></noscript>
+        </form>
 
-        <script>
-        function updateTypeFilters() {
-            var type = document.getElementById('transaction_type').value;
-            var incomeDiv = document.getElementById('income_type_div');
-            var expenseDiv = document.getElementById('expense_type_div');
-            if (type === 'income') {
-                incomeDiv.style.display = '';
-                expenseDiv.style.display = 'none';
-                expenseDiv.querySelector('select').value = '';
-            } else if (type === 'expense') {
-                incomeDiv.style.display = 'none';
-                expenseDiv.style.display = '';
-                incomeDiv.querySelector('select').value = '';
-            } else {
-                incomeDiv.style.display = '';
-                expenseDiv.style.display = '';
+        <style>
+            .seg { display: inline-flex; border: 1px solid #d1d5db; border-radius: .5rem; overflow: hidden; background: #fff; }
+            .seg label { cursor: pointer; }
+            .seg label + label { border-left: 1px solid #e5e7eb; }
+            .seg input { position: absolute; opacity: 0; pointer-events: none; }
+            .seg span { display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .75rem; font-size: .875rem; color: #374151; white-space: nowrap; }
+            .seg span b { font-weight: 600; font-size: .75rem; color: #6b7280; }
+            .seg label:hover span { background: #f9fafb; }
+            .seg input:checked + span { background: #AB334C; color: #fff; }
+            .seg input:checked + span b, .seg input:checked + span i { color: #fff !important; }
+            .seg input:focus-visible + span { outline: 2px solid #AB334C; outline-offset: -2px; }
+            #txResults.loading { opacity: .5; pointer-events: none; transition: opacity .15s; }
+            @media (max-width: 640px) {
+                .seg { display: flex; width: 100%; }
+                .seg label { flex: 1; }
+                .seg label { display: flex; }
+                .seg span { flex: 1; justify-content: center; padding: .45rem .3rem; font-size: .8rem; gap: .25rem; }
             }
-        }
-        </script>
+        </style>
 
-        <!-- Статистик -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="text-2xl font-bold text-blue-600">{{ total_count }}</div>
-                <div class="text-sm text-gray-600">Нийт гүйлгээ</div>
+        <div id="txResults">
+        <!-- Идэвхтэй шүүлтүүд + нийт дүн -->
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+                {% for f in active_filters %}
+                    <a href="{{ f.url }}" class="filter-chip inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full bg-white border border-gray-300 text-xs text-gray-700 hover:border-red-400 hover:text-red-600"
+                       title="Шүүлтийг хасах">
+                        <span class="text-gray-400">{{ f.label }}:</span> {{ f.value }} <i class="fas fa-times ml-0.5"></i>
+                    </a>
+                {% endfor %}
+                {% if active_filters|length > 1 %}
+                    <a href="{% url 'main:bank_transaction_list' %}{% if archive_mode %}?archive=1{% endif %}" class="filter-chip text-xs text-red-600 hover:underline ml-1">Бүгдийг цэвэрлэх</a>
+                {% endif %}
             </div>
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="text-2xl font-bold text-yellow-600">{{ unprocessed_count }}</div>
-                <div class="text-sm text-gray-600">Эсрэг данс холбоогүй</div>
-            </div>
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="text-2xl font-bold text-green-600">{{ processed_count }}</div>
-                <div class="text-sm text-gray-600">Журналд холбогдсон</div>
+            <div class="text-sm text-gray-600">
+                <strong class="text-gray-800">{{ total_count }}</strong> гүйлгээ
+                <span class="mx-1 text-gray-300">|</span><span class="text-green-600 font-semibold">+{{ total_income|floatformat:0 }}₮</span>
+                <span class="mx-1 text-gray-300">|</span><span class="text-red-600 font-semibold">−{{ total_expense|floatformat:0 }}₮</span>
             </div>
         </div>
 
@@ -363,7 +361,12 @@
                         {% empty %}
                         <tr>
                             <td colspan="8" class="px-4 py-8 text-center text-gray-500">
-                                Гүйлгээ олдсонгүй. Эхлээд <a href="{% url 'main:import_bank_transactions' %}" class="text-primary hover:underline">хуулга импортлоно</a> уу.
+                                {% if active_filters %}
+                                    Шүүлтэд тохирох гүйлгээ олдсонгүй.
+                                    <a href="{% url 'main:bank_transaction_list' %}{% if archive_mode %}?archive=1{% endif %}" class="text-primary hover:underline">Шүүлтийг цэвэрлэх</a>
+                                {% else %}
+                                    Гүйлгээ олдсонгүй. Эхлээд <a href="{% url 'main:import_bank_transactions' %}" class="text-primary hover:underline">хуулга импортлоно</a> уу.
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -392,10 +395,10 @@
                     </div>
                     <div class="flex gap-2">
                         {% if page_obj.has_previous %}
-                            <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
-                               class="px-3 py-1 border rounded hover:bg-gray-100">Эхлэл</a>
-                            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
-                               class="px-3 py-1 border rounded hover:bg-gray-100">« Өмнөх</a>
+                            <a href="?page=1{% if page_query %}&{{ page_query }}{% endif %}" 
+                               class="page-link px-3 py-1 border rounded hover:bg-gray-100">Эхлэл</a>
+                            <a href="?page={{ page_obj.previous_page_number }}{% if page_query %}&{{ page_query }}{% endif %}" 
+                               class="page-link px-3 py-1 border rounded hover:bg-gray-100">« Өмнөх</a>
                         {% endif %}
 
                         <span class="px-3 py-1 bg-primary text-white rounded">
@@ -403,16 +406,173 @@
                         </span>
 
                         {% if page_obj.has_next %}
-                            <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
-                               class="px-3 py-1 border rounded hover:bg-gray-100">Дараах »</a>
-                            <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
-                               class="px-3 py-1 border rounded hover:bg-gray-100">Төгсгөл</a>
+                            <a href="?page={{ page_obj.next_page_number }}{% if page_query %}&{{ page_query }}{% endif %}" 
+                               class="page-link px-3 py-1 border rounded hover:bg-gray-100">Дараах »</a>
+                            <a href="?page={{ page_obj.paginator.num_pages }}{% if page_query %}&{{ page_query }}{% endif %}" 
+                               class="page-link px-3 py-1 border rounded hover:bg-gray-100">Төгсгөл</a>
                         {% endif %}
                     </div>
                 </div>
             </div>
             {% endif %}
         </div>
+        </div><!-- /#txResults -->
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+// Банкны гүйлгээний шүүлт — сонголт өөрчлөгдөх бүрт хуудсыг дахин ачаалалгүй шинэчилнэ
+(function() {
+    const form = document.getElementById('txFilterForm');
+    const results = document.getElementById('txResults');
+    const search = document.getElementById('txSearch');
+    const period = document.getElementById('periodSelect');
+    const customDates = document.getElementById('customDates');
+    const dateFrom = document.getElementById('dateFrom');
+    const dateTo = document.getElementById('dateTo');
+    const advancedPanel = document.getElementById('advancedPanel');
+    const advancedBadge = document.getElementById('advancedBadge');
+    const ADVANCED = ['bank_account', 'bank_name', 'offset_account', 'income_type', 'expense_type',
+                      'amount_min', 'amount_max', 'filter_month', 'filter_year'];
+    let controller = null;
+    let timer = null;
+
+    // ----- Хугацааны товч сонголт -----
+    const pad = n => String(n).padStart(2, '0');
+    const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    function presetRange(key) {
+        const t = new Date();
+        const y = t.getFullYear(), m = t.getMonth();
+        switch (key) {
+            case 'this_month': return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
+            case 'last_month': return [iso(new Date(y, m - 1, 1)), iso(new Date(y, m, 0))];
+            case 'last_30':    return [iso(new Date(y, m, t.getDate() - 29)), iso(t)];
+            case 'this_year':  return [`${y}-01-01`, `${y}-12-31`];
+            case 'last_year':  return [`${y - 1}-01-01`, `${y - 1}-12-31`];
+            default: return ['', ''];
+        }
+    }
+    function syncPeriodFromDates() {
+        const from = dateFrom.value, to = dateTo.value;
+        let match = (!from && !to) ? '' : 'custom';
+        ['this_month', 'last_month', 'last_30', 'this_year', 'last_year'].forEach(k => {
+            const [a, b] = presetRange(k);
+            if (a === from && b === to) match = k;
+        });
+        period.value = match;
+        toggleCustomDates(match === 'custom');
+    }
+    function toggleCustomDates(show) {
+        customDates.classList.toggle('hidden', !show);
+        customDates.classList.toggle('flex', show);
+    }
+    period.addEventListener('change', () => {
+        if (period.value === 'custom') {
+            toggleCustomDates(true);
+            dateFrom.focus();
+            return;
+        }
+        const [a, b] = presetRange(period.value);
+        dateFrom.value = a;
+        dateTo.value = b;
+        toggleCustomDates(false);
+        refresh();
+    });
+
+    // ----- Дэлгэрэнгүй шүүлт -----
+    document.getElementById('advancedToggle').addEventListener('click', () => {
+        advancedPanel.classList.toggle('hidden');
+    });
+    function updateAdvancedBadge() {
+        const n = ADVANCED.filter(name => form.elements[name] && form.elements[name].value).length;
+        advancedBadge.textContent = n;
+        advancedBadge.classList.toggle('hidden', !n);
+    }
+
+    // Орлого/Зарлагаас хамааруулж төрлийн талбарыг харуулах
+    function syncTypeFields() {
+        const type = form.elements['transaction_type'].value;
+        const incomeField = document.getElementById('incomeTypeField');
+        const expenseField = document.getElementById('expenseTypeField');
+        incomeField.classList.toggle('hidden', type === 'expense');
+        expenseField.classList.toggle('hidden', type === 'income');
+        if (type === 'expense') form.elements['income_type'].value = '';
+        if (type === 'income') form.elements['expense_type'].value = '';
+    }
+
+    // ----- Үр дүнг шинэчлэх -----
+    function queryString() {
+        const params = new URLSearchParams();
+        new FormData(form).forEach((value, key) => {
+            if (String(value).trim() !== '') params.append(key, String(value).trim());
+        });
+        return params.toString();
+    }
+
+    function load(url, { push = false } = {}) {
+        if (controller) controller.abort();
+        controller = new AbortController();
+        results.classList.add('loading');
+        return fetch(url, { signal: controller.signal, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.text())
+            .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const fresh = doc.getElementById('txResults');
+                if (fresh) results.innerHTML = fresh.innerHTML;
+                ['cnt-all', 'cnt-false', 'cnt-true'].forEach(id => {
+                    const el = doc.getElementById(id);
+                    if (el) document.getElementById(id).textContent = el.textContent;
+                });
+                if (push) history.pushState(null, '', url);
+                else history.replaceState(null, '', url);
+            })
+            .catch(err => { if (err.name !== 'AbortError') window.location.href = url; })
+            .finally(() => results.classList.remove('loading'));
+    }
+
+    function refresh() {
+        clearTimeout(timer);
+        updateAdvancedBadge();
+        const qs = queryString();
+        load(window.location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    // Хайлт — бичих бүрт (400ms хүлээгээд)
+    search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(refresh, 400);
+    });
+    // Бусад сонголт — шууд
+    form.addEventListener('change', e => {
+        if (e.target === search || e.target === period) return;
+        if (e.target.name === 'transaction_type') syncTypeFields();
+        refresh();
+    });
+    form.addEventListener('submit', e => { e.preventDefault(); refresh(); });
+
+    // Шүүлтийн chip, хуудаслалт — хуудсыг бүхэлд нь ачаалалгүй
+    results.addEventListener('click', e => {
+        const link = e.target.closest('a.filter-chip, a.page-link');
+        if (!link || e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        // Chip-ээр шүүлт хасахад формыг ч мөн адил шинэчлэх хэрэгтэй тул бүтнээр нь ачаална
+        if (link.classList.contains('filter-chip')) { window.location.href = link.href; return; }
+        load(link.href, { push: true }).then(() => results.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    });
+    window.addEventListener('popstate', () => window.location.reload());
+
+    // "/" дарахад хайлт руу шилжих
+    document.addEventListener('keydown', e => {
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            search.focus();
+        }
+    });
+
+    syncPeriodFromDates();
+})();
+</script>
+{% endblock %}
+

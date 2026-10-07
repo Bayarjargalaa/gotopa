@@ -149,6 +149,18 @@ SIDEBAR_MENU = [
                 'permissions': ['is_admin', 'is_manager', 'is_accountant'],  # Менежер нэмэгдсэн
             },
             {
+                'label': 'Автомат холболтын загвар',
+                'url_name': 'main:auto_link_rules',
+                'icon': 'fas fa-magic',
+                'permissions': ['is_admin', 'is_manager', 'is_accountant'],
+            },
+            {
+                'label': 'POS тооцоо нийлэх',
+                'url_name': 'main:pos_settlement_list',
+                'icon': 'fas fa-credit-card',
+                'permissions': ['is_admin', 'is_manager', 'is_accountant'],
+            },
+            {
                 'label': 'Кассын бүртгэл',
                 'url_name': 'main:cash_transaction_list',
                 'icon': 'fas fa-money-bill-wave',
@@ -171,14 +183,12 @@ SIDEBAR_MENU = [
                 'label': 'Худалдан авалт',
                 'url_name': 'main:purchase_create_multi',
                 'icon': 'fas fa-arrow-down',
-                'color': 'text-blue-600 hover:bg-blue-600',
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.can_manage_inventory', 'perm:main.add_purchase'],
             },
             {
                 'label': 'Борлуулалт бүртгэх (Олон бараа)',
                 'url_name': 'main:sale_create_multi',
                 'icon': 'fas fa-shopping-basket',
-                'color': 'text-green-600 hover:bg-green-600',
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.can_manage_inventory', 'perm:main.add_sale'],
             },
             {
@@ -210,7 +220,6 @@ SIDEBAR_MENU = [
                 'label': 'Харилцагч бүртгэх',
                 'url_name': 'main:counterparty_create',
                 'icon': 'fas fa-user-plus',
-                'color': 'text-purple-600 hover:bg-purple-600',
                 'permissions': ['is_admin', 'is_accountant', 'perm:main.add_counterparty'],
             },
         ]
@@ -308,7 +317,7 @@ SIDEBAR_MENU = [
             },
             {
                 'label': 'Багш нар',
-                'url_name': 'main:teacher_list',
+                'url_name': 'main:teacher_manage_list',
                 'icon': 'fas fa-chalkboard-teacher',
                 'permissions': ['is_admin'],
             },
@@ -433,7 +442,7 @@ def get_user_menu(user):
     """Хэрэглэгчийн эрхээр нь SIDEBAR цэс буцаах"""
     filtered_menu = []
     
-    for section in SIDEBAR_MENU:
+    for section_index, section in enumerate(SIDEBAR_MENU):
         # Section эрх шалгах
         if not user_has_permission(user, section.get('permissions', [])):
             continue
@@ -448,6 +457,7 @@ def get_user_menu(user):
         if filtered_items:
             section_copy = section.copy()
             section_copy['items'] = filtered_items
+            section_copy['section_key'] = f'section-{section_index}'
             filtered_menu.append(section_copy)
     
     return filtered_menu

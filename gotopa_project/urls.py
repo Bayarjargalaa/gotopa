@@ -21,6 +21,11 @@ from django.views.static import serve
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    re_path(
+        r'^static/images/багшнар/(?P<path>.*)$',
+        serve,
+        {'document_root': settings.BASE_DIR / 'static' / 'images' / 'багшнар'},
+    ),
     path('', include('main.urls')),
 ]
 

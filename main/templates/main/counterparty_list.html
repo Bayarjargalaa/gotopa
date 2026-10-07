@@ -85,6 +85,18 @@
                             <a href="{% url 'main:counterparty_edit' cp.id %}" class="text-blue-600 hover:text-blue-900 mr-3">
                                 <i class="fas fa-edit"></i>
                             </a>
+                            {% if cp.profile %}
+                            <a href="{% if cp.profile.role == 'STUDENT' %}{% url 'main:student_update' cp.profile.id %}{% else %}{% url 'main:user_edit' cp.profile.user_id %}{% endif %}" class="text-green-600 hover:text-green-900 mr-3" title="Холбогдсон хэрэглэгч: {{ cp.profile.full_name }} ({{ cp.profile.get_role_display }})">
+                                <i class="fas fa-user-check"></i>
+                            </a>
+                            {% else %}
+                            <form method="post" action="{% url 'main:counterparty_to_student' cp.id %}" class="inline" onsubmit="return confirm('{{ cp.name|escapejs }}-г сурагч болгох уу? Харилцагчийн түүх хэвээр үлдэнэ.');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-green-600 hover:text-green-900 mr-3" title="Сурагч болгох">
+                                    <i class="fas fa-user-graduate"></i>
+                                </button>
+                            </form>
+                            {% endif %}
                             <a href="{% url 'main:counterparty_delete' cp.id %}" class="text-red-600 hover:text-red-900">
                                 <i class="fas fa-trash"></i>
                             </a>

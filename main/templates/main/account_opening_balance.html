@@ -23,13 +23,42 @@
                 {% endfor %}
             {% endif %}
 
+            <!-- Систем эхлэх огноо -->
+            <div class="mb-4 p-4 rounded-lg border border-amber-300 bg-amber-50 flex flex-wrap items-center justify-between gap-3">
+                <div class="text-sm text-amber-900">
+                    <div class="font-semibold"><i class="fas fa-flag-checkered mr-1"></i>Систем эхлэх огноо:
+                        {% if books_start_date %}{{ books_start_date|date:"Y-m-d" }}{% else %}тохируулаагүй{% endif %}
+                    </div>
+                    <div class="text-xs mt-0.5">
+                        Эхний үлдэгдэл = энэ өдрийн <strong>өглөөний</strong> байдлаарх үлдэгдэл. Энэ өдрөөс хойших гүйлгээ дээр нь нэмэгдэнэ;
+                        өмнөх гүйлгээ архивд орж тооцоонд орохгүй.
+                    </div>
+                </div>
+                {% if user.is_superuser %}
+                <form method="post" class="flex items-center gap-2"
+                      onsubmit="return confirm('Систем эхлэх огноог солих уу? Бүх жагсаалт, үлдэгдэл шинэ огноогоор дахин тооцогдоно.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="set_start_date">
+                    <input type="date" name="books_start_date" value="{{ books_start_date|date:'Y-m-d' }}"
+                           class="px-2 py-1.5 border border-amber-300 rounded text-sm bg-white">
+                    <button type="submit" class="px-3 py-1.5 rounded bg-amber-600 text-white text-sm hover:bg-amber-700">Солих</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="mb-4 text-sm">
+                <a href="{% url 'main:product_opening_stock' %}" class="text-primary hover:underline">
+                    <i class="fas fa-boxes mr-1"></i>Барааны эхний үлдэгдэл (тоо ширхэг, өртөг) оруулах →
+                </a>
+            </div>
+
             <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <div class="flex items-start">
                     <i class="fas fa-info-circle text-blue-500 mt-1 mr-3"></i>
                     <div class="text-sm text-blue-700">
                         <p class="font-semibold mb-1">Анхааруулга:</p>
                         <ul class="list-disc list-inside space-y-1">
-                            <li>Эхний үлдэгдэл нь систем ашиглаж эхлэхээс өмнөх үлдэгдэл юм</li>
+                            <li>Эхний үлдэгдэл нь систем эхлэх огнооны өглөөний байдлаарх үлдэгдэл юм (эерэг тоогоор, дансны шинжийн дагуу)</li>
+                            <li>Дебит шинжтэй (Актив, Зардал, Өртөг) болон кредит шинжтэй (Пассив, Өмч, Орлого) дансны нийлбэр тэнцүү байх ёстой</li>
                             <li>Актив/Зардал дансууд: Эхний үлдэгдэл + Дебит - Кредит = Одоогийн үлдэгдэл</li>
                             <li>Пассив/Өмч/Орлого дансууд: Эхний үлдэгдэл + Кредит - Дебит = Одоогийн үлдэгдэл</li>
                             <li>Дебит болон Кредит дүн нь журналын гүйлгээнүүдээс автоматаар тооцогдоно</li>
@@ -42,8 +71,13 @@
                 {% csrf_token %}
                 
                 <!-- Хайлт -->
+                <div class="mb-4 flex flex-wrap items-center gap-3">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
+                        <input type="checkbox" id="onlyNonZero" class="accent-primary"> Зөвхөн үлдэгдэлтэй данс
+                    </label>
+                </div>
                 <div class="mb-6">
-                    <input type="text" 
+                    <input type="text"
                            id="searchInput" 
                            placeholder="🔍 Данс хайх (код эсвэл нэр)..."
                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
@@ -91,10 +125,11 @@
                                     {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                    <input type="number" 
-                                           name="opening_{{ account.id }}"
+                                    <input type="number"
+                                           name="opening_{{ account.id|stringformat:'d' }}"
                                            step="0.01"
-                                           value="{{ account.opening_balance|floatformat:2 }}"
+                                           data-nature="{% if account.account_type in debit_nature_types %}debit{% else %}credit{% endif %}"
+                                           value="{{ account.opening_balance|floatformat:'2u' }}"
                                            class="w-32 px-2 py-1 text-right border border-gray-300 rounded focus:ring-2 focus:ring-primary focus:border-transparent">
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 font-medium">
@@ -114,8 +149,14 @@
                     </table>
                 </div>
 
-                <!-- Товчнууд -->
-                <div class="flex justify-end gap-4 mt-6">
+                <!-- Эхний үлдэгдлийн тэнцэл -->
+                <div class="sticky bottom-0 mt-6 bg-white border-t border-gray-200 pt-4 pb-2 flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-sm flex flex-wrap gap-x-5 gap-y-1">
+                        <span>Дебит шинжтэй: <strong id="totDebit">{{ opening_debit_total|floatformat:2 }}₮</strong></span>
+                        <span>Кредит шинжтэй: <strong id="totCredit">{{ opening_credit_total|floatformat:2 }}₮</strong></span>
+                        <span>Зөрүү: <strong id="totDiff">—</strong></span>
+                    </div>
+                <div class="flex justify-end gap-4">
                     <a href="{% url 'main:finance_dashboard' %}" 
                        class="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">
                         <i class="fas fa-times mr-2"></i>Болих
@@ -124,6 +165,7 @@
                             class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-colors">
                         <i class="fas fa-save mr-2"></i>Хадгалах
                     </button>
+                </div>
                 </div>
             </form>
         </div>
@@ -147,6 +189,38 @@ document.getElementById('searchInput').addEventListener('input', function() {
         }
     });
 });
+
+// Эхний үлдэгдлийн тэнцэл (дебит шинжтэй = кредит шинжтэй)
+const fmt2 = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '₮';
+function recalcOpeningTotals() {
+    let debit = 0, credit = 0;
+    document.querySelectorAll('input[data-nature]').forEach(inp => {
+        const v = parseFloat(inp.value) || 0;
+        if (inp.dataset.nature === 'debit') debit += v; else credit += v;
+    });
+    document.getElementById('totDebit').textContent = fmt2(debit);
+    document.getElementById('totCredit').textContent = fmt2(credit);
+    const diff = Math.round((debit - credit) * 100) / 100;
+    const el = document.getElementById('totDiff');
+    el.textContent = diff === 0 ? '0₮ ✓ тэнцсэн' : fmt2(diff);
+    el.className = diff === 0 ? 'text-green-600' : 'text-red-600';
+}
+document.querySelectorAll('input[data-nature]').forEach(inp => inp.addEventListener('input', recalcOpeningTotals));
+recalcOpeningTotals();
+
+// Зөвхөн үлдэгдэлтэй данс
+function applyRowFilters() {
+    const term = document.getElementById('searchInput').value.toLowerCase();
+    const onlyNonZero = document.getElementById('onlyNonZero').checked;
+    document.querySelectorAll('.account-row').forEach(row => {
+        const inp = row.querySelector('input[data-nature]');
+        const matchText = row.dataset.code.toLowerCase().includes(term) || row.dataset.name.includes(term);
+        const matchValue = !onlyNonZero || (parseFloat(inp.value) || 0) !== 0;
+        row.style.display = matchText && matchValue ? '' : 'none';
+    });
+}
+document.getElementById('onlyNonZero').addEventListener('change', applyRowFilters);
+document.getElementById('searchInput').addEventListener('input', applyRowFilters);
 
 // Form submit validation
 document.getElementById('balanceForm').addEventListener('submit', function(e) {

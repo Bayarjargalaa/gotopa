@@ -1,0 +1,29 @@
+{% comment %}
+Систем эхлэх огнооны мэдэгдэл + (superuser-д) архивын товч.
+Хэрэглээ: {% include 'main/includes/archive_toggle.html' %}
+Context processor (books_period_processor): books_start_date, can_view_archive, archive_mode
+{% endcomment %}
+{% if books_start_date %}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm
+            {% if archive_mode %}border border-amber-300 bg-amber-50 text-amber-900{% else %}bg-gray-50 text-gray-500{% endif %}">
+    <span>
+        {% if archive_mode %}
+            <i class="fas fa-archive mr-1"></i><strong>Архив</strong> — {{ books_start_date|date:"Y-m-d" }}-аас өмнөх бүртгэл.
+            Шинэ үеийн үлдэгдэл, тайланд орохгүй.
+        {% else %}
+            <i class="fas fa-info-circle mr-1"></i>{{ books_start_date|date:"Y-m-d" }}-аас хойших бүртгэл харагдаж байна (систем эхлэх огноо).
+        {% endif %}
+    </span>
+    {% if can_view_archive %}
+        {% if archive_mode %}
+            <a href="{{ request.path }}" class="px-3 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 font-medium">
+                <i class="fas fa-arrow-left mr-1"></i>Шинэ үе рүү буцах
+            </a>
+        {% else %}
+            <a href="{{ request.path }}?archive=1" class="px-3 py-1 rounded border border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium">
+                <i class="fas fa-archive mr-1"></i>Архив харах
+            </a>
+        {% endif %}
+    {% endif %}
+</div>
+{% endif %}

@@ -8,11 +8,14 @@
 
 2. Голомт банк:
    Гүйлгээний огноо | Гүйлгээний утга | Харьцсан дансны нэр | Харьцсан данс | Ханш | Орлого | Зарлага
+
+3. Хас банк:
+   Огноо | Гүйлгээний утга | Харьцсан данс | Гүйлгээний дугаар | Орлого | Зарлага | Үлдэгдэл
 """
 
 import pandas as pd
 from main.models import BankTransaction, AccountingEntry, ChartOfAccounts, Counterparty
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from django.utils import timezone
 from django.db import IntegrityError, transaction
@@ -387,7 +390,10 @@ def unlink_bank_transfer(bt):
 
 def detect_bank_format(df):
     """Банкны хуулгын форматыг баганын нэрээс таних"""
-    columns = [col.strip() for col in df.columns]
+    columns = [str(col).strip() for col in df.columns]
+
+    if {'Огноо', 'Гүйлгээний дугаар', 'Орлого', 'Зарлага', 'Үлдэгдэл'} <= set(columns):
+        return 'xac'
     
     if 'Дебит гүйлгээ' in columns and 'Кредит гүйлгээ' in columns:
         return 'khan'
@@ -396,6 +402,213 @@ def detect_bank_format(df):
         return 'golomt'
     
     return None
+
+
+
+class BankImportError(Exception):
+    """Хэрэглэгчид харуулах импортын алдаа (файлыг бүхэлд нь импортлохгүй)"""
+
+
+def _parse_xac_amount(value):
+    """'5,000,000.00' / '-' / хоосон → Decimal"""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return Decimal('0')
+    text = str(value).replace(',', '').replace(' ', '').strip()
+    if text in ('', '-', 'nan'):
+        return Decimal('0')
+    return Decimal(text)
+
+
+def _parse_xac_date(value):
+    if hasattr(value, 'to_pydatetime'):
+        return value.to_pydatetime().date()
+    if isinstance(value, datetime):
+        return value.date()
+    text = str(value).strip()
+    for fmt in ('%Y-%m-%d', '%Y.%m.%d', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _split_xac_counterparty(text):
+    """'БОЛОР БАТСҮРЭН ХААН БАНК-5039139089' → ('БОЛОР БАТСҮРЭН ХААН БАНК', '5039139089')"""
+    text = (text or '').strip()
+    if not text or text == 'nan':
+        return '', ''
+    name, sep, account = text.rpartition('-')
+    if sep and account.strip().isdigit():
+        return name.strip(), account.strip()
+    return text, ''
+
+
+def _read_xac_header_info(excel_file):
+    """Хуулгын толгой хэсгээс дансны дугаар, хугацааг унших"""
+    info = {}
+    preview = pd.read_excel(excel_file, engine='openpyxl', header=None, nrows=10, dtype=str)
+    labels = {'Дансны дугаар:': 'account_number', 'Эхлэх:': 'start', 'Дуусах:': 'end'}
+    for _, row in preview.iterrows():
+        cells = [str(c).strip() for c in row.tolist()]
+        for i, cell in enumerate(cells[:-1]):
+            if cell in labels and cells[i + 1] not in ('', 'nan'):
+                info[labels[cell]] = cells[i + 1]
+    return info
+
+
+def import_xac_statement(df, bank_account, header_info=None):
+    """Хас банкны хуулга импортлох
+
+    Багана: Огноо | Гүйлгээний утга | Харьцсан данс | Гүйлгээний дугаар | Орлого | Зарлага | Үлдэгдэл
+
+    Давхардал: Хас банкны гүйлгээний дугаар дангаараа давтагддаггүй биш — шилжүүлэг болон
+    түүний шимтгэл ижил дугаартай ирдэг. Мөн цаг байхгүй тул нэг өдөр ижил утга, ижил дүнтэй
+    хоёр шимтгэл байж болно. Тиймээс (огноо, гүйлгээний дугаар, орлого, зарлага, гүйлгээний
+    дараах үлдэгдэл)-ээр давхардлыг шалгана. Үлдэгдэл нь гүйлгээ бүрийн дараа өөрчлөгддөг тул
+    хуулгын мөр бүрийг өвөрмөц тодорхойлно.
+    """
+    header_info = header_info or {}
+    rows = []
+    errors = []
+    warnings = []
+    opening_balance = None
+
+    for index, row in df.iterrows():
+        excel_row = index + 2 + df.attrs.get('header_row', 0)
+        description = str(row.get('Гүйлгээний утга', '') or '').strip()
+        if description == 'nan':
+            description = ''
+        balance_raw = row.get('Үлдэгдэл')
+
+        # Эхний/эцсийн үлдэгдлийн мөр
+        if description == 'Эхний үлдэгдэл':
+            opening_balance = _parse_xac_amount(balance_raw)
+            continue
+        if description == 'Эцсийн үлдэгдэл':
+            continue
+
+        reference = str(row.get('Гүйлгээний дугаар', '') or '').strip()
+        date_raw = row.get('Огноо')
+        if not reference or reference == 'nan' or date_raw is None or (isinstance(date_raw, float) and pd.isna(date_raw)):
+            continue  # Хуулгын хөл (хэвлэсэн огноо г.м.)
+
+        transaction_date = _parse_xac_date(date_raw)
+        try:
+            income = _parse_xac_amount(row.get('Орлого'))
+            expense = _parse_xac_amount(row.get('Зарлага'))
+            balance = _parse_xac_amount(balance_raw) if str(balance_raw).strip() not in ('', 'nan', 'None') else None
+        except InvalidOperation:
+            errors.append(f'Мөр {excel_row}: дүн буруу ({row.get("Орлого")} / {row.get("Зарлага")})')
+            continue
+        if transaction_date is None:
+            errors.append(f'Мөр {excel_row}: огноо буруу ({date_raw})')
+            continue
+        if income and expense:
+            errors.append(f'Мөр {excel_row}: орлого, зарлага хоёулаа бөглөгдсөн')
+            continue
+        if not income and not expense:
+            continue
+
+        counterparty_name, counterparty_account = _split_xac_counterparty(str(row.get('Харьцсан данс', '') or ''))
+        rows.append({
+            'excel_row': excel_row,
+            'date': transaction_date,
+            'reference': reference,
+            'description': description or 'Банкны гүйлгээ',
+            'counterparty_name': counterparty_name,
+            'counterparty_account': counterparty_account,
+            'income': income,
+            'expense': expense,
+            'balance': balance,
+        })
+
+    if errors:
+        raise BankImportError('Файлд алдаатай мөр байна, юу ч импортлоогүй:\n' + '\n'.join(errors[:10]))
+    if not rows:
+        raise BankImportError('Хас банкны хуулгаас гүйлгээ олдсонгүй.')
+
+    # Үлдэгдлийн уялдаа: өмнөх үлдэгдэл + орлого - зарлага = үлдэгдэл (файл дутуу/буруу уншигдсан эсэх)
+    running = opening_balance
+    for r in rows:
+        if running is not None and r['balance'] is not None:
+            expected = running + r['income'] - r['expense']
+            if abs(expected - r['balance']) >= Decimal('0.01'):
+                warnings.append(
+                    f"Мөр {r['excel_row']}: үлдэгдэл таарахгүй байна "
+                    f"(хүлээгдэж буй {expected:,.2f}, хуулгад {r['balance']:,.2f})"
+                )
+        running = r['balance'] if r['balance'] is not None else None
+
+    def dedup_filter(r):
+        return {
+            'bank_name': 'XAC',
+            'reference_number': r['reference'],
+            'transaction_date': r['date'],
+            'income_amount': r['income'],
+            'expense_amount': r['expense'],
+            'closing_balance': r['balance'],
+        }
+
+    created_count = 0
+    skipped_count = 0
+    other_account_count = 0
+    seen_in_file = set()
+
+    with transaction.atomic():
+        for r in rows:
+            key = tuple(dedup_filter(r).values())
+            if key in seen_in_file:
+                skipped_count += 1
+                continue
+            seen_in_file.add(key)
+
+            existing = BankTransaction.objects.filter(**dedup_filter(r)).first()
+            if existing:
+                skipped_count += 1
+                if existing.bank_account_id != bank_account.id:
+                    other_account_count += 1
+                continue
+
+            counterparty = None
+            if r['counterparty_name']:
+                counterparty, _ = Counterparty.objects.get_or_create(
+                    name=r['counterparty_name'],
+                    defaults={'counterparty_type': 'BOTH'}
+                )
+
+            BankTransaction.objects.create(
+                account_type='BANK',
+                bank_name='XAC',
+                bank_account=bank_account,
+                transaction_date=r['date'],
+                description=r['description'],
+                reference_number=r['reference'],
+                counterparty_account=r['counterparty_account'],
+                counterparty_name=r['counterparty_name'],
+                counterparty=counterparty,
+                income_amount=r['income'],
+                expense_amount=r['expense'],
+                closing_balance=r['balance'],
+                opening_balance=(r['balance'] - r['income'] + r['expense']) if r['balance'] is not None else None,
+                is_processed=False,
+                offset_account=None,
+            )
+            created_count += 1
+
+    if other_account_count:
+        warnings.insert(0, f'{other_account_count} гүйлгээ өөр дансанд аль хэдийн импортлогдсон тул алгаслаа. '
+                           f'Зөв данс сонгосон эсэхээ шалгана уу.')
+
+    return {
+        'bank': 'Хас банк',
+        'created': created_count,
+        'skipped': skipped_count,
+        'final_balance': bank_account.balance,
+        'statement_account': header_info.get('account_number', ''),
+        'period': f"{header_info.get('start', '')} – {header_info.get('end', '')}".strip(' –'),
+        'warnings': warnings,
+    }
 
 
 def import_bank_transactions(excel_file, bank_account):
@@ -410,12 +623,15 @@ def import_bank_transactions(excel_file, bank_account):
         
         # Excel унших - эхний мөрнүүдийг алгасах (Хаан банкны тайлбар мэдээлэл)
         # Эхлээд бүх файлыг уншиж, header-г хаанаас эхлэхийг олох
-        df_preview = pd.read_excel(excel_file, engine='openpyxl', header=None, nrows=10)
+        df_preview = pd.read_excel(excel_file, engine='openpyxl', header=None, nrows=30)
         
         # "Гүйлгээний огноо" гэсэн баганыг хайх (header мөр)
         header_row = None
         for idx, row in df_preview.iterrows():
-            if any('Гүйлгээний огноо' in str(cell) for cell in row):
+            cells = [str(cell).strip() for cell in row]
+            # "Гүйлгээний огноо" (Хаан, Голомт) эсвэл "Огноо" + "Гүйлгээний дугаар" (Хас)
+            if any('Гүйлгээний огноо' in cell for cell in cells) or \
+                    ('Огноо' in cells and 'Гүйлгээний дугаар' in cells):
                 header_row = idx
                 break
         
@@ -436,12 +652,20 @@ def import_bank_transactions(excel_file, bank_account):
             print("✗ Танигдаагүй банкны формат!")
             print(f"Бүх баганууд: {list(df.columns)}")
             return None
+
+        if bank_format == 'xac':
+            # Хас банкны дүн "5,000,000.00" текстээр ирдэг тул бүгдийг текстээр уншина
+            df = pd.read_excel(excel_file, engine='openpyxl', header=header_row, dtype=str)
+            df.columns = [str(col).strip() for col in df.columns]
+            df.attrs['header_row'] = header_row or 0
+            return import_xac_statement(df, bank_account, _read_xac_header_info(excel_file))
         
         print(f"✓ Банк: {'Хаан банк' if bank_format == 'khan' else 'Голомт банк'}\n")
         
         created_count = 0
         skipped_count = 0
-        
+        file_occurrences = {}  # {давхардлын түлхүүр: файлд хэдэн удаа гарсан}
+
         # Өдөр бүрийн дугаарлалтын tracker (entry_number давхцахгүйн тулд)
         daily_entry_counts = {}  # {YYYYMMDD: max_sequence_number}
         
@@ -535,9 +759,18 @@ def import_bank_transactions(excel_file, bank_account):
                 # Цаг байвал цагаар нь шалгах (банкны шимтгэл гэх мэт давхардах магадлалтай)
                 if transaction_time:
                     filter_kwargs['transaction_time'] = transaction_time
-                
-                existing = BankTransaction.objects.filter(**filter_kwargs).first()
-                
+                # Хаан банк мөр бүрийн эцсийн үлдэгдэлтэй — энэ нь мөрийг өвөрмөц болгоно
+                if closing_bal is not None:
+                    filter_kwargs['closing_balance'] = closing_bal
+
+                # Ижил түлхүүртэй хэд дэх мөр вэ гэдгийг тоолно: нэг өдөр ижил утга, ижил дүнтэй
+                # хоёр жинхэнэ гүйлгээ (жишээ нь хоёр шимтгэл) байж болно. Файлд N дахь удаа гарч
+                # буй мөрийг DB-д ийм түлхүүртэй N-ээс цөөн бичлэг байвал л үүсгэнэ.
+                dedup_key = tuple(sorted((k, str(v)) for k, v in filter_kwargs.items() if k != 'bank_account'))
+                occurrence = file_occurrences.get(dedup_key, 0)
+                file_occurrences[dedup_key] = occurrence + 1
+                existing = BankTransaction.objects.filter(**filter_kwargs).count() > occurrence
+
                 if existing:
                     skipped_count += 1
                     if created_count == 0 and skipped_count <= 5:  # Эхний 5 давхардсаныг харуулах
@@ -586,7 +819,9 @@ def import_bank_transactions(excel_file, bank_account):
             'skipped': skipped_count,
             'final_balance': bank_account.balance
         }
-        
+
+    except BankImportError:
+        raise
     except Exception as e:
         print(f"✗ Алдаа: {str(e)}")
         import traceback
