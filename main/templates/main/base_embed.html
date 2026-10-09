@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Готопа{% endblock %}</title>
+    {% load static %}
+    <!-- Өөр хуудсанд (iframe цонхонд) нээгдэх хуудасны суурь: толгой, цэс, хөлгүй -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#890c12', secondary: '#222631', light: '#f8f9fa' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    {% if messages %}
+    <div class="px-4 pt-3 space-y-2">
+        {% for message in messages %}
+        <div class="rounded border-l-4 bg-white px-3 py-2 text-sm shadow-sm {% if message.tags == 'success' %}border-green-500{% elif message.tags == 'error' %}border-red-500{% elif message.tags == 'warning' %}border-yellow-500{% else %}border-blue-500{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

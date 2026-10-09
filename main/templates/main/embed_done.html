@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head><meta charset="UTF-8"><title>Хадгалагдлаа</title></head>
+<body style="font-family: sans-serif; padding: 2rem; text-align: center; color: #166534;">
+    <!-- Мэдэгдлийг энд харуулахгүй — эх хуудас дахин ачаалагдахад тэнд гарна -->
+    <p>✓ {{ purchase.purchase_number }} хадгалагдлаа.</p>
+    <script>
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'purchase-saved', purchase: '{{ purchase.purchase_number|escapejs }}' }, window.location.origin);
+        }
+    </script>
+</body>
+</html>

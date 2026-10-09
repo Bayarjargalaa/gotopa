@@ -4,203 +4,319 @@
 {% block title %}{% if is_edit %}Бараа засах{% else %}Шинэ бараа нэмэх{% endif %} - Готопа{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8 max-w-3xl">
-    <div class="bg-white rounded-lg shadow-md p-8">
-        <h1 class="text-3xl font-bold text-secondary mb-6">
-            {% if is_edit %}✏️ Бараа материал засах{% else %}➕ Шинэ бараа материал нэмэх{% endif %}
-        </h1>
+<div class="container mx-auto px-4 py-6 max-w-3xl pb-28">
+    <div class="mb-4 flex items-center justify-between gap-3">
+        <div>
+            <a href="{% url 'main:inventory_list' %}" class="text-sm text-primary hover:underline">← Бараа материал</a>
+            <h1 class="text-2xl font-bold text-secondary mt-1">
+                {% if is_edit %}✏️ {{ product.name }}{% else %}➕ Шинэ бараа нэмэх{% endif %}
+            </h1>
+        </div>
+        {% if is_edit %}<span class="text-sm text-gray-500">Одоогийн үлдэгдэл: <strong class="text-gray-800">{{ product.current_stock }}</strong></span>{% endif %}
+    </div>
 
-        <form method="POST" enctype="multipart/form-data" class="space-y-6">
-            {% csrf_token %}
+    {% if form.errors %}
+    <div class="mb-4 px-4 py-3 rounded-lg border border-red-300 bg-red-50 text-sm text-red-800" role="alert">
+        <strong>Хадгалсангүй:</strong> доор улаанаар тэмдэглэсэн талбарыг засна уу.
+        {% for err in form.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+    </div>
+    {% endif %}
 
-            <!-- Үндсэн мэдээлэл -->
-            <div class="grid md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Барааны код <span class="text-red-500">*</span></label>
-                    <input type="text" name="code" value="{{ product.code }}" required
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                    <p class="text-xs text-gray-500 mt-1">Жишээ: BOOK-001, PROD-123</p>
+    <form method="POST" enctype="multipart/form-data" id="productForm" novalidate>
+        {% csrf_token %}
+
+        <!-- ===== Үндсэн ===== -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-4">
+            <div class="grid sm:grid-cols-3 gap-4">
+                <div class="sm:col-span-2">
+                    <label for="f-name" class="block text-sm font-medium text-gray-700 mb-1">Барааны нэр <span class="text-red-500">*</span></label>
+                    <input type="text" name="name" id="f-name" value="{{ form.name.value|default_if_none:'' }}" required maxlength="200"
+                           autocomplete="off" {% if not is_edit %}autofocus{% endif %}
+                           class="pf-input {% if form.name.errors %}pf-error{% endif %}" aria-describedby="name-hint">
+                    {% for e in form.name.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p id="name-hint" class="pf-warn hidden"></p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium mb-2">Ангилал
-                        <button type="button" onclick="addProductCategory()" class="ml-2 text-xs font-normal text-primary hover:underline">+ Шинэ ангилал</button>
-                    </label>
-                    <select name="category" id="categorySelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                        <option value="">-- Сонгох --</option>
-                        {% for cat in categories %}
-                        <option value="{{ cat.id|stringformat:'d' }}" {% if product.category.id == cat.id %}selected{% endif %}>
-                            {{ cat.name }}
-                        </option>
+                    <label for="f-code" class="block text-sm font-medium text-gray-700 mb-1">Код / SKU</label>
+                    <input type="text" name="code" id="f-code" value="{{ form.code.value|default_if_none:'' }}" maxlength="50"
+                           autocomplete="off" class="pf-input font-mono {% if form.code.errors %}pf-error{% endif %}" aria-describedby="code-hint">
+                    {% for e in form.code.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p id="code-hint" class="text-xs text-gray-500 mt-1">{% if is_edit %}Барааны код{% else %}Автоматаар олгосон — хүсвэл өөрчилнө{% endif %}</p>
+                </div>
+
+                <div class="sm:col-span-2">
+                    <label for="f-category" class="block text-sm font-medium text-gray-700 mb-1">Ангилал</label>
+                    <div class="flex gap-2">
+                        <select name="category" id="f-category" class="pf-input">
+                            <option value="">— Ангилалгүй —</option>
+                            {% for cat in form.fields.category.queryset %}
+                            <option value="{{ cat.id|stringformat:'d' }}" {% if form.category.value|stringformat:'s' == cat.id|stringformat:'d' %}selected{% endif %}>{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" id="newCategoryBtn" class="px-3 rounded-lg border border-gray-300 text-sm text-primary hover:bg-gray-50 whitespace-nowrap" title="Шинэ ангилал нэмэх">+ Шинэ</button>
+                    </div>
+                    <div id="newCategoryRow" class="hidden mt-2 flex gap-2">
+                        <input type="text" id="newCategoryName" placeholder="Шинэ ангиллын нэр" class="pf-input" maxlength="100">
+                        <button type="button" id="newCategorySave" class="px-3 rounded-lg bg-primary text-white text-sm whitespace-nowrap">Нэмэх</button>
+                    </div>
+                </div>
+                <div>
+                    <label for="f-unit" class="block text-sm font-medium text-gray-700 mb-1">Хэмжих нэгж</label>
+                    <select name="unit" id="f-unit" class="pf-input">
+                        {% for unit_code, unit_name in units %}
+                        <option value="{{ unit_code }}" {% if form.unit.value == unit_code %}selected{% endif %}>{{ unit_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
+        </section>
 
-            <div>
-                <label class="block text-sm font-medium mb-2">Бүтээгдэхүүний нэр <span class="text-red-500">*</span></label>
-                <input type="text" name="name" value="{{ product.name }}" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-2">Тайлбар</label>
-                <textarea name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">{{ product.description }}</textarea>
-            </div>
-
-            <!-- Үнийн мэдээлэл -->
-            <div class="bg-gray-50 p-4 rounded-lg">
-                <h3 class="font-bold mb-3">💰 Үнийн мэдээлэл</h3>
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Худалдан авах үнэ <span class="text-red-500">*</span></label>
-                        <input type="number" name="purchase_price" value="{{ product.purchase_price|floatformat:'2u' }}" step="0.01" required
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+        <!-- ===== Үнэ ===== -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-4">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3">💰 Үнэ</h2>
+            <div class="grid sm:grid-cols-3 gap-4 items-start">
+                <div>
+                    <label for="f-purchase" class="block text-sm font-medium text-gray-700 mb-1">Худалдан авах үнэ <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <input type="text" inputmode="decimal" name="purchase_price" id="f-purchase" required
+                               value="{{ form.purchase_price.value|default_if_none:''|stringformat:'s' }}" placeholder="0"
+                               class="pf-input pf-money pr-7 text-right {% if form.purchase_price.errors %}pf-error{% endif %}">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₮</span>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Борлуулах үнэ <span class="text-red-500">*</span></label>
-                        <input type="number" name="selling_price" value="{{ product.selling_price|floatformat:'2u' }}" step="0.01" required
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                    </div>
+                    {% for e in form.purchase_price.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p class="text-xs text-gray-500 mt-1">Өөрөө үйлдвэрлэдэг бол 0</p>
                 </div>
-            </div>
-
-            <!-- Агуулах -->
-            <div class="bg-gray-50 p-4 rounded-lg">
-                <h3 class="font-bold mb-3">📦 Агуулахын мэдээлэл</h3>
-                <div class="grid md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Хэмжих нэгж</label>
-                        <select name="unit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                            {% for unit_code, unit_name in units %}
-                            <option value="{{ unit_code }}" {% if product.unit == unit_code %}selected{% endif %}>
-                                {{ unit_name }}
-                            </option>
-                            {% endfor %}
-                        </select>
+                <div>
+                    <label for="f-selling" class="block text-sm font-medium text-gray-700 mb-1">Борлуулах үнэ <span class="text-gray-400 font-normal">(заавал биш)</span></label>
+                    <div class="relative">
+                        <input type="text" inputmode="decimal" name="selling_price" id="f-selling"
+                               value="{% if form.selling_price.value and form.selling_price.value != '0' %}{{ form.selling_price.value|stringformat:'s' }}{% endif %}" placeholder="Дараа тогтооно"
+                               class="pf-input pf-money pr-7 text-right {% if form.selling_price.errors %}pf-error{% endif %}">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₮</span>
                     </div>
-                    {% if not is_edit %}
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Эхний үлдэгдэл</label>
-                        <input type="number" name="initial_stock" value="{{ product.initial_stock|default:0|stringformat:'d' }}"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                        <p class="text-xs text-gray-500 mt-1">Үүсгэх үед л оруулна</p>
-                    </div>
-                    {% else %}
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Эхний үлдэгдэл</label>
-                        <input type="text" value="{{ product.initial_stock }}" disabled
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100">
-                        <p class="text-xs text-gray-500 mt-1">"Үлдэгдэл" товчоор засна</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Одоогийн үлдэгдэл (тооцоолсон)</label>
-                        <input type="text" value="{{ product.current_stock }}" disabled
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-green-800 font-bold">
-                        <p class="text-xs text-gray-500 mt-1">= Эхний үлдэгдэл + Орлого - Зарлага</p>
-                    </div>
-                    {% endif %}
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Доод үлдэгдэл</label>
-                        <input type="number" name="min_stock" value="{{ product.min_stock|default:0|stringformat:'d' }}"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                    </div>
+                    {% for e in form.selling_price.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p class="text-xs text-gray-500 mt-1">Хоосон бол борлуулахдаа үнээ оруулна</p>
                 </div>
+                <div id="marginBox" class="hidden sm:mt-6 rounded-lg px-3 py-2 text-sm" aria-live="polite"></div>
             </div>
+        </section>
 
-            <!-- Нийлүүлэгч -->
-            <div class="bg-gray-50 p-4 rounded-lg">
-                <h3 class="font-bold mb-3">🏢 Нийлүүлэгчийн мэдээлэл</h3>
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Нийлүүлэгч сонгох</label>
-                        <select name="supplier_fk" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                            <option value="">-- Сонгох --</option>
-                            {% for supplier in suppliers %}
-                            <option value="{{ supplier.id|stringformat:'d' }}"
-                                {% if product.supplier_fk.id == supplier.id %}selected{% endif %}>
-                                {{ supplier.name }}
-                                {% if supplier.phone %}({{ supplier.phone }}){% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Жагсаалтанд байхгүй бол 
-                            <a href="{% url 'main:counterparty_create' %}" target="_blank" class="text-primary hover:underline">харилцагч нэмэх</a>
-                        </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Нийлүүлэгч (хуучин)</label>
-                        <input type="text" name="supplier" value="{{ product.supplier }}"
-                               class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500" readonly>
-                        <p class="text-xs text-gray-400 mt-1">Зөвхөн харах зориулалттай</p>
-                    </div>
+        <!-- ===== Үлдэгдэл ===== -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-4">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3">📦 Үлдэгдэл</h2>
+            <div class="grid sm:grid-cols-3 gap-4">
+                {% if not is_edit %}
+                <div>
+                    <label for="f-initial" class="block text-sm font-medium text-gray-700 mb-1">Эхний үлдэгдэл</label>
+                    <input type="text" inputmode="numeric" name="initial_stock" id="f-initial" placeholder="0"
+                           value="{% if form.initial_stock.value and form.initial_stock.value != '0' and form.initial_stock.value != 0 %}{{ form.initial_stock.value|stringformat:'s' }}{% endif %}"
+                           class="pf-input text-right {% if form.initial_stock.errors %}pf-error{% endif %}">
+                    {% for e in form.initial_stock.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p class="text-xs text-gray-500 mt-1">Одоо агуулахад байгаа тоо</p>
                 </div>
-                <div class="mt-4">
-                    <label class="block text-sm font-medium mb-2">Холбоо барих (хуучин)</label>
-                    <input type="text" name="supplier_contact" value="{{ product.supplier_contact }}"
-                           class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500" readonly>
-                    <p class="text-xs text-gray-400 mt-1">Зөвхөн харах зориулалттай</p>
-                </div>
-            </div>
-
-            <!-- Зураг -->
-            <div>
-                <label class="block text-sm font-medium mb-2">Зураг</label>
-                <input type="file" name="image" accept="image/*"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
-                {% if product.image %}
-                <div class="mt-2">
-                    <img src="{{ product.image.url }}" alt="{{ product.name }}" class="h-32 rounded">
+                {% else %}
+                <div>
+                    <span class="block text-sm font-medium text-gray-700 mb-1">Эхний үлдэгдэл</span>
+                    <div class="pf-input bg-gray-50 text-gray-600 text-right">{{ product.initial_stock }}</div>
+                    <p class="text-xs text-gray-500 mt-1"><a href="{% url 'main:product_opening_stock' %}" class="text-primary hover:underline">Эхний үлдэгдэл</a> хуудсаар засна</p>
                 </div>
                 {% endif %}
+                <div>
+                    <label for="f-min" class="block text-sm font-medium text-gray-700 mb-1">Доод үлдэгдэл</label>
+                    <input type="text" inputmode="numeric" name="min_stock" id="f-min" placeholder="0"
+                           value="{% if form.min_stock.value and form.min_stock.value != '0' and form.min_stock.value != 0 %}{{ form.min_stock.value|stringformat:'s' }}{% endif %}"
+                           class="pf-input text-right {% if form.min_stock.errors %}pf-error{% endif %}">
+                    {% for e in form.min_stock.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                    <p class="text-xs text-gray-500 mt-1">Үүнээс бага болоход сануулна</p>
+                </div>
             </div>
+        </section>
 
-            <!-- Тэмдэглэл -->
-            <div>
-                <label class="block text-sm font-medium mb-2">Тэмдэглэл</label>
-                <textarea name="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">{{ product.notes }}</textarea>
+        <!-- ===== Нэмэлт мэдээлэл ===== -->
+        <details class="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 group"
+                 {% if form.supplier_fk.errors or form.image.errors or form.description.value or form.notes.value or form.supplier_fk.value or product.image %}open{% endif %}>
+            <summary class="px-5 py-3 cursor-pointer select-none text-sm font-semibold text-gray-700 flex items-center justify-between">
+                <span>📝 Нэмэлт мэдээлэл <span class="font-normal text-gray-400">— нийлүүлэгч, зураг, тайлбар</span></span>
+                <i class="fas fa-chevron-down text-xs text-gray-400 group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div class="px-5 pb-5 grid sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="f-supplier" class="block text-sm font-medium text-gray-700 mb-1">Нийлүүлэгч</label>
+                    <select name="supplier_fk" id="f-supplier" class="pf-input">
+                        <option value="">— Сонгоогүй —</option>
+                        {% for supplier in form.fields.supplier_fk.queryset %}
+                        <option value="{{ supplier.id|stringformat:'d' }}" {% if form.supplier_fk.value|stringformat:'s' == supplier.id|stringformat:'d' %}selected{% endif %}>
+                            {{ supplier.name }}{% if supplier.phone %} ({{ supplier.phone }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Байхгүй бол <a href="{% url 'main:counterparty_create' %}" target="_blank" class="text-primary hover:underline">харилцагч нэмэх ↗</a></p>
+                    {% if product.supplier or product.supplier_contact %}
+                    <p class="text-xs text-gray-400 mt-1">Хуучин бүртгэл: {{ product.supplier }}{% if product.supplier_contact %} · {{ product.supplier_contact }}{% endif %}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="f-image" class="block text-sm font-medium text-gray-700 mb-1">Зураг</label>
+                    <div class="flex items-center gap-3">
+                        <img id="imagePreview" src="{% if product.image %}{{ product.image.url }}{% endif %}" alt=""
+                             class="h-16 w-16 rounded object-cover border border-gray-200 {% if not product.image %}hidden{% endif %}">
+                        <input type="file" name="image" id="f-image" accept="image/*" class="text-sm w-full">
+                    </div>
+                    {% for e in form.image.errors %}<p class="pf-err">{{ e }}</p>{% endfor %}
+                </div>
+                <div class="sm:col-span-2">
+                    <label for="f-description" class="block text-sm font-medium text-gray-700 mb-1">Тайлбар</label>
+                    <textarea name="description" id="f-description" rows="2" class="pf-input">{{ form.description.value|default_if_none:'' }}</textarea>
+                </div>
+                <div class="sm:col-span-2">
+                    <label for="f-notes" class="block text-sm font-medium text-gray-700 mb-1">Тэмдэглэл <span class="text-gray-400 font-normal">(дотоод)</span></label>
+                    <textarea name="notes" id="f-notes" rows="2" class="pf-input">{{ form.notes.value|default_if_none:'' }}</textarea>
+                </div>
+                {% if is_edit %}
+                <label class="sm:col-span-2 inline-flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="is_active" {% if form.is_active.value %}checked{% endif %} class="w-4 h-4 accent-primary">
+                    Идэвхтэй <span class="text-gray-400">(идэвхгүй бараа борлуулалт, худалдан авалтад гарахгүй)</span>
+                </label>
+                {% endif %}
             </div>
+        </details>
 
-            {% if is_edit %}
-            <div class="flex items-center">
-                <input type="checkbox" name="is_active" id="is_active" {% if product.is_active %}checked{% endif %}
-                       class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
-                <label for="is_active" class="ml-2 text-sm font-medium">Идэвхтэй</label>
-            </div>
-            {% endif %}
-
-            <!-- Товчнууд -->
-            <div class="flex space-x-4">
-                <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-bold">
-                    ✓ Хадгалах
+        <!-- ===== Товчнууд (доод талд наалттай) ===== -->
+        <div class="fixed bottom-0 inset-x-0 md:left-56 bg-white/95 backdrop-blur border-t border-gray-200 z-40">
+            <div class="container mx-auto max-w-3xl px-4 py-3 flex flex-wrap items-center gap-2">
+                <button type="submit" name="after_save" value="list" class="pf-submit bg-primary text-white px-6 py-2.5 rounded-lg hover:bg-opacity-90 font-semibold">
+                    <i class="fas fa-check mr-1"></i>Хадгалах
                 </button>
-                <a href="{% url 'main:inventory_list' %}" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 text-center font-bold">
-                    ✗ Болих
-                </a>
+                {% if not is_edit %}
+                <button type="submit" name="after_save" value="add_another" class="pf-submit border border-primary text-primary px-4 py-2.5 rounded-lg hover:bg-gray-50 font-semibold">
+                    Хадгалаад дахин нэмэх
+                </button>
+                {% endif %}
+                <a href="{% url 'main:inventory_list' %}" class="px-4 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100">Болих</a>
+                <span class="ml-auto text-xs text-gray-400 hidden sm:inline">Ctrl + Enter — хадгалах</span>
             </div>
-        </form>
-    </div>
+        </div>
+    </form>
 </div>
+
+{{ existing_products|json_script:"existing-products" }}
+{{ code_suggestions|json_script:"code-suggestions" }}
+<style>
+    .pf-input { width: 100%; padding: .5rem .75rem; border: 1px solid #d1d5db; border-radius: .5rem; background: #fff; }
+    .pf-input:focus { outline: none; border-color: #AB334C; box-shadow: 0 0 0 3px rgba(171, 51, 76, .15); }
+    .pf-error { border-color: #dc2626 !important; background: #fef2f2; }
+    .pf-money { padding-right: 1.75rem; }
+    .pf-err { font-size: .75rem; color: #dc2626; margin-top: .25rem; }
+    .pf-warn { font-size: .75rem; color: #b45309; margin-top: .25rem; }
+</style>
 <script>
-// Барааны ангилал шинээр нэмээд шууд сонгох
-function addProductCategory() {
-    var name = (prompt('Шинэ ангиллын нэр (ж: Бэлдэц):') || '').trim();
-    if (!name) return;
-    fetch('{% url "main:product_category_create" %}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value},
-        body: JSON.stringify({name: name}),
-    }).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data.success) { alert(data.error || 'Алдаа гарлаа'); return; }
-        var select = document.getElementById('categorySelect');
-        if (!select.querySelector('option[value="' + data.id + '"]')) {
-            var option = document.createElement('option');
-            option.value = data.id;
-            option.textContent = data.name;
-            select.appendChild(option);
-        }
-        select.value = String(data.id);
+(function () {
+    const form = document.getElementById('productForm');
+    const existing = JSON.parse(document.getElementById('existing-products').textContent);
+    const $ = id => document.getElementById(id);
+    const norm = s => (s || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('mn');
+    const parse = s => parseFloat(String(s || '').replace(/[,\s₮]/g, '')) || 0;
+    const fmt = n => Math.round(n).toLocaleString('en-US');
+
+    // ----- Давхардал: код (алдаа), ижил нэр (анхааруулга) -----
+    const nameInput = $('f-name'), codeInput = $('f-code');
+    const editUrl = id => '{% url "main:product_edit" 0 %}'.replace('/0/', '/' + id + '/');
+    function checkName() {
+        const n = norm(nameInput.value), hint = $('name-hint');
+        const match = n.length >= 3 && existing.find(p => norm(p.name) === n);
+        hint.classList.toggle('hidden', !match);
+        if (match) hint.innerHTML = `⚠ Ижил нэртэй бараа байна: <a class="underline" target="_blank" href="${editUrl(match.id)}">${match.code} · ${match.name}</a>`;
+    }
+    function checkCode() {
+        const c = norm(codeInput.value), hint = $('code-hint');
+        const match = c && existing.find(p => norm(p.code) === c);
+        codeInput.classList.toggle('pf-error', !!match);
+        if (match) { hint.className = 'pf-err'; hint.textContent = `Энэ код "${match.name}" бараанд бүртгэлтэй`; }
+        else { hint.className = 'text-xs text-gray-500 mt-1'; hint.textContent = '{% if is_edit %}Барааны код{% else %}Автоматаар олгосон — хүсвэл өөрчилнө{% endif %}'; }
+    }
+    nameInput.addEventListener('input', checkName);
+    codeInput.addEventListener('input', checkCode);
+
+    // Ангилал солиход тухайн ангиллын мужид дараагийн код (хэрэглэгч өөрөө бичээгүй бол)
+    const codeSuggestions = JSON.parse(document.getElementById('code-suggestions').textContent);
+    let autoCode = {% if is_edit %}null{% else %}codeInput.value{% endif %};
+    function suggestCode(key) {
+        if (autoCode === null || codeInput.value !== autoCode) return;
+        autoCode = codeInput.value = codeSuggestions[key] || codeSuggestions.new;
+        checkCode();
+    }
+    $('f-category').addEventListener('change', e => suggestCode(e.target.value));
+
+    // ----- Үнэ: мянгатын таслал, ашгийн хувь -----
+    const purchase = $('f-purchase'), selling = $('f-selling');
+    function updateMargin() {
+        const box = $('marginBox'), p = parse(purchase.value), s = parse(selling.value);
+        if (!s) { box.classList.add('hidden'); return; }
+        const profit = s - p, pct = p ? profit / p * 100 : null;
+        box.classList.remove('hidden');
+        box.className = 'sm:mt-6 rounded-lg px-3 py-2 text-sm ' + (profit < 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800');
+        box.innerHTML = profit < 0
+            ? `⚠ Өртгөөс <strong>${fmt(-profit)}₮</strong> бага үнэ`
+            : `Ашиг <strong>${fmt(profit)}₮</strong>${pct !== null ? ` · ${pct.toFixed(0)}% нэмэгдэл` : ''}`;
+    }
+    document.querySelectorAll('.pf-money').forEach(inp => {
+        const format = () => { if (inp.value.trim()) inp.value = parse(inp.value).toLocaleString('en-US', {maximumFractionDigits: 2}); };
+        format();
+        inp.addEventListener('blur', format);
+        inp.addEventListener('input', updateMargin);
     });
-}
+    updateMargin();
+
+    // ----- Шинэ ангилал (хуудаснаас гаралгүй) -----
+    $('newCategoryBtn').addEventListener('click', () => {
+        $('newCategoryRow').classList.toggle('hidden');
+        $('newCategoryName').focus();
+    });
+    function saveCategory() {
+        const name = $('newCategoryName').value.trim();
+        if (!name) return;
+        fetch('{% url "main:product_category_create" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value},
+            body: JSON.stringify({name}),
+        }).then(r => r.json()).then(data => {
+            if (!data.success) { alert(data.error || 'Алдаа гарлаа'); return; }
+            const select = $('f-category');
+            if (!select.querySelector(`option[value="${data.id}"]`)) select.add(new Option(data.name, data.id));
+            select.value = String(data.id);
+            suggestCode(data.created ? 'new' : String(data.id));
+            $('newCategoryName').value = '';
+            $('newCategoryRow').classList.add('hidden');
+        });
+    }
+    $('newCategorySave').addEventListener('click', saveCategory);
+    $('newCategoryName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveCategory(); } });
+
+    // ----- Зургийн урьдчилсан харагдац -----
+    $('f-image').addEventListener('change', e => {
+        const file = e.target.files[0], img = $('imagePreview');
+        if (file) { img.src = URL.createObjectURL(file); img.classList.remove('hidden'); }
+    });
+
+    // ----- Илгээх: шалгах, давхар дарахаас сэргийлэх, Ctrl+Enter -----
+    form.addEventListener('submit', e => {
+        const missing = [nameInput, purchase].filter(inp => !inp.value.trim());
+        missing.forEach(inp => inp.classList.add('pf-error'));
+        if (missing.length || codeInput.classList.contains('pf-error')) {
+            e.preventDefault();
+            (missing[0] || codeInput).focus();
+            return;
+        }
+        // Илгээх товчны утгыг (after_save) алдахгүйн тулд дараагийн tick-д идэвхгүй болгоно
+        setTimeout(() => form.querySelectorAll('.pf-submit').forEach(b => b.disabled = true));
+    });
+    [nameInput, purchase].forEach(inp => inp.addEventListener('input', () => inp.classList.remove('pf-error')));
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') form.querySelector('.pf-submit').click();
+    });
+
+    checkName();
+    checkCode();
+})();
 </script>
 {% endblock %}

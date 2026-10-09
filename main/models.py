@@ -1049,8 +1049,9 @@ class StockMovement(models.Model):
             
             self.reference_number = f'{prefix}-{date_str}-{next_num:03d}'
         
-        # Нийт дүн тооцоолох
-        self.total_amount = self.quantity * self.price
+        # Нийт дүн тооцоолох (худалдан авалтад гараас оруулсан дүнг fixed_total-оор дамжуулна)
+        fixed_total = getattr(self, 'fixed_total', None)
+        self.total_amount = fixed_total if fixed_total is not None else self.quantity * self.price
         
         # current_stock нь @property тул тусад нь шинэчлэх шаардлагагүй —
         # StockMovement хадгалагдсаны дараа автоматаар тооцоологдоно.
@@ -1440,6 +1441,11 @@ class BankTransaction(models.Model):
                                         null=True, blank=True, 
                                         verbose_name='Гүйлгээний бичилт',
                                         help_text='Үүссэн журналын бичилт')
+    # Сурагчийн төлбөр + борлуулалтад хуваагдсан гүйлгээ (жишээ нь POS сэттлмэнт):
+    # accounting_entry = сурагчийн хэсэг (Кт эсрэг данс), энэ = борлуулалтын хэсэг (Кт 510101)
+    sale_revenue_entry = models.ForeignKey(AccountingEntry, on_delete=models.SET_NULL,
+                                           null=True, blank=True, related_name='sale_revenue_bank_transactions',
+                                           verbose_name='Борлуулалтын орлогын бичилт (хосолсон)')
     is_processed = models.BooleanField('Боловсруулсан эсэх', default=False)
     imported_at = models.DateTimeField('Импортолсон огноо', auto_now_add=True)
     imported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 

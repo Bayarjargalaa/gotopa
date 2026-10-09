@@ -39,11 +39,109 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
     <div class="lg:col-span-2 min-w-0">
-    {% if 'СЕТТЛЕМЕНТ ХААВ' in transaction.description and not is_archived_tx %}
-    <div class="mb-3 px-4 py-2.5 rounded-lg border border-indigo-300 bg-indigo-50 text-sm text-indigo-900">
-        💳 Энэ бол <strong>POS-ын сэттлмэнт</strong> — тухайн өдрийн POS борлуулалттай нэг дор тулгаж холбоно.
-        <a href="{% url 'main:pos_settlement_list' %}" class="font-semibold underline">POS тооцоо нийлэх →</a>
-    </div>
+    {% if multi_sale_rows or multi_sale_day %}
+    <!-- ===== Олон борлуулалттай холбох (POS сэттлмэнт гэх мэт) ===== -->
+    <details id="multiSale" class="mb-3 bg-white rounded-lg shadow-sm border {% if multi_sale_day %}border-indigo-300{% else %}border-gray-200{% endif %}"
+             {% if multi_sale_day or transaction.sale_allocations.count > 1 %}open{% endif %}>
+        <summary class="px-4 py-3 cursor-pointer select-none text-sm font-semibold {% if multi_sale_day %}text-indigo-900 bg-indigo-50 rounded-t-lg{% else %}text-gray-700{% endif %}">
+            {% if multi_sale_day %}
+            💳 POS сэттлмэнт — {{ multi_sale_day|date:"Y-m-d" }}-ны борлуулалтуудтай холбох
+            {% else %}
+            <i class="fas fa-layer-group mr-1 text-gray-400"></i>Олон борлуулалттай холбох
+            {% endif %}
+        </summary>
+        <form method="post" action="{% url 'main:bank_transaction_link_sales' transaction.id %}" id="multiSaleForm" class="px-4 pb-3">
+            {% csrf_token %}
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+            {% if multi_sale_day %}
+            <p class="text-xs text-indigo-800 mt-2">
+                Сэттлмэнт = тухайн өдрийн бүх POS борлуулалтын нийлбэр. Тухайн өдрийн POS борлуулалт урьдчилан сонгогдсон.
+                Шимтгэлийн мөрийг "Автомат холболтын загвар" тусад нь зардлаар бүртгэнэ.
+            </p>
+            {% endif %}
+            <div class="mt-2 flex flex-wrap items-center gap-3">
+                <input type="search" id="multiSaleSearch" placeholder="Борлуулалт хайх (дугаар, харилцагч, дүн)..." autocomplete="off"
+                       class="flex-1 min-w-[200px] px-3 py-1.5 border border-gray-300 rounded text-sm">
+                {% if multi_sale_day %}
+                <label class="text-sm text-indigo-800 whitespace-nowrap cursor-pointer">
+                    <input type="checkbox" id="msPosOnly" class="accent-indigo-600" checked> Зөвхөн POS борлуулалт
+                </label>
+                {% endif %}
+            </div>
+            <div class="mt-2 max-h-72 overflow-y-auto border border-gray-200 rounded divide-y divide-gray-100">
+                {% for row in multi_sale_rows %}
+                {% with sale=row.sale %}
+                <label class="ms-row flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 {% if row.is_pos_day %}bg-indigo-50/50{% endif %}"
+                       data-search="{{ sale.sale_number }} {{ sale.customer.name|default:'бэлэн' }} {{ sale.total_amount|floatformat:0 }}"
+                       data-pos="{% if sale.pos_bank_account_id or sale.expected_payment_method == 'POS' %}1{% else %}0{% endif %}">
+                    <input type="checkbox" name="sale_ids" value="{{ sale.id|stringformat:'d' }}" class="ms-check accent-primary" {% if row.checked %}checked{% endif %}>
+                    <span class="flex-1 min-w-0">
+                        <span class="font-mono text-xs text-primary">{{ sale.sale_number }}</span>
+                        <span class="text-gray-800">· {{ sale.customer.name|default:"Бэлэн" }}</span>
+                        {% if row.is_pos_day %}<span class="ml-1 px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold">💳 POS · энэ өдөр</span>
+                        {% elif sale.pos_bank_account_id %}<span class="ml-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px]">POS</span>{% endif %}
+                        <span class="block text-xs text-gray-500">{{ sale.sale_date|date:"Y-m-d" }} · Нийт {{ sale.total_amount|floatformat:0 }}₮ · Холбох боломжтой {{ row.room|floatformat:0 }}₮</span>
+                    </span>
+                    <input type="text" inputmode="decimal" name="amount_{{ sale.id|stringformat:'d' }}" value="{{ row.amount|floatformat:'2u' }}"
+                           class="ms-amount w-28 px-2 py-1 border border-gray-300 rounded text-sm text-right" aria-label="Холбох дүн">
+                </label>
+                {% endwith %}
+                {% empty %}
+                <div class="px-3 py-6 text-center text-sm text-gray-500">Холбох боломжтой борлуулалт олдсонгүй.</div>
+                {% endfor %}
+            </div>
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div>
+                    Сонгосон: <strong id="msCount">0</strong> борлуулалт · <strong id="msTotal">0</strong>₮
+                    / {% if student_alloc_total %}борлуулалтад {{ multi_sale_capacity|floatformat:0 }}₮
+                    <span class="text-gray-500">(сурагчийн төлбөр {{ student_alloc_total|floatformat:0 }}₮)</span>{% else %}гүйлгээ {{ transaction.income_amount|floatformat:0 }}₮{% endif %}
+                    <span id="msDiff" class="ml-1 font-semibold"></span>
+                </div>
+                <button type="submit" id="msSubmit" class="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">
+                    <i class="fas fa-link mr-1"></i>Сонгосон борлуулалттай холбох
+                </button>
+            </div>
+        </form>
+    </details>
+    <script>
+    (function () {
+        const form = document.getElementById('multiSaleForm');
+        const txAmount = {{ multi_sale_capacity|floatformat:'2u' }};  // сурагчийн төлбөрийг хассан
+        const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        function update() {
+            let total = 0, count = 0;
+            form.querySelectorAll('.ms-row').forEach(row => {
+                const cb = row.querySelector('.ms-check'), amt = row.querySelector('.ms-amount');
+                amt.disabled = !cb.checked;
+                if (cb.checked) { count++; total += parseFloat(amt.value.replace(/,/g, '')) || 0; }
+            });
+            const diff = txAmount - total;
+            document.getElementById('msCount').textContent = count;
+            document.getElementById('msTotal').textContent = fmt(total);
+            const el = document.getElementById('msDiff');
+            el.textContent = Math.abs(diff) < 0.005 ? '✓ тэнцсэн' : (diff > 0 ? `үлдэх ${fmt(diff)}₮` : `илүү ${fmt(-diff)}₮`);
+            el.className = 'ml-1 font-semibold ' + (Math.abs(diff) < 0.005 ? 'text-green-600' : diff > 0 ? 'text-amber-600' : 'text-red-600');
+            document.getElementById('msSubmit').disabled = diff < -0.005;
+        }
+        form.addEventListener('input', update);
+        form.addEventListener('change', update);
+        const search = document.getElementById('multiSaleSearch');
+        const posOnly = document.getElementById('msPosOnly');
+        function filterRows() {
+            const q = search.value.trim().toLowerCase();
+            form.querySelectorAll('.ms-row').forEach(row => {
+                const match = (!q || row.dataset.search.toLowerCase().includes(q)) &&
+                              (!posOnly || !posOnly.checked || row.dataset.pos === '1');
+                // Сонгогдсон мөр шүүлтээс үл хамааран харагдана
+                row.classList.toggle('hidden', !match && !row.querySelector('.ms-check').checked);
+            });
+        }
+        search.addEventListener('input', filterRows);
+        if (posOnly) posOnly.addEventListener('change', filterRows);
+        filterRows();
+        update();
+    })();
+    </script>
     {% endif %}
     <div class="lg:hidden">
     <!-- ===== Гүйлгээний мэдээлэл (товч) ===== -->
@@ -105,6 +203,7 @@
                 <button type="button" class="mode-chip" data-mode="NEW"><i class="fas fa-plus"></i> Шинэ төрөл</button>
             {% else %}
                 <button type="button" class="mode-chip" data-mode="EXPENSE"><i class="fas fa-receipt"></i> Зардал / зарлага</button>
+                <button type="button" class="mode-chip" data-mode="purchase"><i class="fas fa-truck-loading"></i> Худалдан авалт</button>
             {% endif %}
             {% if transaction.account_type == 'BANK' and not is_archived_tx %}
                 <button type="button" class="mode-chip" data-mode="transfer"><i class="fas fa-exchange-alt"></i> Харилцах хооронд</button>
@@ -172,7 +271,87 @@
     </div>
     {% endif %}
 
+    <!-- ===== Худалдан авалттай холбох ===== -->
+    {% if transaction.expense_amount > 0 and not is_archived_tx %}
+    <div id="purchasePanel" class="hidden bg-white rounded-lg shadow-sm border border-amber-200 px-4 py-3 mb-3">
+        <h2 class="text-sm font-semibold text-amber-900 mb-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-600 text-white text-xs mr-1">2</span>
+            Худалдан авалттай холбох
+        </h2>
+        {% if can_create_purchase %}
+        <button type="button" id="newPurchaseBtn"
+                class="w-full mb-3 px-3 py-2 rounded border-2 border-dashed border-amber-400 text-amber-800 text-sm font-semibold hover:bg-amber-50">
+            <i class="fas fa-plus mr-1"></i> Шинээр бүртгэх — худалдан авалтыг энд бүртгээд энэ гүйлгээтэй холбоно
+        </button>
+        {% endif %}
+        {% if linked_purchase %}
+            <p class="text-sm text-gray-600">Энэ гүйлгээ худалдан авалт
+                <strong>{{ linked_purchase.purchase_number }}</strong>-тэй холбогдсон.
+                Таслах бол "Одоогийн холболт" хэсгийг ашиглана уу.</p>
+        {% elif transaction.accounting_entry %}
+            <p class="text-sm text-gray-600">Энэ гүйлгээ өөр журналын бичилттэй холбогдсон тул худалдан авалттай холбох боломжгүй. Эхлээд журналыг цуцлана уу.</p>
+        {% else %}
+            <p class="text-xs text-amber-800 mb-2">
+                Дансаар/бэлнээр төлсөн гэж бүртгэсэн ч гүйлгээтэй холбогдоогүй (ижил дүнтэй) худалдан авалт болон
+                өглөг нь үлдсэн зээлийн худалдан авалтыг харуулна. Зээлийнх бол гүйлгээгээр өглөг төлөгдөнө (Дт 310101).
+            </p>
+            <input type="text" id="purchaseSearch" placeholder="Дугаар, нийлүүлэгчээр шүүх..."
+                   class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm mb-2">
+            <div class="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded" id="purchaseList">
+                {% for p in purchase_candidates %}
+                <div class="flex items-center justify-between gap-2 px-3 py-2 purchase-row{% if p.link_exact %} bg-green-50{% endif %}"
+                     data-search="{{ p.purchase_number|lower }} {{ p.supplier.name|default:''|lower }} {{ p.reference_number|lower }} {{ p.notes|lower }}">
+                    <div class="text-sm min-w-0">
+                        <div class="font-medium">{{ p.purchase_number }}
+                            <span class="text-gray-500 font-normal">· {{ p.supplier.name|default:"Нийлүүлэгчгүй" }}</span>
+                            {% if p.link_exact %}<span class="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-green-100 text-green-800">дүн таарсан</span>{% endif %}
+                        </div>
+                        <div class="text-xs text-gray-500 truncate">
+                            {{ p.purchase_date|date:"Y-m-d" }} · нийт {{ p.total_amount|floatformat:0 }}₮ ·
+                            {% if p.link_kind == 'payable' %}<span class="text-red-700">зээл, үлдэгдэл {{ p.link_remaining|floatformat:0 }}₮</span>
+                            {% else %}{{ p.payment_label }} төлбөр гүйлгээгүй{% endif %}
+                            {% if p.reference_number %} · {{ p.reference_number }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                        <input type="hidden" name="link_purchase" value="{{ p.id|stringformat:'d' }}">
+                        <button type="submit" class="px-3 py-1 bg-amber-600 text-white rounded text-sm hover:bg-amber-700 whitespace-nowrap">Холбох</button>
+                    </form>
+                </div>
+                {% empty %}
+                <p class="text-sm text-gray-500 px-3 py-3">Холбож болох худалдан авалт олдсонгүй. Худалдан авалтаа бүртгэхдээ энэ гүйлгээг сонгож бас холбож болно.</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if can_create_purchase %}
+    <!-- Худалдан авалт бүртгэх цонх: бүртгэх формыг энэ гүйлгээгээр бөглөж нээнэ -->
+    <div id="purchaseModal" class="hidden fixed inset-0 z-[10000] bg-black/50 flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl h-full max-h-[95vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-2 border-b">
+                <h3 class="font-semibold text-gray-800"><i class="fas fa-truck-loading mr-1 text-amber-600"></i>Худалдан авалт бүртгэх</h3>
+                <button type="button" id="purchaseModalClose" class="text-gray-400 hover:text-gray-700 text-xl leading-none px-2" title="Хаах">&times;</button>
+            </div>
+            <iframe id="purchaseFrame" class="flex-1 w-full rounded-b-lg" title="Худалдан авалт бүртгэх"
+                    data-src="{% url 'main:purchase_create_multi' %}?embed=1&bank_tx={{ transaction.id|stringformat:'d' }}"></iframe>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ===== Үндсэн форм ===== -->
+    {% if sale_allocations_all|length > 1 %}
+    <div class="mb-3 px-4 py-2.5 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+        <i class="fas fa-info-circle mr-1"></i>
+        Энэ гүйлгээ <strong>{{ sale_allocations_all|length }} борлуулалттай</strong> холбогдсон.
+        Холболтыг дээрх <a href="#multiSale" onclick="document.getElementById('multiSale').open = true" class="font-semibold underline">"Олон борлуулалттай холбох"</a>
+        хэсгээс засна. Үлдсэн {{ sale_alloc_left|floatformat:0 }}₮-г доор <strong>"Сурагчийн төлбөр"</strong> сонгож сурагчдад хуваарилж болно
+        (бусад төрлөөр хадгалахгүй — борлуулалтын холболт устах тул).
+    </div>
+    {% endif %}
     <form method="post" id="linkForm" class="hidden" novalidate>
         {% csrf_token %}
         <input type="hidden" name="return_to" value="{{ return_to }}">
@@ -217,6 +396,14 @@
                 </div>
             </div>
 
+            {% if sale_allocations_all|length > 1 %}
+            <div class="mt-3 p-3 rounded border border-indigo-200 bg-indigo-50 text-sm text-indigo-900">
+                <i class="fas fa-shopping-bag mr-1"></i>
+                {{ sale_allocations_all|length }} борлуулалтад <strong>{{ sale_alloc_total|floatformat:0 }}₮</strong> холбогдсон (хэвээр үлдэнэ).
+                Сурагчийн төлбөрт үлдсэн <strong>{{ sale_alloc_left|floatformat:0 }}₮</strong>-г хуваарилна.
+                <div class="text-xs text-indigo-700 mt-1">Журнал: сургалтын хэсэг → сонгосон эсрэг данс, борлуулалтын хэсэг → 510101.</div>
+            </div>
+            {% else %}
             <!-- Барааны төлбөр давхар -->
             <details class="mt-3 text-sm" {% if existing_sale_allocation %}open{% endif %}>
                 <summary class="cursor-pointer text-amber-800 select-none"><i class="fas fa-shopping-bag mr-1"></i>Барааны төлбөр давхар орсон уу?</summary>
@@ -243,6 +430,7 @@
                     </div>
                 </div>
             </details>
+            {% endif %}
         </div>
 
         <!-- Барааны борлуулалт -->
@@ -263,7 +451,17 @@
                         class="px-2 py-0.5 text-xs rounded border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 sale-filter-btn">Холбоогүй</button>
                 <button type="button" id="filterLinked" onclick="setSaleLinkFilter('linked')"
                         class="px-2 py-0.5 text-xs rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 sale-filter-btn">Холбогдсон</button>
+                {% if settle_day %}
+                <button type="button" id="filterPos" onclick="setSaleLinkFilter('pos')"
+                        class="px-2 py-0.5 text-xs rounded border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 sale-filter-btn">💳 POS</button>
+                {% endif %}
             </div>
+            {% if settle_day and multi_sale_rows %}
+            <p class="mb-2 text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5">
+                Сэттлмэнт нь {{ settle_day|date:"Y-m-d" }}-ны бүх POS борлуулалтын нийлбэр. Олон борлуулалттай холбох бол
+                <a href="#multiSale" onclick="document.getElementById('multiSale').open = true" class="font-semibold underline">"POS сэттлмэнт" хэсгийг</a> ашиглана уу.
+            </p>
+            {% endif %}
 
             <div class="border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary">
                 <div class="flex items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
@@ -286,16 +484,23 @@
                         data-value="{{ sale.id|stringformat:'d' }}"
                         data-text="{{ sale.sale_date|date:'Y-m-d' }} | {{ sale.customer|default:'-' }} | {{ sale.sale_number }} | {{ sale.total_amount|floatformat:0 }}₮"
                         data-linked="{{ sale.is_linked|yesno:'true,false' }}"
+                        data-pos="{% if sale.is_pos %}1{% else %}0{% endif %}"
                         data-suggested="{% if sale.is_suggested %}1{% else %}0{% endif %}"
                         onclick="selectSale(this.dataset.value, this.dataset.text)">
                         <div class="flex justify-between items-center gap-2">
                             <span><span class="font-medium">{{ sale.sale_number }}</span> — {{ sale.customer|default:"Харилцагчгүй" }}
-                                {% if sale.is_suggested %}<span class="ml-1 px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-semibold">Дүн таарсан</span>{% endif %}</span>
+                                {% if sale.is_pos_day %}<span class="ml-1 px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold">💳 POS · сэттлмэнтийн өдөр</span>
+                                {% elif sale.is_pos %}<span class="ml-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px]">POS</span>
+                                {% elif sale.is_suggested %}<span class="ml-1 px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-semibold">Дүн таарсан</span>{% endif %}</span>
                             <span class="text-xs whitespace-nowrap opacity-70">{{ sale.sale_date|date:"Y-m-d" }}</span>
                         </div>
                         <div class="flex justify-between text-xs mt-0.5 opacity-70">
-                            <span>{% if sale.is_linked %}Холбогдсон{% else %}Холбоогүй{% endif %}</span>
-                            <span>Үлдэгдэл: {{ sale.remaining_for_link|floatformat:0 }}₮</span>
+                            <span>{% if sale.is_linked %}Банкинд холбогдсон{% else %}Банкинд холбоогүй{% endif %}</span>
+                            <span>
+                                Дүн <strong class="text-gray-800">{{ sale.total_amount|floatformat:0 }}₮</strong> ·
+                                {% if sale.remaining_for_link > 0 %}Үлдэгдэл <strong class="text-amber-700">{{ sale.remaining_for_link|floatformat:0 }}₮</strong>
+                                {% else %}<span class="text-green-700">Төлөгдсөн</span>{% endif %}
+                            </span>
                         </div>
                     </li>
                     {% empty %}
@@ -442,7 +647,7 @@
             <div class="hidden lg:block text-[11px] text-gray-400 mt-2 text-center">Ctrl+Enter — хадгалах · Ctrl+Shift+Enter — дараагийнх</div>
         </div>
     <!-- ===== Одоогийн холболтууд ===== -->
-    {% if transaction.is_processed or transaction.offset_account_id or transaction.accounting_entry_id or existing_sale_allocation or existing_allocations or existing_splits or transfer_link or transaction.income_sale_id %}
+    {% if transaction.is_processed or transaction.offset_account_id or transaction.accounting_entry_id or sale_allocations_all or existing_allocations or existing_splits or transfer_link or transaction.income_sale_id %}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3 mb-3">
         <div class="flex items-center justify-between mb-2">
             <h2 class="text-sm font-semibold text-gray-700"><i class="fas fa-link mr-1 text-gray-400"></i>Одоогийн холболт</h2>
@@ -463,7 +668,8 @@
             {% endif %}
             {% if transaction.accounting_entry %}
             <li class="py-1.5 flex items-center justify-between gap-2">
-                <span><span class="text-gray-500">Журнал:</span> №{{ transaction.accounting_entry.entry_number }}</span>
+                <span><span class="text-gray-500">Журнал:</span> №{{ transaction.accounting_entry.entry_number }}
+                    {% if linked_purchase %}<span class="text-gray-500 ml-1">· худалдан авалт</span> {{ linked_purchase.purchase_number }}{% endif %}</span>
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="return_to" value="{{ return_to }}">
@@ -499,17 +705,30 @@
                 </form>
             </li>
             {% endfor %}
-            {% if existing_sale_allocation %}
+            {% if sale_allocations_all %}
+            {% for alloc in sale_allocations_all %}
             <li class="py-1.5 flex items-center justify-between gap-2">
-                <span><span class="text-gray-500">Борлуулалт:</span> {{ existing_sale_allocation.sale.sale_number }} · {{ existing_sale_allocation.sale.customer }}
-                    <strong class="ml-1">{{ existing_sale_allocation.amount|floatformat:0 }}₮</strong></span>
-                <form method="post" action="{% url 'main:sale_link_bank' existing_sale_allocation.sale.id %}">
+                <span><span class="text-gray-500">Борлуулалт:</span> {{ alloc.sale.sale_number }} · {{ alloc.sale.customer|default:"Бэлэн" }}
+                    <span class="text-gray-400">· {{ alloc.sale.sale_date|date:"Y-m-d" }}</span>
+                    <strong class="ml-1">{{ alloc.amount|floatformat:0 }}₮</strong></span>
+                <form method="post" action="{% url 'main:sale_link_bank' alloc.sale.id %}">
                     {% csrf_token %}
                     <input type="hidden" name="transaction_id" value="{{ transaction.id|stringformat:'d' }}">
                     <input type="hidden" name="action" value="unlink">
+                    <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                    <input type="hidden" name="redirect_to_return" value="1">
                     <button type="submit" class="text-xs px-2 py-0.5 rounded bg-red-50 text-red-700 hover:bg-red-100">Таслах</button>
                 </form>
             </li>
+            {% endfor %}
+            {% if sale_allocations_all|length > 1 or sale_alloc_left > 0 %}
+            <li class="py-1.5 flex items-center justify-between gap-2 text-xs">
+                <span class="text-gray-500">Борлуулалтад холбосон нийт <strong class="text-gray-800">{{ sale_alloc_total|floatformat:0 }}₮</strong>
+                    / гүйлгээ {{ transaction.income_amount|floatformat:0 }}₮</span>
+                {% if sale_alloc_left > 0 %}<span class="font-semibold text-amber-700">Холбогдоогүй үлдэгдэл {{ sale_alloc_left|floatformat:0 }}₮</span>
+                {% else %}<span class="font-semibold text-green-700">✓ бүрэн холбогдсон</span>{% endif %}
+            </li>
+            {% endif %}
             {% elif transaction.income_sale %}
             <li class="py-1.5 flex items-center justify-between gap-2">
                 <span><span class="text-gray-500">Борлуулалт:</span> {{ transaction.income_sale.sale_number }} · {{ transaction.income_sale.customer }}</span>
@@ -662,15 +881,17 @@
     function setMode(newMode, { applyDefaults = true } = {}) {
         mode = newMode;
         chips.forEach(c => c.classList.toggle('active', c.dataset.mode === mode));
-        const isTransfer = mode === 'transfer';
-        if ($('transferPanel')) $('transferPanel').classList.toggle('hidden', !isTransfer);
+        // Шилжүүлэг, худалдан авалт нь өөрийн мини-формтой — үндсэн форм хэрэггүй
+        const isTransfer = mode === 'transfer' || mode === 'purchase';
+        if ($('transferPanel')) $('transferPanel').classList.toggle('hidden', mode !== 'transfer');
+        if ($('purchasePanel')) $('purchasePanel').classList.toggle('hidden', mode !== 'purchase');
         form.classList.toggle('hidden', !mode || isTransfer);
         $('saveBox').classList.toggle('hidden', !mode || isTransfer);
         $('chooseTypeHint').classList.toggle('hidden', !!mode);
         document.querySelectorAll('.type-panel').forEach(p => p.classList.add('hidden'));
         if (panels[mode]) $(panels[mode]).classList.remove('hidden');
         $('accountStepNo').textContent = panels[mode] ? '3' : '2';
-        if (incomeTypeInput) incomeTypeInput.value = (mode && mode !== 'NEW' && mode !== 'transfer') ? mode : '';
+        if (incomeTypeInput) incomeTypeInput.value = (mode && mode !== 'NEW' && !isTransfer) ? mode : '';
         hideErrors();
 
         if (!mode || isTransfer) return;
@@ -692,6 +913,33 @@
         updatePreview();
     }
     chips.forEach(c => c.addEventListener('click', () => setMode(c.dataset.mode)));
+
+    // Худалдан авалт шинээр бүртгэх цонх
+    if ($('newPurchaseBtn')) {
+        const modal = $('purchaseModal'), frame = $('purchaseFrame');
+        const closeModal = () => { modal.classList.add('hidden'); frame.removeAttribute('src'); };
+        $('newPurchaseBtn').addEventListener('click', () => {
+            frame.src = frame.dataset.src;
+            modal.classList.remove('hidden');
+        });
+        $('purchaseModalClose').addEventListener('click', closeModal);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
+        window.addEventListener('message', e => {
+            if (e.origin !== window.location.origin || !e.data) return;
+            if (e.data.type === 'purchase-cancel') closeModal();
+            // Хадгалсны дараа хуудсыг дахин ачаалж холболтыг харуулна
+            if (e.data.type === 'purchase-saved') window.location.reload();
+        });
+    }
+
+    if ($('purchaseSearch')) {
+        $('purchaseSearch').addEventListener('input', e => {
+            const q = e.target.value.trim().toLowerCase();
+            document.querySelectorAll('.purchase-row').forEach(r => {
+                r.classList.toggle('hidden', !!q && !r.dataset.search.includes(q));
+            });
+        });
+    }
 
     // Өмнөх гүйлгээ шиг холбох
     if ($('applyHintBtn') && D.counterparty_hint) {
@@ -716,6 +964,7 @@
     let allocationCounter = 0;
 
     function mixedSaleAmount() {
+        if (D.fixed_sale_amount) return D.fixed_sale_amount;  // олон борлуулалт — хэвээр үлдэнэ
         return $('mixedSaleToggle') && $('mixedSaleToggle').checked ? (parseFloat($('mixedSaleAmount').value) || 0) : 0;
     }
     function studentTarget() { return D.amount - mixedSaleAmount(); }
@@ -954,8 +1203,11 @@
         $('mixedSaleEnabled').value = on ? '1' : '0';
         updateAllocationTotal();
     }
-    $('mixedSaleToggle').addEventListener('change', syncMixedSale);
-    $('mixedSaleAmount').addEventListener('input', updateAllocationTotal);
+    // Олон борлуулалттай үед энэ хэсэг байхгүй (борлуулалтын дүн тогтмол)
+    if ($('mixedSaleToggle')) {
+        $('mixedSaleToggle').addEventListener('change', syncMixedSale);
+        $('mixedSaleAmount').addEventListener('input', updateAllocationTotal);
+    }
 
     // =====================================================================
     // Нэмэлт хуваарилалт (splits)
@@ -1009,10 +1261,13 @@
     function updatePreview() {
         const acc = accountsById[offsetAccount.value];
         const accLabel = acc ? `${acc.code} ${acc.name}` : '[данс сонгоогүй]';
-        const mainAmount = D.amount - splitTotal();
+        // Сурагчийн төлбөр + борлуулалт: борлуулалтын хэсэг 510101-д тусдаа бичигдэнэ
+        const salePart = (D.is_income && mode === 'STUDENT_PAYMENT') ? mixedSaleAmount() : 0;
+        const mainAmount = D.amount - splitTotal() - salePart;
         const lines = D.is_income
             ? [`Дт ${D.bank_account_label} ${fmt(D.amount)}`, `Кт ${accLabel} ${fmt(mainAmount)}`]
             : [`Дт ${accLabel} ${fmt(mainAmount)}`, `Кт ${D.bank_account_label} ${fmt(D.amount)}`];
+        if (salePart > 0) lines.push(`Кт 510101 Борлуулалтын орлого ${fmt(salePart)}`);
         document.querySelectorAll('.split-row').forEach(row => {
             const a = accountsById[row.querySelector('[data-field="account"]').value];
             const amt = parseFloat(row.querySelector('[data-field="amount"]').value) || 0;
@@ -1051,7 +1306,7 @@
             const remaining = studentTarget() - allocatedSum();
             if (studentTarget() > 0 && !rows.length) errors.push('Дор хаяж нэг сурагчийн мөр оруулна уу.');
             else if (Math.abs(remaining) >= 0.01) errors.push(`Хуваарилсан дүн гүйлгээний дүнтэй тэнцэхгүй байна (үлдэгдэл ${fmt(remaining)}).`);
-            if ($('mixedSaleToggle').checked) {
+            if ($('mixedSaleToggle') && $('mixedSaleToggle').checked) {
                 if (!$('mixedSaleSelect').value) bad($('mixedSaleSelect'), 'Барааны төлбөрийн борлуулалт сонгоно уу.');
                 if (!(mixedSaleAmount() > 0)) bad($('mixedSaleAmount'), 'Барааны төлбөрийн дүн оруулна уу.');
             }
@@ -1144,7 +1399,7 @@ let currentSaleLinkFilter = 'unlinked';
 function setSaleLinkFilter(filter) {
     currentSaleLinkFilter = filter;
     document.querySelectorAll('.sale-filter-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-1', 'ring-gray-400'));
-    const activeBtn = document.getElementById(filter === 'all' ? 'filterAll' : filter === 'unlinked' ? 'filterUnlinked' : 'filterLinked');
+    const activeBtn = document.getElementById({all: 'filterAll', unlinked: 'filterUnlinked', linked: 'filterLinked', pos: 'filterPos'}[filter]);
     if (activeBtn) activeBtn.classList.add('ring-2', 'ring-offset-1', 'ring-gray-400');
     filterSales(document.getElementById('saleSearch').value);
 }
@@ -1161,6 +1416,7 @@ function filterSales(query) {
         let linkMatch = true;
         if (currentSaleLinkFilter === 'unlinked') linkMatch = linked === 'false';
         else if (currentSaleLinkFilter === 'linked') linkMatch = linked === 'true';
+        else if (currentSaleLinkFilter === 'pos') linkMatch = item.dataset.pos === '1';
         // Сонгогдсон борлуулалт шүүлтээс үл хамааран харагдана
         const visible = (item.dataset.value === selected && selected) || ((!q || text.includes(q)) && linkMatch);
         item.style.display = visible ? '' : 'none';
@@ -1189,7 +1445,8 @@ function clearSaleSelection() { selectSale('', ''); }
 
 (function initSaleSelection() {
     if (!document.getElementById('saleList')) return;
-    setSaleLinkFilter('unlinked');
+    // POS сэттлмэнт бол анхдагчаар POS борлуулалтыг харуулна
+    setSaleLinkFilter('{% if settle_day %}pos{% else %}unlinked{% endif %}');
     let hiddenVal = document.getElementById('saleHiddenInput').value;
     // Ганц тохирох (дүн таарсан) борлуулалт байвал урьдчилан сонгоно
     const suggested = document.querySelectorAll('#saleList .sale-option[data-suggested="1"]');

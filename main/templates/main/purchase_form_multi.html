@@ -1,10 +1,21 @@
-{% extends 'main/base.html' %}
+{% extends base_template|default:'main/base.html' %}
 {% load static %}
 
 {% block title %}{% if edit_purchase %}{{ edit_purchase.purchase_number }} засах{% else %}Худалдан авалт бүртгэх{% endif %} - Готопа{% endblock %}
 {% block content %}
-<div class="container mx-auto px-4 py-8">
+<div class="{% if embed %}px-3 py-3{% else %}container mx-auto px-4 py-8{% endif %}">
     <div class="max-w-6xl mx-auto">
+        {% if prefill_tx %}
+        <div class="mb-3 px-4 py-2.5 rounded-lg border border-sky-200 bg-sky-50 text-sm text-sky-900">
+            <i class="fas fa-university mr-1"></i>
+            {% if prefill_tx.account_type == 'CASH' %}Кассын{% else %}Банкны{% endif %} гүйлгээнээс бүртгэж байна:
+            <strong>{{ prefill_tx.transaction_date|date:"Y-m-d" }}</strong> ·
+            <strong class="text-red-700">−{{ prefill_tx.expense_amount|floatformat:0 }}₮</strong> ·
+            {{ prefill_tx.description|truncatechars:80 }}
+            <span class="block text-xs text-sky-700 mt-0.5">Хадгалахад худалдан авалт энэ гүйлгээтэй холбогдоно.</span>
+        </div>
+        {% endif %}
+        {% if not embed %}
         <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
             {% if edit_purchase %}
             <div>
@@ -21,6 +32,9 @@
                 ← Буцах
             </a>
         </div>
+        {% else %}
+        <h1 class="hidden" id="pageTitle">Худалдан авалт бүртгэх</h1>
+        {% endif %}
 
         <form method="POST" id="purchaseForm" class="bg-white shadow-md rounded-lg p-6" onsubmit="return validatePurchaseForm()">
             {% csrf_token %}
@@ -60,7 +74,7 @@
                                 <th class="border px-3 py-2 text-left">Бараа</th>
                                 <th class="border px-3 py-2 text-center w-28">Тоо ширхэг</th>
                                 <th class="border px-3 py-2 text-right w-36" id="priceHeader">Нэгж үнэ</th>
-                                <th class="border px-3 py-2 text-right w-32">Дүн</th>
+                                <th class="border px-3 py-2 text-right w-36">Дүн</th>
                                 <th class="border px-3 py-2 text-center w-12"></th>
                             </tr>
                         </thead>
@@ -83,7 +97,7 @@
                         </tfoot>
                     </table>
                 </div>
-                <p class="text-xs text-gray-500 mt-1" id="itemsHint">Бараа сонгоход сүүлийн худалдан авах үнэ автоматаар бөглөгдөнө. Сүүлийн мөрөнд сонгоход шинэ мөр нэмэгдэнэ.</p>
+                <p class="text-xs text-gray-500 mt-1" id="itemsHint">Бараа сонгоход сүүлийн худалдан авах үнэ бөглөгдөнө. Нэгж үнэ эсвэл дүнгийн аль нэгийг оруулахад нөгөө нь бодогдоно.</p>
             </div>
 
             <!-- 3б. Зарцуулсан бэлдэц (зөвхөн бараа хувиргалт) -->
@@ -278,9 +292,16 @@
                 <button type="submit" class="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-opacity-90 font-semibold">
                     ✓ {% if edit_purchase %}Засварыг хадгалах{% else %}Хадгалах{% endif %}
                 </button>
+                {% if embed %}
+                <button type="button" onclick="window.parent.postMessage({type: 'purchase-cancel'}, window.location.origin)"
+                        class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
+                    Цуцлах
+                </button>
+                {% else %}
                 <a href="{% url 'main:purchase_list' %}" class="flex-1 text-center bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold">
                     Цуцлах
                 </a>
+                {% endif %}
             </div>
         </form>
     </div>
@@ -290,12 +311,14 @@
 {{ suppliers_data|json_script:"suppliers-data" }}
 {{ transactions_data|json_script:"transactions-data" }}
 {% if edit_data %}{{ edit_data|json_script:"edit-data" }}{% endif %}
+{% if prefill_data %}{{ prefill_data|json_script:"prefill-data" }}{% endif %}
 
 <script>
 var products = JSON.parse(document.getElementById('products-data').textContent);
 var suppliers = JSON.parse(document.getElementById('suppliers-data').textContent);
 var bankTransactions = JSON.parse(document.getElementById('transactions-data').textContent);
 var EDIT_DATA = document.getElementById('edit-data') ? JSON.parse(document.getElementById('edit-data').textContent) : null;
+var PREFILL = document.getElementById('prefill-data') ? JSON.parse(document.getElementById('prefill-data').textContent) : null;
 var MATERIAL_CATEGORY_ID = {{ material_category_id|default:'null' }};
 var INITIAL_MODE = '{{ initial_mode|default:"" }}';
 var CATEGORY_CREATE_URL = '{% url "main:product_category_create" %}';
@@ -384,11 +407,10 @@ function onModeChange() {
     document.getElementById('grandTotalLabel').textContent = conv ? 'НИЙТ ӨРТӨГ:' : 'НИЙТ ДҮН:';
     document.getElementById('itemsHint').textContent = conv
         ? 'Нэгж өртөг = зарцуулсан бэлдэцийн өртөг ÷ хийсэн барааны нийт тоо (автоматаар).'
-        : 'Бараа сонгоход сүүлийн худалдан авах үнэ автоматаар бөглөгдөнө. Сүүлийн мөрөнд сонгоход шинэ мөр нэмэгдэнэ.';
+        : 'Бараа сонгоход сүүлийн худалдан авах үнэ бөглөгдөнө. Нэгж үнэ эсвэл дүнгийн аль нэгийг оруулахад нөгөө нь бодогдоно.';
     productRows.forEach(function(rowId) {
-        var price = document.getElementById('price_' + rowId);
-        price.readOnly = conv;
-        price.classList.toggle('bg-gray-100', conv);
+        setRowReadOnly(rowId, conv);
+        if (!conv) recalcRow(rowId);
     });
     if (conv) renderMaterials();
     onPaymentMethodChange();
@@ -414,16 +436,13 @@ function addProductRow(focus) {
             'class="w-full px-2 py-1 border rounded text-center focus:ring-2 focus:ring-primary"></td>' +
         '<td class="border px-3 py-2"><input type="number" name="price_' + rowId + '" id="price_' + rowId + '" min="0" step="0.01" ' +
             'class="w-full px-2 py-1 border rounded text-right focus:ring-2 focus:ring-primary"></td>' +
-        '<td class="border px-3 py-2 text-right font-bold" id="subtotal_' + rowId + '">0₮</td>' +
+        '<td class="border px-3 py-2"><input type="number" name="total_' + rowId + '" id="total_' + rowId + '" min="0" step="0.01" ' +
+            'class="w-full px-2 py-1 border rounded text-right font-bold focus:ring-2 focus:ring-primary"></td>' +
         '<td class="border px-3 py-2 text-center"><button type="button" class="text-red-600 hover:text-red-800" title="Устгах">' +
             '<i class="fas fa-trash"></i></button></td>';
     tbody.appendChild(row);
     productRows.push(rowId);
-    if (isConversion()) {
-        var priceInput = document.getElementById('price_' + rowId);
-        priceInput.readOnly = true;
-        priceInput.classList.add('bg-gray-100');
-    }
+    if (isConversion()) setRowReadOnly(rowId, true);
 
     var search = document.getElementById('productSearch_' + rowId);
     var drop = document.getElementById('productDrop_' + rowId);
@@ -443,19 +462,59 @@ function addProductRow(focus) {
     search.addEventListener('focus', show);
     search.addEventListener('blur', function() { setTimeout(function() { drop.classList.add('hidden'); }, 150); });
     search.addEventListener('keydown', function(e) { comboKeydown(e, drop); });
-    document.getElementById('quantity_' + rowId).addEventListener('input', function() { updateRow(rowId); });
-    document.getElementById('price_' + rowId).addEventListener('input', function() { updateRow(rowId); });
+    // Нэгж үнэ оруулбал дүн, дүн оруулбал нэгж үнэ бодогдоно. Тоо солиход сүүлд оруулсан талбар хэвээр үлдэнэ.
+    document.getElementById('quantity_' + rowId).addEventListener('input', function() { recalcRow(rowId); updateRow(rowId); });
+    document.getElementById('price_' + rowId).addEventListener('input', function() {
+        lastEdited[rowId] = 'price'; recalcRow(rowId); updateRow(rowId);
+    });
+    document.getElementById('total_' + rowId).addEventListener('input', function() {
+        lastEdited[rowId] = 'total'; recalcRow(rowId); updateRow(rowId);
+    });
     row.querySelector('button').addEventListener('click', function() { removeRow(rowId); });
 
     renumberRows();
     if (focus) search.focus();
 }
 
+var lastEdited = {};  // {rowId: 'price' | 'total'}
+
+function round2(n) { return Math.round(n * 100) / 100; }
+
+function setRowReadOnly(rowId, readOnly) {
+    ['price_', 'total_'].forEach(function(prefix) {
+        var input = document.getElementById(prefix + rowId);
+        input.readOnly = readOnly;
+        input.classList.toggle('bg-gray-100', readOnly);
+    });
+}
+
+function recalcRow(rowId) {
+    if (isConversion()) return;
+    var q = parseFloat(document.getElementById('quantity_' + rowId).value) || 0;
+    var price = document.getElementById('price_' + rowId);
+    var total = document.getElementById('total_' + rowId);
+    if (lastEdited[rowId] === 'total') {
+        var t = parseFloat(total.value) || 0;
+        price.value = q && t ? round2(t / q) : '';
+    } else {
+        var p = parseFloat(price.value) || 0;
+        total.value = q && p ? round2(q * p) : '';
+    }
+}
+
+function rowTotal(rowId) {
+    return parseFloat(document.getElementById('total_' + rowId).value) || 0;
+}
+
 function pickProduct(rowId, product) {
     document.getElementById('product_' + rowId).value = product.id;
     document.getElementById('productSearch_' + rowId).value = product.name;
     document.getElementById('productDrop_' + rowId).classList.add('hidden');
-    if (!isConversion()) document.getElementById('price_' + rowId).value = product.purchase_price || '';
+    if (!isConversion()) {
+        document.getElementById('price_' + rowId).value = product.purchase_price || '';
+        lastEdited[rowId] = 'price';
+        recalcRow(rowId);
+    }
     updateRow(rowId);
     if (isConversion()) renderMaterials();  // хийсэн барааг бэлдэцээс хасна
     // Сүүлийн мөрөнд бараа сонговол доор нь шинэ хоосон мөр автоматаар нэмнэ
@@ -469,7 +528,9 @@ function removeRow(rowId) {
         document.getElementById('product_' + rowId).value = '';
         document.getElementById('productSearch_' + rowId).value = '';
         document.getElementById('price_' + rowId).value = '';
+        document.getElementById('total_' + rowId).value = '';
         document.getElementById('quantity_' + rowId).value = 1;
+        delete lastEdited[rowId];
         updateRow(rowId);
         return;
     }
@@ -486,8 +547,6 @@ function renumberRows() {
 function updateRow(rowId) {
     var productId = parseInt(document.getElementById('product_' + rowId).value);
     var quantity = parseFloat(document.getElementById('quantity_' + rowId).value) || 0;
-    var price = parseFloat(document.getElementById('price_' + rowId).value) || 0;
-    document.getElementById('subtotal_' + rowId).textContent = productId ? money(quantity * price) : '0₮';
 
     // Авсны дараах үлдэгдэл
     var info = document.getElementById('stock_info_' + rowId);
@@ -508,12 +567,8 @@ function filledRows() {
 function getPurchaseTotal() {
     if (isConversion()) return materialsTotal();
     var total = 0;
-    filledRows().forEach(function(rowId) {
-        var q = parseFloat(document.getElementById('quantity_' + rowId).value) || 0;
-        var p = parseFloat(document.getElementById('price_' + rowId).value) || 0;
-        total += q * p;
-    });
-    return total;
+    filledRows().forEach(function(rowId) { total += rowTotal(rowId); });
+    return round2(total);
 }
 
 function updateGrandTotal() {
@@ -544,7 +599,7 @@ function applyUnitCost() {
     filledRows().forEach(function(id) {
         document.getElementById('price_' + id).value = unit || '';
         var q = parseFloat(document.getElementById('quantity_' + id).value) || 0;
-        document.getElementById('subtotal_' + id).textContent = money(q * unit);
+        document.getElementById('total_' + id).value = unit ? round2(q * unit) : '';
     });
     document.getElementById('materialsTotal').textContent = money(materialsTotal());
     document.getElementById('outputQty').textContent = qty;
@@ -854,8 +909,8 @@ function validatePurchaseForm() {
     }
     for (var i = 0; i < filled.length; i++) {
         var price = document.getElementById('price_' + filled[i]);
-        if (!(parseFloat(price.value) > 0)) {
-            alert(document.getElementById('productSearch_' + filled[i]).value + ': үнэ оруулна уу.');
+        if (!(parseFloat(price.value) > 0) || !(rowTotal(filled[i]) > 0)) {
+            alert(document.getElementById('productSearch_' + filled[i]).value + ': нэгж үнэ эсвэл дүн оруулна уу.');
             price.focus();
             return false;
         }
@@ -904,6 +959,8 @@ function fillFromEditData(d) {
         document.getElementById('productSearch_' + rowId).value = it.name;
         document.getElementById('quantity_' + rowId).value = it.quantity;
         document.getElementById('price_' + rowId).value = it.price;
+        document.getElementById('total_' + rowId).value = it.total != null ? it.total : round2(it.quantity * it.price);
+        lastEdited[rowId] = 'total';  // хадгалсан дүн хэвээр (нэгж үнийн бүхэлтгэлээр өөрчлөгдөхгүй)
         updateRow(rowId);
         addProductRow(false);
     });
@@ -925,6 +982,34 @@ function fillFromEditData(d) {
     updateGrandTotal();
 }
 
+// ---------- Банкны гүйлгээнээс бүртгэх: огноо, төлбөр, данс, гүйлгээ, нийлүүлэгчийг бөглөх ----------
+function fillFromPrefill(d) {
+    document.getElementById('transactionDate').value = d.date;
+    if (d.supplier) {
+        setSupplier(d.supplier.id, d.supplier.name, '');
+    } else if (d.supplier_manual) {
+        var search = document.getElementById('supplierSearch');
+        search.value = d.supplier_manual;
+        search.dispatchEvent(new Event('input'));
+        document.getElementById('supplierDrop').classList.add('hidden');
+    }
+    var radio = document.querySelector('input[name="payment_method"][value="' + d.payment_method + '"]');
+    if (radio) radio.checked = true;
+    if (d.payment_method === 'CASH') {
+        if (d.account) document.getElementById('cashAccountSelect').value = String(d.account);
+        document.querySelector('input[name="cash_record_mode"][value="existing"]').checked = true;
+        document.getElementById('cashTransactionSelect').dataset.initial = String(d.tx);
+    } else {
+        if (d.account) document.getElementById('bankAccountSelect').value = String(d.account);
+        document.getElementById('bankTransactionSelect').dataset.initial = String(d.tx);
+    }
+    document.getElementById('purchaseNotes').value = d.notes || '';
+    onPaymentMethodChange();
+    updateCashRecordMode();
+    if (d.payment_method === 'CASH') document.getElementById('cashTransactionSelect').value = String(d.tx);
+    checkTxnMatch();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     initPaymentMethod();
     initSupplierSearch();
@@ -936,6 +1021,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (INITIAL_MODE === 'CONVERSION') document.querySelector('input[name="mode"][value="CONVERSION"]').checked = true;
     onModeChange();
+    if (PREFILL) fillFromPrefill(PREFILL);
     // Огноо сонгосны дараа шууд бараа хайх руу шилжинэ
     document.getElementById('transactionDate').addEventListener('change', function() {
         document.getElementById('productSearch_' + productRows[0]).focus();

@@ -1,7 +1,7 @@
 {% extends 'main/base.html' %}
 {% load static humanize %}
 
-{% block title %}Кассын бүртгэл - Готопа{% endblock %}
+{% block title %}{% if kind == 'BANK' %}Банкны бүртгэл{% else %}Кассын бүртгэл{% endif %} - Готопа{% endblock %}
 
 {% block content %}
 <div class="bg-gray-100 min-h-screen py-6">
@@ -11,13 +11,19 @@
         <!-- Гарчиг -->
         <div class="mb-6 flex flex-wrap justify-between items-center gap-3 no-print">
             <div>
-                <h2 class="text-3xl font-bold text-secondary">💵 Кассын бүртгэл</h2>
-                <p class="text-gray-600 mt-1">Бэлэн мөнгөний орлого, зарлага, үлдэгдэл</p>
+                <h2 class="text-3xl font-bold text-secondary">{% if kind == 'BANK' %}🏦 Банкны бүртгэл{% else %}💵 Кассын бүртгэл{% endif %}</h2>
+                <p class="text-gray-600 mt-1">{% if kind == 'BANK' %}Харилцах дансны орлого, зарлага, үлдэгдэл{% else %}Бэлэн мөнгөний орлого, зарлага, үлдэгдэл{% endif %}</p>
             </div>
             <div class="flex flex-wrap gap-2">
+                {% if kind == 'BANK' %}
+                <a href="{% url 'main:bank_transaction_list' %}{% if archive_mode %}?archive=1{% endif %}" class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-semibold">
+                    <i class="fas fa-list mr-1"></i>Холбох жагсаалт
+                </a>
+                {% else %}
                 <a href="{% url 'main:cash_transaction_create' %}" class="bg-primary text-white px-5 py-2 rounded-lg hover:bg-opacity-90 font-bold">
                     + Шинэ гүйлгээ
                 </a>
+                {% endif %}
                 <a href="?{{ export_query }}{% if export_query %}&{% endif %}export=csv" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold">
                     <i class="fas fa-file-excel mr-1"></i>Excel (CSV)
                 </a>
@@ -53,11 +59,11 @@
                         <input type="date" name="date_to" value="{{ f.date_to }}" class="filter-input">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Кассын данс</label>
-                        <select name="cash_account" class="filter-input">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{% if kind == 'BANK' %}Банк{% else %}Кассын данс{% endif %}</label>
+                        <select name="{{ account_param }}" class="filter-input">
                             <option value="">-- Бүгд --</option>
-                            {% for account in cash_accounts %}
-                            <option value="{{ account.id|stringformat:'d' }}" {% if f.cash_account == account.id|stringformat:'d' %}selected{% endif %}>
+                            {% for account in accounts %}
+                            <option value="{{ account.id|stringformat:'d' }}" {% if f.account == account.id|stringformat:'d' %}selected{% endif %}>
                                 {{ account.code }} - {{ account.name }}
                             </option>
                             {% endfor %}
@@ -137,7 +143,7 @@
                         <option value="asc" {% if f.order == 'asc' %}selected{% endif %}>Хуучнаас шинэ рүү</option>
                         <option value="desc" {% if f.order == 'desc' %}selected{% endif %}>Шинээс хуучин руу</option>
                     </select>
-                    <a href="{% url 'main:cash_transaction_list' %}{% if archive_mode %}?archive=1{% endif %}" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">
+                    <a href="{{ request.path }}{% if archive_mode %}?archive=1{% endif %}" class="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500">
                         <i class="fas fa-redo mr-1"></i>Цэвэрлэх
                     </a>
                     <button type="submit" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-opacity-90 font-semibold">
@@ -167,16 +173,42 @@
             </div>
         </div>
 
+        {% for m in balance_mismatches %}
+        <div class="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3 mb-4 no-print">
+            <i class="fas fa-exclamation-triangle mr-1"></i>
+            <b>{{ m.account.code }} {{ m.account.name }}</b>: {{ m.date|date:"Y-m-d" }}-ны хуулгын үлдэгдэл <b>{{ m.statement|floatformat:0 }}₮</b>,
+            системд тооцоолсон <b>{{ m.computed|floatformat:0 }}₮</b> (зөрүү {{ m.difference|floatformat:0 }}₮).
+            Хуулга давхар импортлогдсон эсвэл дансны эхний үлдэгдэл буруу байж болно.
+        </div>
+        {% endfor %}
+
+        {% if account_balances %}
+        <div class="bg-white rounded-lg shadow-md p-4 mb-6 no-print">
+            <div class="text-sm font-semibold text-gray-700 mb-2">Дансаар задаргаа</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                {% for b in account_balances %}
+                <a href="?{{ account_param }}={{ b.account.id|stringformat:'d' }}{% if f.date_from %}&date_from={{ f.date_from }}{% endif %}{% if f.date_to %}&date_to={{ f.date_to }}{% endif %}{% if archive_mode %}&archive=1{% endif %}"
+                   class="block border border-gray-200 rounded-lg px-3 py-2 hover:border-primary hover:bg-gray-50">
+                    <div class="text-xs text-gray-500 truncate">{{ b.account.code }} {{ b.account.name }}</div>
+                    <div class="font-bold {% if b.closing < 0 %}text-red-700{% else %}text-gray-800{% endif %}">{{ b.closing|floatformat:0 }}₮</div>
+                    <div class="text-[11px] text-gray-400">Эхний {{ b.opening|floatformat:0 }}₮</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {% if secondary_filtered %}
         <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg px-4 py-3 mb-4 no-print">
-            Шүүлт идэвхтэй: {{ row_count }} гүйлгээ харагдаж байна. <b>Үлдэгдэл</b> багана нь шүүлтээс үл хамааран тухайн гүйлгээний дараах кассын бодит үлдэгдлийг харуулна.
+            Шүүлт идэвхтэй: {{ row_count }} гүйлгээ харагдаж байна. <b>Үлдэгдэл</b> багана нь шүүлтээс үл хамааран тухайн гүйлгээний дараах {% if kind == 'BANK' %}дансны{% else %}кассын{% endif %} бодит үлдэгдлийг харуулна.
         </div>
         {% endif %}
 
         <!-- Тайлан хүснэгт -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
             <div class="print-only p-4 border-b">
-                <h1 class="text-xl font-bold text-center">Кассын гүйлгээний тайлан</h1>
+                <h1 class="text-xl font-bold text-center">{% if kind == 'BANK' %}Банкны гүйлгээний тайлан{% else %}Кассын гүйлгээний тайлан{% endif %}</h1>
+                {% if kind == 'BANK' %}<p class="text-center text-sm text-gray-600">{% if f.account %}{% for a in accounts %}{% if f.account == a.id|stringformat:'d' %}{{ a.code }} {{ a.name }}{% endif %}{% endfor %}{% else %}Бүх банк{% endif %}</p>{% endif %}
                 <p class="text-center text-sm text-gray-600">
                     Хугацаа: {% if f.date_from %}{{ f.date_from }}{% elif books_start_date %}{{ books_start_date|date:"Y-m-d" }}{% else %}эхлэлээс{% endif %}
                     — {% if f.date_to %}{{ f.date_to }}{% else %}өнөөдөр{% endif %}
@@ -184,7 +216,11 @@
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="ledger w-full text-sm">
+                    <colgroup>
+                        <col class="c-no"><col class="c-date"><col class="c-desc"><col class="c-cp">
+                        <col class="c-amt"><col class="c-amt"><col class="c-amt"><col class="c-act no-print">
+                    </colgroup>
                     <thead class="bg-gray-50 border-b">
                         <tr>
                             <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">№</th>
@@ -204,9 +240,9 @@
                             <td class="px-3 py-2 text-gray-400">{{ forloop.counter }}</td>
                             <td class="px-3 py-2 whitespace-nowrap">{{ row.tx.transaction_date|date:"Y-m-d" }}</td>
                             <td class="px-3 py-2 max-w-md">
-                                <a href="{% url 'main:cash_transaction_edit' row.tx.id %}?return_to={{ request.get_full_path|urlencode }}" class="text-secondary hover:text-primary hover:underline">{{ row.tx.description }}</a>
+                                <a href="{% if kind == 'BANK' %}{% url 'main:link_bank_transaction_to_journal' row.tx.id %}{% else %}{% url 'main:cash_transaction_edit' row.tx.id %}{% endif %}?return_to={{ request.get_full_path|urlencode }}" class="text-secondary hover:text-primary hover:underline">{{ row.tx.description }}</a>
                                 <div class="text-xs text-gray-400 no-print">
-                                    {% if not f.cash_account and cash_accounts|length > 1 %}{{ row.tx.bank_account.code }} · {% endif %}
+                                    {% if not f.account and accounts|length > 1 %}{{ row.tx.bank_account.code }}{% if kind == 'BANK' %} {{ row.tx.bank_account.name }}{% endif %} · {% endif %}
                                     {% if row.tx.offset_account %}Эсрэг: {{ row.tx.offset_account.code }} {{ row.tx.offset_account.name }}{% endif %}
                                     {% if row.tx.transfer_source_id %}<span class="text-purple-600">⇄ харилцахын гүйлгээнээс</span>{% endif %}
                                 </div>
@@ -231,7 +267,11 @@
                                         {% else %}
                                             <a href="{% url 'main:link_bank_transaction_to_journal' row.tx.id %}?return_to={{ request.get_full_path|urlencode }}" class="act-btn bg-primary hover:bg-opacity-90" title="Журналд холбох"><i class="fas fa-link"></i></a>
                                         {% endif %}
+                                        {% if kind == 'BANK' %}
+                                        {% if row.tx.accounting_entry_id %}<a href="{% url 'main:link_bank_transaction_to_journal' row.tx.id %}?return_to={{ request.get_full_path|urlencode }}" class="act-btn bg-blue-500 hover:bg-blue-600" title="Холболт засах"><i class="fas fa-pen"></i></a>{% endif %}
+                                        {% else %}
                                         <a href="{% url 'main:cash_transaction_edit' row.tx.id %}?return_to={{ request.get_full_path|urlencode }}" class="act-btn bg-blue-500 hover:bg-blue-600" title="Засах"><i class="fas fa-pen"></i></a>
+                                        {% endif %}
                                         {% if row.has_links %}
                                         <form method="post" action="{% url 'main:unlink_bank_transaction' row.tx.id %}" onsubmit="return confirm('Энэ гүйлгээтэй холбогдсон баримтыг таслах уу?')">
                                             {% csrf_token %}
@@ -239,8 +279,10 @@
                                             <button type="submit" class="act-btn bg-amber-500 hover:bg-amber-600" title="Холбоос таслах"><i class="fas fa-unlink"></i></button>
                                         </form>
                                         {% endif %}
+                                        {% if kind != 'BANK' %}
                                         <a href="{% url 'main:cash_transaction_delete' row.tx.id %}" class="act-btn bg-red-500 hover:bg-red-600" title="Устгах"
                                            onclick="return confirm('Энэ гүйлгээг устгах уу?')"><i class="fas fa-trash"></i></a>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
                             </td>
@@ -277,12 +319,26 @@
     .act-btn { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; border-radius: 0.375rem; color: #fff; font-size: 0.75rem; }
     .print-only { display: none; }
     @media print {
+        @page { size: A4; margin: 10mm; }
         .no-print, nav, header, footer { display: none !important; }
         .print-only { display: block !important; }
         body, .bg-gray-100 { background: white !important; }
+        .bg-gray-100.min-h-screen { padding: 0 !important; min-height: 0 !important; }
+        .container { padding: 0 !important; }
         .shadow-md { box-shadow: none !important; }
-        table { font-size: 11px; }
-        th, td { padding: 4px 6px !important; }
+        /* Бүх багана (ялангуяа Үлдэгдэл) цаасанд багтана: тогтмол өргөн, утга мөр шилжинэ */
+        table.ledger { width: 100% !important; table-layout: fixed; font-size: 10px; }
+        table.ledger col.c-no { width: 4%; }
+        table.ledger col.c-date { width: 10%; }
+        table.ledger col.c-desc { width: 34%; }
+        table.ledger col.c-cp { width: 16%; }
+        table.ledger col.c-amt { width: 12%; }
+        table.ledger col.c-act { width: 0; }
+        table.ledger td, table.ledger th { padding: 3px 4px !important; overflow-wrap: anywhere; }
+        table.ledger td.max-w-md { max-width: none !important; }
+        table.ledger tr { break-inside: avoid; }
+        table.ledger thead { display: table-header-group; }
+        table.ledger tfoot { display: table-row-group; }  /* нийт дүн зөвхөн төгсгөлд нэг удаа */
         a { color: inherit !important; text-decoration: none !important; }
     }
 </style>

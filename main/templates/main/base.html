@@ -205,6 +205,14 @@
             left: 8px;
             right: 8px;
         }
+
+        /* Хэвлэх: хажуугийн цэс, толгой, хөлийг нууж агуулгыг цаасны бүтэн өргөнөөр */
+        @media print {
+            #sidebar, #main-header, #messagesContainer, footer { display: none !important; }
+            .md\:ml-56 { margin-left: 0 !important; }
+            .container { max-width: none !important; }
+            .overflow-x-auto { overflow: visible !important; }
+        }
     </style>
 
 </head>

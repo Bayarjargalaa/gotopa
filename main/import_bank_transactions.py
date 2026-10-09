@@ -125,9 +125,21 @@ def sync_sale_revenue_journal(bt, user, dry_run=False):
     if sale_alloc == 0 and bt.income_sale_id:
         sale_alloc = bt.income_amount or Decimal('0')
 
-    # Хосолсон хуваарилалт — гараар ангилуулна
+    # Хосолсон хуваарилалт (сурагчийн төлбөр + борлуулалт): сурагчийн ангиллыг нягтлан
+    # хийсэн бол хоёр хэсгийг тусад нь бичнэ, эс бөгөөс гараар ангилуулна
     if student_alloc > 0:
+        if bt.offset_account_id and not dry_run:
+            sync_mixed_income_journal(bt, user)
+            return 'updated'
         return 'skipped'
+
+    # Өмнө нь хосолсон байсан (сурагчийн хэсэг нь цуцлагдсан) — хоёр бичилтийг цэвэрлээд
+    # доорх энгийн борлуулалтын журнал руу шилжинэ
+    if bt.sale_revenue_entry_id and not dry_run:
+        drop_entry(bt, 'sale_revenue_entry')
+        drop_entry(bt, 'accounting_entry')
+        bt.offset_account = None
+        bt.save(update_fields=['offset_account'])
 
     revenue_account = ChartOfAccounts.objects.filter(code=SALE_REVENUE_CODE).first()
     if not revenue_account or not bt.bank_account_id:
@@ -216,6 +228,61 @@ def sync_sale_revenue_journal(bt, user, dry_run=False):
             result = 'offset'
 
     return result
+
+
+def drop_entry(bt, field):
+    """Гүйлгээнээс журналын бичилтийг салгаж устгана (дансны үлдэгдэл буцна).
+
+    Эхлээд холбоосыг салгана: AccountingEntry.delete() нь accounting_entry-ээр
+    холбогдсон гүйлгээний хуваарилалтуудыг устгадаг тул.
+    """
+    entry = getattr(bt, field)
+    if entry is None:
+        return
+    setattr(bt, field, None)
+    bt.save(update_fields=[field])
+    entry.delete()
+
+
+def sync_mixed_income_journal(bt, user):
+    """Сурагчийн төлбөр + борлуулалтад хуваагдсан орлогын гүйлгээний журнал.
+
+    Нэг гүйлгээний орлого хоёр өөр орлогын дансанд хуваагдана (жишээ нь POS сэттлмэнт —
+    борлуулалт 152,000, сургалтын төлбөр 1,000,000):
+      accounting_entry   = Дт банк / Кт эсрэг данс (сургалтын орлого) — сурагчийн хэсэг
+      sale_revenue_entry = Дт банк / Кт 510101 Борлуулалтын орлого     — борлуулалтын хэсэг
+    Хуваарилалт өөрчлөгдөх бүрт хоёуланг дахин үүсгэнэ.
+    """
+    from decimal import Decimal
+    from django.db import transaction as db_transaction
+    from django.db.models import Sum
+
+    student = bt.allocations.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    sale = bt.sale_allocations.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    revenue_account = ChartOfAccounts.objects.filter(code=SALE_REVENUE_CODE).first()
+    if not bt.bank_account_id or not revenue_account:
+        return
+
+    date_key = bt.transaction_date.strftime('%Y%m%d')
+    prefix = 'CSH' if bt.account_type == 'CASH' else 'BNK'
+
+    def create(credit_account, amount):
+        _, number = next_entry_number(f'{prefix}{date_key}')
+        return create_accounting_entry_safe(
+            entry_date=bt.transaction_date, entry_number=number, description=bt.description,
+            debit_account=bt.bank_account, debit_amount=amount,
+            credit_account=credit_account, credit_amount=amount, created_by=user,
+        )
+
+    with db_transaction.atomic():
+        drop_entry(bt, 'accounting_entry')
+        drop_entry(bt, 'sale_revenue_entry')
+        if student > 0 and bt.offset_account_id:
+            bt.accounting_entry = create(bt.offset_account, student)
+        if sale > 0:
+            bt.sale_revenue_entry = create(revenue_account, sale)
+        bt.is_processed = bool(bt.accounting_entry_id) and student + sale >= (bt.income_amount or 0)
+        bt.save(update_fields=['accounting_entry', 'sale_revenue_entry', 'is_processed'])
 
 
 def is_cash_account(account):
@@ -462,11 +529,12 @@ def import_xac_statement(df, bank_account, header_info=None):
 
     Багана: Огноо | Гүйлгээний утга | Харьцсан данс | Гүйлгээний дугаар | Орлого | Зарлага | Үлдэгдэл
 
-    Давхардал: Хас банкны гүйлгээний дугаар дангаараа давтагддаггүй биш — шилжүүлэг болон
-    түүний шимтгэл ижил дугаартай ирдэг. Мөн цаг байхгүй тул нэг өдөр ижил утга, ижил дүнтэй
-    хоёр шимтгэл байж болно. Тиймээс (огноо, гүйлгээний дугаар, орлого, зарлага, гүйлгээний
-    дараах үлдэгдэл)-ээр давхардлыг шалгана. Үлдэгдэл нь гүйлгээ бүрийн дараа өөрчлөгддөг тул
-    хуулгын мөр бүрийг өвөрмөц тодорхойлно.
+    Давхардал: шилжүүлэг болон түүний шимтгэл ижил гүйлгээний дугаартай ирдэг тул
+    (огноо, гүйлгээний дугаар, орлого, зарлага)-аар шалгана. Гүйлгээний дараах үлдэгдлийг
+    түлхүүрт оруулахгүй: хуулгад цаг байхгүй тул нэг өдрийн мөрүүдийн (жишээ нь сэттлмэнт,
+    шимтгэл) дарааллыг банк татах бүрт өөрөөр гаргаж, үлдэгдэл нь өөр гардаг — үүнээс болж
+    давхцсан хуулгыг дахин импортлоход гүйлгээ давхардаж байсан. Ижил түлхүүртэй хэд хэдэн
+    жинхэнэ мөр байж болох тул файлд N дахь удаа гарсан мөрийг DB-д N-ээс цөөн байвал л үүсгэнэ.
     """
     header_info = header_info or {}
     rows = []
@@ -547,26 +615,23 @@ def import_xac_statement(df, bank_account, header_info=None):
             'transaction_date': r['date'],
             'income_amount': r['income'],
             'expense_amount': r['expense'],
-            'closing_balance': r['balance'],
         }
 
     created_count = 0
     skipped_count = 0
     other_account_count = 0
-    seen_in_file = set()
+    file_occurrences = {}
 
     with transaction.atomic():
         for r in rows:
             key = tuple(dedup_filter(r).values())
-            if key in seen_in_file:
-                skipped_count += 1
-                continue
-            seen_in_file.add(key)
+            occurrence = file_occurrences.get(key, 0)
+            file_occurrences[key] = occurrence + 1
 
-            existing = BankTransaction.objects.filter(**dedup_filter(r)).first()
-            if existing:
+            matches = BankTransaction.objects.filter(**dedup_filter(r))
+            if matches.count() > occurrence:
                 skipped_count += 1
-                if existing.bank_account_id != bank_account.id:
+                if not matches.filter(bank_account=bank_account).exists():
                     other_account_count += 1
                 continue
 
@@ -756,12 +821,14 @@ def import_bank_transactions(excel_file, bank_account):
                     'expense_amount': expense
                 }
                 
-                # Цаг байвал цагаар нь шалгах (банкны шимтгэл гэх мэт давхардах магадлалтай)
-                if transaction_time:
-                    filter_kwargs['transaction_time'] = transaction_time
-                # Хаан банк мөр бүрийн эцсийн үлдэгдэлтэй — энэ нь мөрийг өвөрмөц болгоно
+                # Хаан банк мөр бүрийн эцсийн үлдэгдэлтэй — энэ нь мөрийг өвөрмөц болгоно.
+                # Цагийг тэр үед оруулахгүй: сарын хураамж гэх мэт гүйлгээний цаг хуулга татах
+                # бүрт өөр гардаг (жишээ нь 09:54 ба 06:30) тул давхардал үүсгэж байсан.
                 if closing_bal is not None:
                     filter_kwargs['closing_balance'] = closing_bal
+                # Үлдэгдэлгүй (Голомт) бол цагаар ялгана (нэг өдрийн олон шимтгэл)
+                elif transaction_time:
+                    filter_kwargs['transaction_time'] = transaction_time
 
                 # Ижил түлхүүртэй хэд дэх мөр вэ гэдгийг тоолно: нэг өдөр ижил утга, ижил дүнтэй
                 # хоёр жинхэнэ гүйлгээ (жишээ нь хоёр шимтгэл) байж болно. Файлд N дахь удаа гарч

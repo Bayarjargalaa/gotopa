@@ -155,12 +155,6 @@ SIDEBAR_MENU = [
                 'permissions': ['is_admin', 'is_manager', 'is_accountant'],
             },
             {
-                'label': 'POS тооцоо нийлэх',
-                'url_name': 'main:pos_settlement_list',
-                'icon': 'fas fa-credit-card',
-                'permissions': ['is_admin', 'is_manager', 'is_accountant'],
-            },
-            {
                 'label': 'Кассын бүртгэл',
                 'url_name': 'main:cash_transaction_list',
                 'icon': 'fas fa-money-bill-wave',

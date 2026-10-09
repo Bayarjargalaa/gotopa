@@ -139,8 +139,8 @@
 
                 {% if sale.pos_bank_account and remaining > 0 %}
                 <div class="mt-3 text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5">
-                    💳 POS-ын мөнгө {{ sale.pos_bank_account.name }}-ны хуулгад "СЕТТЛЕМЕНТ ХААВ" гэж орж ирнэ.
-                    <a href="{% url 'main:pos_settlement_list' %}" class="font-semibold hover:underline">POS тооцоо нийлэх →</a>
+                    💳 POS-ын мөнгө {{ sale.pos_bank_account.name }}-ны хуулгад "СЕТТЛЕМЕНТ ХААВ" гэж дараа өдөр нь орж ирнэ.
+                    <a href="#linkSection" onclick="document.getElementById('linkSection').open = true" class="font-semibold hover:underline">Сэттлмэнттэй холбох ↓</a>
                 </div>
                 {% endif %}
 
@@ -231,6 +231,7 @@
                 <option value="">Банк + Касс</option>
                 <option value="BANK" {% if q_actype == 'BANK' %}selected{% endif %}>Банк</option>
                 <option value="CASH" {% if q_actype == 'CASH' %}selected{% endif %}>Касс</option>
+                <option value="POS" {% if q_actype == 'POS' %}selected{% endif %}>💳 POS сэттлмэнт</option>
             </select>
             <select name="q_txtype" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
                 <option value="">Орлого + Зарлага</option>
@@ -245,7 +246,7 @@
 
         <div class="divide-y divide-gray-100">
             {% for tx in tx_page_obj %}
-            <div class="px-4 py-2.5 flex flex-wrap items-center gap-3 {% if tx.is_exact %}bg-green-50{% endif %}">
+            <div class="px-4 py-2.5 flex flex-wrap items-center gap-3 {% if tx.is_pos_match %}bg-indigo-50{% elif tx.is_exact %}bg-green-50{% endif %}">
                 <div class="w-24 shrink-0 text-sm">
                     <div>{{ tx.transaction_date|date:"Y-m-d" }}</div>
                     <div class="text-xs {% if tx.account_type == 'CASH' %}text-amber-700{% else %}text-blue-700{% endif %}">{% if tx.account_type == 'CASH' %}Касс{% else %}{{ tx.bank_account.name|default:tx.get_bank_name_display }}{% endif %}</div>
@@ -255,6 +256,11 @@
                     <div class="text-xs text-gray-500">
                         {% if tx.counterparty_name and tx.counterparty_name != 'nan' %}{{ tx.counterparty_name }} · {% endif %}
                         {% if tx.income_amount > 0 %}Орлого {{ tx.income_amount|floatformat:0 }}₮{% else %}Зарлага {{ tx.expense_amount|floatformat:0 }}₮{% endif %}
+                        {% if tx.settlement_date %}
+                        <span class="ml-1 px-1.5 py-0.5 rounded {% if tx.is_pos_match %}bg-indigo-600 text-white{% else %}bg-gray-200 text-gray-600{% endif %} text-[10px] font-semibold"
+                              title="Сэттлмэнт нь тухайн өдрийн бүх POS борлуулалтын нийлбэр">💳 {{ tx.settlement_date|date:"m/d" }}-ны POS сэттлмэнт{% if tx.is_pos_match %} · энэ борлуулалтын өдөр{% endif %}</span>
+                        <span class="text-gray-400">· холбох боломжтой {{ tx.available_for_link|floatformat:0 }}₮</span>
+                        {% endif %}
                         {% if tx.is_exact %}<span class="ml-1 px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-semibold">Үлдэгдэлтэй тэнцүү</span>{% endif %}
                     </div>
                 </div>
@@ -271,10 +277,10 @@
                     <input type="hidden" name="q_txtype" value="{{ q_txtype }}">
                     <input type="hidden" name="tx_page" value="{{ tx_page_number }}">
                     <input type="hidden" name="return_to" value="{{ return_to }}">
-                    <input type="number" name="link_amount" value="{{ tx.available_for_link|floatformat:'2u' }}" min="0"
+                    <input type="number" name="link_amount" value="{{ tx.default_link_amount|floatformat:'2u' }}" min="0"
                            max="{{ tx.available_for_link|floatformat:'2u' }}" step="0.01" title="Холбох дүн"
                            class="w-28 px-2 py-1 border border-gray-300 rounded text-sm text-right">
-                    <button type="submit" class="px-3 py-1 rounded {% if tx.is_exact %}bg-green-600 hover:bg-green-700{% else %}bg-primary hover:bg-opacity-90{% endif %} text-white text-sm whitespace-nowrap">Холбох</button>
+                    <button type="submit" class="px-3 py-1 rounded {% if tx.is_pos_match %}bg-indigo-600 hover:bg-indigo-700{% elif tx.is_exact %}bg-green-600 hover:bg-green-700{% else %}bg-primary hover:bg-opacity-90{% endif %} text-white text-sm whitespace-nowrap">Холбох</button>
                 </form>
             </div>
             {% empty %}

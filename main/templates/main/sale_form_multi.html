@@ -404,7 +404,8 @@ function pickProduct(rowId, product) {
     document.getElementById('product_' + rowId).value = product.id;
     document.getElementById('productSearch_' + rowId).value = product.name;
     document.getElementById('productDrop_' + rowId).classList.add('hidden');
-    document.getElementById('price_' + rowId).value = product.selling_price;
+    // Үнэ тогтоогоогүй (0) бараа бол хоосон үлдээж, оруулахыг сануулна
+    document.getElementById('price_' + rowId).value = product.selling_price || '';
     updateRow(rowId);
     // Сүүлийн мөрөнд бараа сонговол доор нь шинэ хоосон мөр автоматаар нэмнэ
     if (productRows[productRows.length - 1] === rowId) addProductRow(false);

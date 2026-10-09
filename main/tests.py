@@ -380,6 +380,108 @@ class MultiPurchaseTests(TestCase):
         supplier.refresh_from_db()
         self.assertEqual(supplier.balance, 5000)
 
+    def test_link_bank_expense_to_bank_purchase_from_link_page(self):
+        from .models import AccountingEntry, BankTransaction, Purchase
+        self.post_purchase(payment_method='BANK', bank_account=str(self.bank.id))
+        purchase = Purchase.objects.get()
+        bank_tx = BankTransaction.objects.create(account_type='BANK', bank_account=self.bank, transaction_date=date.today(),
+                                                 description='бараа', expense_amount=25000)
+        url = reverse('main:link_bank_transaction_to_journal', args=[bank_tx.id])
+        page = self.client.get(url)
+        self.assertEqual([p.id for p in page.context['purchase_candidates']], [purchase.id])
+        self.assertEqual(page.context['link_data']['initial_mode'], 'purchase')
+
+        self.client.post(url, {'link_purchase': str(purchase.id)})
+        bank_tx.refresh_from_db()
+        self.assertEqual(bank_tx.accounting_entry.related_purchase, purchase)
+        self.assertEqual((bank_tx.offset_account.code, bank_tx.expense_type), ('150101', 'PRODUCT_PURCHASE'))
+
+        # Журнал цуцлахад худалдан авалтын журнал үлдэж, гүйлгээ л салгагдана
+        self.client.post(url, {'unlink_type': 'journal'})
+        bank_tx.refresh_from_db()
+        self.assertIsNone(bank_tx.accounting_entry)
+        self.assertEqual(AccountingEntry.objects.filter(related_purchase=purchase).count(), 1)
+
+    def test_bank_expense_pays_credit_purchase_and_unlink_reverts(self):
+        from .models import AccountingEntry, BankTransaction, Purchase
+        supplier = Counterparty.objects.create(name='Нийлүүлэгч', counterparty_type='SUPPLIER')
+        self.post_purchase(payment_method='CREDIT', counterparty=str(supplier.id))
+        purchase = Purchase.objects.get()
+        bank_tx = BankTransaction.objects.create(account_type='BANK', bank_account=self.bank, transaction_date=date.today(),
+                                                 description='өглөг', expense_amount=10000)
+        url = reverse('main:link_bank_transaction_to_journal', args=[bank_tx.id])
+        self.client.post(url, {'link_purchase': str(purchase.id)})
+        purchase.refresh_from_db()
+        supplier.refresh_from_db()
+        bank_tx.refresh_from_db()
+        self.assertEqual((purchase.paid_amount, purchase.status, supplier.balance), (10000, 'RECEIVED', 15000))
+        entry = bank_tx.accounting_entry
+        self.assertEqual((entry.debit_account.code, entry.credit_account.code, entry.related_purchase), ('310101', '110101', purchase))
+
+        # Үлдэгдлээс их дүнтэй гүйлгээ холбогдохгүй
+        big_tx = BankTransaction.objects.create(account_type='BANK', bank_account=self.bank, transaction_date=date.today(),
+                                                description='их', expense_amount=20000)
+        self.client.post(reverse('main:link_bank_transaction_to_journal', args=[big_tx.id]), {'link_purchase': str(purchase.id)})
+        big_tx.refresh_from_db()
+        self.assertIsNone(big_tx.accounting_entry)
+
+        self.client.post(url, {'unlink_type': 'all'})
+        purchase.refresh_from_db()
+        supplier.refresh_from_db()
+        self.assertEqual((purchase.paid_amount, supplier.balance), (0, 25000))
+        self.assertFalse(AccountingEntry.objects.filter(debit_account__code='310101').exists())
+
+    def test_create_purchase_from_bank_transaction_in_embed(self):
+        from .models import BankTransaction, Purchase
+        supplier = Counterparty.objects.create(name='Нийлүүлэгч', counterparty_type='SUPPLIER')
+        bank_tx = BankTransaction.objects.create(account_type='BANK', bank_account=self.bank, transaction_date=date.today(),
+                                                 description='бараа авсан', expense_amount=25000, counterparty=supplier)
+        link_page = self.client.get(reverse('main:link_bank_transaction_to_journal', args=[bank_tx.id]))
+        self.assertTrue(link_page.context['can_create_purchase'])
+        self.assertContains(link_page, 'purchaseFrame')
+
+        url = reverse('main:purchase_create_multi') + f'?embed=1&bank_tx={bank_tx.id}'
+        page = self.client.get(url)
+        self.assertEqual(page['X-Frame-Options'], 'SAMEORIGIN')
+        self.assertTemplateUsed(page, 'main/base_embed.html')
+        prefill = page.context['prefill_data']
+        self.assertEqual((prefill['tx'], prefill['payment_method'], prefill['account'], prefill['supplier']['id']),
+                         (bank_tx.id, 'BANK', self.bank.id, str(supplier.id)))
+        self.assertIn(bank_tx.id, [t['id'] for t in page.context['transactions_data']])
+
+        response = self.post_purchase_to(url, payment_method='BANK', bank_account=str(self.bank.id),
+                                         bank_transaction=str(bank_tx.id), counterparty=str(supplier.id))
+        self.assertTemplateUsed(response, 'main/embed_done.html')
+        bank_tx.refresh_from_db()
+        self.assertEqual(bank_tx.accounting_entry.related_purchase, Purchase.objects.get())
+
+    def test_entered_line_total_is_kept_and_unit_price_derived(self):
+        from decimal import Decimal
+        from .models import AccountingEntry, Purchase
+        self.client.post(reverse('main:purchase_create_multi'), {
+            'transaction_date': date.today().isoformat(), 'payment_method': 'BANK', 'bank_account': str(self.bank.id),
+            'product_1': str(self.p1.id), 'quantity_1': '3', 'price_1': '3333.33', 'total_1': '10000',
+            'product_2': str(self.p2.id), 'quantity_2': '2', 'price_2': '1500', 'total_2': '',
+        })
+        purchase = Purchase.objects.get()
+        self.assertEqual(purchase.total_amount, 13000)
+        m1 = purchase.stock_movements.get(product=self.p1)
+        self.assertEqual((m1.price, m1.total_amount), (Decimal('3333.33'), 10000))
+        self.assertEqual(purchase.stock_movements.get(product=self.p2).total_amount, 3000)
+        self.assertEqual(AccountingEntry.objects.get().debit_amount, 13000)
+
+        page = self.client.get(reverse('main:purchase_edit', args=[m1.id]))
+        self.assertEqual(page.context['edit_data']['items'][0]['total'], 10000)
+
+    def post_purchase_to(self, url, **extra):
+        data = {
+            'transaction_date': date.today().isoformat(),
+            'product_1': str(self.p1.id), 'quantity_1': '3', 'price_1': '5000',
+            'product_2': str(self.p2.id), 'quantity_2': '10', 'price_2': '1000',
+        }
+        data.update(extra)
+        return self.client.post(url, data)
+
     def test_legacy_movements_grouped_into_document(self):
         from .models import AccountingEntry, Purchase, StockMovement
         entry = AccountingEntry.objects.create(entry_number='PUR-OLD-1', entry_date=date.today(), description='хуучин',
@@ -508,6 +610,52 @@ class XacBankImportTests(TestCase):
         self.assertEqual((result['created'], result['skipped']), (2, 1))
         self.assertEqual(BankTransaction.objects.count(), 5)
 
+    def test_reimport_with_same_day_rows_reordered_creates_nothing(self):
+        """Цаггүй тул банк нэг өдрийн мөрүүдийг өөр дарааллаар (өөр үлдэгдэлтэй) гаргадаг."""
+        from .models import BankTransaction
+
+        self.run_import(XAC_ROWS)
+        reordered = [
+            XAC_ROWS[1][:6] + ('999,800.00',), XAC_ROWS[0][:6] + ('899,800.00',),  # шимтгэл түрүүлж
+            XAC_ROWS[3], XAC_ROWS[2], XAC_ROWS[4],
+        ]
+        result = self.run_import(reordered, name='b.xlsx')
+        self.assertEqual((result['created'], result['skipped']), (0, 5))
+        self.assertEqual(BankTransaction.objects.count(), 5)
+
+    def test_dedupe_removes_earlier_duplicates_keeping_linked_copy(self):
+        from .bank_dedup import find_duplicates, remove_duplicate
+        from .models import AccountingEntry, BankTransaction, ChartOfAccounts
+
+        self.run_import(XAC_ROWS)
+        # Хуучин (засахаас өмнөх) импортын давхардлыг дуурайх: өөр үлдэгдэлтэй, өөр импорт
+        original = BankTransaction.objects.get(reference_number='SX1', expense_amount=200)
+        dup = BankTransaction.objects.get(pk=original.pk)
+        dup.pk = None
+        dup.closing_balance = 999800
+        dup.save()
+        BankTransaction.objects.filter(pk=dup.pk).update(imported_at=original.imported_at.replace(year=2025))
+        fee_acc = ChartOfAccounts.objects.create(code='702701', name='Шимтгэл', account_type='EXPENSE')
+        entry = AccountingEntry.objects.create(
+            entry_number='F1', entry_date=dup.transaction_date, debit_account=fee_acc, credit_account=self.account,
+            debit_amount=200, credit_amount=200, description='шимтгэл')
+        BankTransaction.objects.filter(pk=dup.pk).update(accounting_entry=entry)
+
+        groups = find_duplicates()
+        self.assertEqual(len(groups), 1)
+        self.assertEqual([t.id for t in groups[0]['keep']], [dup.pk])       # журналтай нь үлдэнэ
+        self.assertEqual([t.id for t in groups[0]['remove']], [original.pk])
+        self.assertEqual(remove_duplicate(groups[0]['remove'][0]), [])
+        self.assertEqual(BankTransaction.objects.count(), 5)
+        self.assertEqual(find_duplicates(), [])
+
+    def test_dedupe_keeps_genuine_same_key_rows_from_one_import(self):
+        from .bank_dedup import find_duplicates
+        rows = list(XAC_ROWS)
+        rows.insert(2, ('2026-05-03', 'Банк хоорондын шилжүүлгийн шимтгэл', 'x-5006157789', 'SX1', '-', '200.00', '899,600.00'))
+        self.run_import(rows)
+        self.assertEqual(find_duplicates(), [])
+
     def test_same_statement_into_other_account_is_blocked_with_warning(self):
         from .models import BankTransaction, ChartOfAccounts
 
@@ -596,6 +744,16 @@ class KhanGolomtDuplicateTests(TestCase):
         result = self.run_import(self.KHAN_HEADER, self.KHAN_ROWS, 'k1.xlsx')
         self.assertEqual(result['created'], 2)
         result = self.run_import(self.KHAN_HEADER, self.KHAN_ROWS, 'k2.xlsx')
+        self.assertEqual((result['created'], result['skipped']), (0, 2))
+        self.assertEqual(BankTransaction.objects.count(), 2)
+
+    def test_khan_reimport_with_different_time_same_balance_creates_nothing(self):
+        """Хаан банк сарын хураамжийн цагийг хуулга бүрт өөрөөр гаргадаг (09:54 / 06:30)."""
+        from .models import BankTransaction
+
+        self.run_import(self.KHAN_HEADER, self.KHAN_ROWS, 'k1.xlsx')
+        shifted = [['2026-05-14T06:30'] + row[1:] for row in self.KHAN_ROWS]
+        result = self.run_import(self.KHAN_HEADER, shifted, 'k2.xlsx')
         self.assertEqual((result['created'], result['skipped']), (0, 2))
         self.assertEqual(BankTransaction.objects.count(), 2)
 
@@ -722,56 +880,157 @@ class PosSettlementTests(TestCase):
         # Орлогын журнал сэттлмэнт холбох хүртэл бичигдэхгүй
         self.assertFalse(AccountingEntry.objects.filter(credit_account__code='510101').exists())
 
-    def test_matched_settlement_links_sales_and_fee(self):
+    def test_settlement_links_many_sales(self):
+        """Банкны гүйлгээ → "Олон борлуулалттай холбох": тухайн өдрийн POS борлуулалт урьдчилан сонгогдоно."""
         from .models import AccountingEntry, Sale
-        self.post_pos_sale()
-        settlement, fee_tx = self.add_statement(20000, 200)
-        page = self.client.get(reverse('main:pos_settlement_list'))
-        self.assertEqual(page.context['matched_count'], 1)
-
-        self.client.post(reverse('main:pos_settlement_list'), {'action': 'link', 'settlement_id': settlement.id})
-        settlement.refresh_from_db(); fee_tx.refresh_from_db()
-        sale = Sale.objects.get()
-        self.assertEqual((sale.status, sale.paid_amount), ('PAID', 20000))
-        self.assertTrue(settlement.is_processed and fee_tx.is_processed)
-        self.assertEqual((settlement.accounting_entry.debit_account.code, settlement.accounting_entry.credit_account.code,
-                          settlement.accounting_entry.debit_amount), ('110103', '510101', 20000))
-        self.assertEqual((fee_tx.accounting_entry.debit_account.code, fee_tx.accounting_entry.credit_account.code,
-                          fee_tx.accounting_entry.debit_amount), ('702701', '110103', 200))
-        self.xac.refresh_from_db()
-        self.assertEqual(self.xac.debit_balance - self.xac.credit_balance, 19800)  # банкинд цэвэр 19,800
-
-        # Цуцлах — бүгд буцна
-        self.client.post(reverse('main:pos_settlement_list'), {'action': 'unlink', 'settlement_id': settlement.id})
-        settlement.refresh_from_db(); fee_tx.refresh_from_db()
-        self.assertFalse(settlement.is_processed or fee_tx.is_processed)
-        self.assertEqual(Sale.objects.get().status, 'DRAFT')
-        self.assertFalse(AccountingEntry.objects.filter(debit_account__code__in=['110103', '702701']).exists())
-
-    def test_mismatch_is_not_linked(self):
-        self.post_pos_sale()
-        settlement, _ = self.add_statement(30000, 300)
-        page = self.client.get(reverse('main:pos_settlement_list'))
-        self.assertEqual((page.context['matched_count'], page.context['mismatch_count']), (0, 1))
-        self.client.post(reverse('main:pos_settlement_list'), {'action': 'link', 'settlement_id': settlement.id})
-        settlement.refresh_from_db()
-        self.assertFalse(settlement.is_processed)
-
-    def test_link_all(self):
         self.post_pos_sale(qty='1')
         self.post_pos_sale(qty='3')
         settlement, _ = self.add_statement(40000, 400)
-        self.client.post(reverse('main:pos_settlement_list'), {'action': 'link_all'})
+        link_page = reverse('main:link_bank_transaction_to_journal', args=[settlement.id])
+        page = self.client.get(link_page)
+        self.assertEqual(page.context['multi_sale_day'], self.sale_day)
+        rows = page.context['multi_sale_rows']
+        self.assertEqual([(r['checked'], r['is_pos_day']) for r in rows], [(True, True), (True, True)])
+
+        data = {'sale_ids': [str(r['sale'].id) for r in rows]}
+        data.update({f"amount_{r['sale'].id}": str(r['amount']) for r in rows})
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]), data)
         settlement.refresh_from_db()
         self.assertEqual(settlement.sale_allocations.count(), 2)
+        self.assertTrue(settlement.is_processed)
+        self.assertEqual(list(Sale.objects.values_list('status', flat=True)), ['PAID', 'PAID'])
+        entry = settlement.accounting_entry
+        self.assertEqual((entry.debit_account.code, entry.credit_account.code, entry.debit_amount), ('110103', '510101', 40000))
 
-    def test_pending_excludes_days_with_settlement(self):
-        self.post_pos_sale()
-        page = self.client.get(reverse('main:pos_settlement_list'))
-        self.assertEqual(len(page.context['pending_sales']), 1)  # хуулга ирээгүй
-        self.add_statement(30000, 300)  # зөрүүтэй сэттлмэнт ирсэн
-        page = self.client.get(reverse('main:pos_settlement_list'))
-        self.assertEqual(len(page.context['pending_sales']), 0)
+        # Бүгдийг сонгохгүй илгээвэл холболт цуцлагдана
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]), {})
+        settlement.refresh_from_db()
+        self.assertFalse(settlement.sale_allocations.exists() or settlement.is_processed)
+        self.assertEqual(list(Sale.objects.values_list('status', flat=True)), ['DRAFT', 'DRAFT'])
+        self.assertFalse(AccountingEntry.objects.filter(credit_account__code='510101').exists())
+
+    def test_partially_linked_settlement_shows_all_sales_and_guards_old_form(self):
+        """1,152,000-аас 152,000-г 3 борлуулалтад холбосон үед эхнийх нь л тооцогдож 1,085,000 гэж харагдаж байсан."""
+        from .models import Sale
+        self.post_pos_sale(qty='1')
+        self.post_pos_sale(qty='3')
+        settlement, _ = self.add_statement(100000, 1000)
+        sales = list(Sale.objects.order_by('id'))
+        data = {'sale_ids': [str(x.id) for x in sales]}
+        data.update({f'amount_{x.id}': str(x.total_amount) for x in sales})
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]), data)
+
+        link_page = reverse('main:link_bank_transaction_to_journal', args=[settlement.id])
+        page = self.client.get(link_page)
+        self.assertIsNone(page.context['existing_sale_allocation'])
+        self.assertEqual(len(page.context['sale_allocations_all']), 2)
+        self.assertEqual(page.context['sale_alloc_left'], 60000)
+        self.assertContains(page, 'Холбогдоогүй үлдэгдэл 60,000₮')
+
+        # Банкны гүйлгээний жагсаалтын "Төлөв" баганад хүлээгдэж буй дүн
+        listing = self.client.get(reverse('main:bank_transaction_list'))
+        row = next(t for t in listing.context['transactions'] if t.id == settlement.id)
+        self.assertEqual((row.pending_amount, row.linked_amount), (60000, 40000))
+        self.assertContains(listing, '40,000₮ холбогдсон')
+
+        # Нэг борлуулалтын хуучин формоор хадгалахад бусад борлуулалтын холболт устах ёсгүй
+        self.client.post(link_page, {'offset_account': str(self.xac.id), 'income_type': 'PRODUCT_SALE', 'sale': str(sales[0].id)})
+        self.assertEqual(settlement.sale_allocations.count(), 2)
+        self.assertEqual(page.context['link_data']['fixed_sale_amount'], 40000)
+
+    def make_student(self):
+        from .models import ChartOfAccounts, Enrollment
+        tuition = ChartOfAccounts.objects.create(code='510102', name='Сургалтын төлбөрийн орлого', account_type='INCOME')
+        student = make_profile('posstudent', UserRole.STUDENT)
+        course = make_course()
+        Enrollment.objects.create(student=student, course=course, status='APPROVED')
+        return tuition, student, course
+
+    def test_settlement_split_between_sales_and_student_payment(self):
+        """Сэттлмэнтийн 40,000-г 2 борлуулалтад, үлдсэн 60,000-г сурагчийн төлбөрт — журнал хоёр дансанд."""
+        from .models import AccountingEntry, Sale
+        tuition, student, course = self.make_student()
+        self.post_pos_sale(qty='1')
+        self.post_pos_sale(qty='3')
+        settlement, _ = self.add_statement(100000, 1000)
+        sales = list(Sale.objects.order_by('id'))
+        data = {'sale_ids': [str(x.id) for x in sales]}
+        data.update({f'amount_{x.id}': str(x.total_amount) for x in sales})
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]), data)
+
+        link_page = reverse('main:link_bank_transaction_to_journal', args=[settlement.id])
+        self.client.post(link_page, {
+            'offset_account': str(tuition.id), 'income_type': 'STUDENT_PAYMENT',
+            'allocations[0][student]': str(student.id), 'allocations[0][course]': str(course.id),
+            'allocations[0][month_year]': '2026-10', 'allocations[0][amount]': '60000',
+        })
+        settlement.refresh_from_db()
+        self.assertEqual(settlement.sale_allocations.count(), 2)  # борлуулалтын холболт хэвээр
+        self.assertEqual(list(settlement.allocations.values_list('amount', flat=True)), [60000])
+        main, sale_part = settlement.accounting_entry, settlement.sale_revenue_entry
+        self.assertEqual((main.debit_account.code, main.credit_account.code, main.debit_amount), ('110103', '510102', 60000))
+        self.assertEqual((sale_part.debit_account.code, sale_part.credit_account.code, sale_part.debit_amount), ('110103', '510101', 40000))
+        self.assertTrue(settlement.is_processed)
+        self.assertEqual(set(Sale.objects.values_list('status', flat=True)), {'PAID'})
+
+        # Олон борлуулалтын хэсгээр нэгийг хасахад — сурагчийн хэсэг хэвээр, борлуулалтын бичилт шинэчлэгдэнэ
+        keep = sales[1]
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]),
+                         {'sale_ids': [str(keep.id)], f'amount_{keep.id}': str(keep.total_amount)})
+        settlement.refresh_from_db()
+        self.assertEqual((settlement.accounting_entry.debit_amount, settlement.sale_revenue_entry.debit_amount), (60000, 30000))
+        self.assertFalse(settlement.is_processed)  # 10,000 холбогдоогүй
+        self.assertEqual(Sale.objects.get(pk=sales[0].pk).status, 'DRAFT')
+
+        # Бүгдийг таслах — хоёр бичилт устаж, борлуулалт буцна
+        self.client.post(link_page, {'unlink_type': 'all'})
+        settlement.refresh_from_db()
+        self.assertIsNone(settlement.accounting_entry)
+        self.assertIsNone(settlement.sale_revenue_entry)
+        self.assertFalse(AccountingEntry.objects.filter(debit_account=self.xac).exists())
+        self.assertEqual(set(Sale.objects.values_list('status', flat=True)), {'DRAFT'})
+
+    def test_link_more_than_settlement_rejected(self):
+        from .models import Sale
+        self.post_pos_sale(qty='1')
+        self.post_pos_sale(qty='3')
+        settlement, _ = self.add_statement(30000, 300)
+        sales = list(Sale.objects.all())
+        data = {'sale_ids': [str(s.id) for s in sales]}
+        data.update({f'amount_{s.id}': str(s.total_amount) for s in sales})
+        self.client.post(reverse('main:bank_transaction_link_sales', args=[settlement.id]), data)
+        self.assertFalse(settlement.sale_allocations.exists())
+
+    def test_sale_detail_suggests_settlement_of_sale_day(self):
+        """Борлуулалт → гүйлгээ: өөр өдрийн, дүн таарсан сэттлмэнтээс илүү тухайн өдрийнхийг санал болгоно."""
+        from datetime import timedelta
+        from .models import BankTransaction, Sale
+        self.post_pos_sale(qty='1')
+        self.post_pos_sale(qty='3')
+        sale = Sale.objects.get(total_amount=10000)
+        other_day = BankTransaction.objects.create(
+            account_type='BANK', bank_account=self.xac, transaction_date=self.sale_day - timedelta(days=2),
+            description=f'{self.sale_day - timedelta(days=3):%Y.%m.%d}, 187, 44311091 СЕТТЛЕМЕНТ ХААВ', income_amount=10000)
+        settlement, _ = self.add_statement(40000, 400)
+
+        page = self.client.get(reverse('main:sale_detail', args=[sale.id]))
+        txs = list(page.context['tx_page_obj'])
+        self.assertEqual(txs[0].id, settlement.id)
+        self.assertTrue(txs[0].is_pos_match)
+        self.assertEqual(txs[0].default_link_amount, 10000)  # сэттлмэнтийн бүх дүн биш
+        self.assertFalse(next(t for t in txs if t.id == other_day.id).is_exact)
+
+        self.client.post(reverse('main:sale_link_bank', args=[sale.id]), {
+            'transaction_id': str(settlement.id), 'action': 'link', 'link_amount': '10000'})
+        sale.refresh_from_db(); settlement.refresh_from_db()
+        self.assertEqual((sale.status, sale.paid_amount), ('PAID', 10000))
+        self.assertEqual(settlement.accounting_entry.debit_amount, 10000)
+        self.assertFalse(settlement.is_processed)  # 30,000 үлдсэн
+
+    def test_pos_settlement_page_removed(self):
+        from django.urls import NoReverseMatch
+        with self.assertRaises(NoReverseMatch):
+            reverse('main:pos_settlement_list')
 
 
 class AutoLinkRuleTests(TestCase):
@@ -1280,3 +1539,108 @@ class StudentPaymentsTests(TestCase):
         page = self.client.get(reverse('main:link_bank_transaction_to_journal', args=[tx.id]))
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page.context['link_data']['pending_payments'][0]['id'], pending.id)
+
+
+class BankLedgerTests(TestCase):
+    """Банкны бүртгэл — кассын бүртгэл шиг: банк тус бүр эсвэл бүх банкны нийлсэн үлдэгдэл."""
+
+    def setUp(self):
+        from decimal import Decimal
+        from .models import BankTransaction, ChartOfAccounts
+        self.client.force_login(make_profile('ledger', UserRole.DIRECTOR).user)
+        self.khan = ChartOfAccounts.objects.create(code='110101', name='ХААН БАНК', account_type='ASSET', opening_balance=Decimal('1000'))
+        self.xac = ChartOfAccounts.objects.create(code='110103', name='ХАС БАНК', account_type='ASSET', opening_balance=Decimal('500'))
+        today = date.today()
+        BankTransaction.objects.create(account_type='BANK', bank_account=self.khan, transaction_date=today,
+                                       description='орлого', income_amount=300, closing_balance=1300)
+        BankTransaction.objects.create(account_type='BANK', bank_account=self.xac, transaction_date=today,
+                                       description='зарлага', expense_amount=100, closing_balance=999)
+        BankTransaction.objects.create(account_type='CASH', bank_account=self.khan, transaction_date=today,
+                                       description='касс', income_amount=50)
+
+    def test_all_banks_combined_and_single_bank(self):
+        page = self.client.get(reverse('main:bank_transaction_ledger'))
+        self.assertEqual((page.context['opening_balance'], page.context['closing_balance'], page.context['row_count']),
+                         (1500, 1700, 2))  # кассын гүйлгээ орохгүй
+        self.assertEqual([b['closing'] for b in page.context['account_balances']], [1300, 400])
+        # ХАС-ийн хуулгын үлдэгдэл (999) тооцоолсонтой (400) зөрнө
+        self.assertEqual([m['account'].code for m in page.context['balance_mismatches']], ['110103'])
+
+        page = self.client.get(reverse('main:bank_transaction_ledger'), {'bank_account': self.khan.id})
+        self.assertEqual((page.context['opening_balance'], page.context['closing_balance'], page.context['account_balances']),
+                         (1000, 1300, []))
+
+    def test_csv_export(self):
+        response = self.client.get(reverse('main:bank_transaction_ledger'), {'export': 'csv'})
+        self.assertIn('bank_tailan_', response['Content-Disposition'])
+
+
+class ProductFormTests(TestCase):
+    """Бараа нэмэх: борлуулах үнэ заавал биш, код автоматаар, алдаатай үед утга хадгалагдана."""
+
+    def setUp(self):
+        from .models import Product, ProductCategory
+        self.client.force_login(make_profile('inv', UserRole.DIRECTOR).user)
+        self.category = ProductCategory.objects.create(name='Лаа')
+        Product.objects.create(code='400', name='Хадаг', purchase_price=1000, selling_price=2000)
+        Product.objects.create(code='020156', name='Баркодтой', purchase_price=1, selling_price=2)
+
+    def test_create_without_selling_price_and_auto_code(self):
+        from .models import Product
+        page = self.client.get(reverse('main:product_create'))
+        self.assertEqual(page.context['form'].initial['code'], '401')  # 020156 тэгээр эхэлсэн тул тооцохгүй
+
+        response = self.client.post(reverse('main:product_create'), {
+            'name': '  Зул   лаа ', 'code': '', 'unit': 'PIECE', 'purchase_price': '12,500', 'selling_price': '',
+        })
+        product = Product.objects.get(name='Зул лаа')
+        self.assertRedirects(response, reverse('main:inventory_list') + f'?highlight={product.id}', fetch_redirect_response=False)
+        self.assertEqual((product.code, product.purchase_price, product.selling_price, product.initial_stock), ('401', 12500, 0, 0))
+
+    def test_code_suggested_within_category_range(self):
+        from .forms import product_code_suggestions, suggest_product_code
+        from .models import Product, ProductCategory
+        Product.objects.create(code='101', name='Лаа 1', purchase_price=1, selling_price=1, category=self.category)
+        Product.objects.create(code='102', name='Лаа 2', purchase_price=1, selling_price=1, category=self.category)
+        Product.objects.create(code='103', name='Ангилалгүй', purchase_price=1, selling_price=1)  # мужид ч давхцахгүй
+        empty = ProductCategory.objects.create(name='Шинэ')
+        self.assertEqual(suggest_product_code(self.category.id), '104')
+        self.assertEqual(suggest_product_code(empty.id), '500')   # дараагийн чөлөөтэй зуут
+        self.assertEqual(product_code_suggestions()[1], '401')
+
+        # Код хоосон илгээвэл сонгосон ангиллын мужаас олгоно
+        self.client.post(reverse('main:product_create'), {
+            'name': 'Лаа 3', 'unit': 'PIECE', 'category': str(self.category.id), 'purchase_price': '0'})
+        self.assertEqual(Product.objects.get(name='Лаа 3').code, '104')
+
+    def test_duplicate_code_rejected_case_insensitively_and_values_kept(self):
+        from .models import Product
+        Product.objects.create(code='ABC-1', name='Хуучин', purchase_price=1, selling_price=1)
+        response = self.client.post(reverse('main:product_create'), {
+            'name': 'Шинэ бараа', 'code': 'abc-1', 'unit': 'PIECE', 'purchase_price': '500',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('code', response.context['form'].errors)
+        self.assertContains(response, 'value="Шинэ бараа"')
+        self.assertFalse(Product.objects.filter(name='Шинэ бараа').exists())
+
+    def test_save_and_add_another_keeps_category_and_unit(self):
+        response = self.client.post(reverse('main:product_create'), {
+            'name': 'Бараа 1', 'unit': 'BOX', 'category': str(self.category.id), 'purchase_price': '0',
+            'after_save': 'add_another',
+        })
+        self.assertRedirects(response, reverse('main:product_create') + f'?category={self.category.id}&unit=BOX',
+                             fetch_redirect_response=False)
+        page = self.client.get(response['Location'])
+        self.assertContains(page, f'value="{self.category.id}" selected')
+        self.assertContains(page, 'value="BOX" selected')
+
+    def test_edit_keeps_initial_stock_and_clears_selling_price(self):
+        from .models import Product
+        product = Product.objects.create(code='P9', name='Ном', purchase_price=5000, selling_price=10000, initial_stock=7)
+        self.client.post(reverse('main:product_edit', args=[product.id]), {
+            'name': 'Ном', 'code': 'P9', 'unit': 'PIECE', 'purchase_price': '5000', 'selling_price': '',
+            'initial_stock': '999', 'is_active': 'on',
+        })
+        product.refresh_from_db()
+        self.assertEqual((product.initial_stock, product.selling_price, product.is_active), (7, 0, True))

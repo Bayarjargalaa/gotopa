@@ -114,7 +114,7 @@
                 </thead>
                 <tbody id="invBody" class="divide-y divide-gray-100">
                     {% for product in products %}
-                    <tr class="inv-row hover:bg-gray-50 {% if not product.is_active %}opacity-60{% endif %}"
+                    <tr id="product-{{ product.id|stringformat:'d' }}" class="inv-row hover:bg-gray-50 {% if not product.is_active %}opacity-60{% endif %}"
                         data-search="{{ product.code }} {{ product.name }} {{ product.supplier_label }} {{ product.category.name|default:'' }}"
                         data-name="{{ product.name }}"
                         data-code="{{ product.code }}"
@@ -143,7 +143,7 @@
                             <div class="text-xs font-normal text-gray-400">өөрчлөгдсөн</div>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-2.5 text-right text-sm">{{ product.selling_price|floatformat:0 }}₮</td>
+                        <td class="px-4 py-2.5 text-right text-sm">{% if product.selling_price %}{{ product.selling_price|floatformat:0 }}₮{% else %}<span class="text-gray-300" title="Борлуулах үнэ тогтоогоогүй">—</span>{% endif %}</td>
                         <td class="px-4 py-2.5 text-center whitespace-nowrap">
                             {% if product.stock_state == 'out' %}
                             <span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-sm font-bold">⚠️ {{ product.stock_qty }}</span>
@@ -277,6 +277,16 @@
 </div>
 
 <script>
+// Бараа нэмсэн/зассаны дараа тухайн мөрийг тодруулна (?highlight=<id>)
+(function () {
+    const id = new URLSearchParams(location.search).get('highlight');
+    const row = id && document.getElementById('product-' + id);
+    if (!row) return;
+    row.scrollIntoView({ block: 'center' });
+    row.classList.add('bg-yellow-50');
+    setTimeout(() => row.classList.remove('bg-yellow-50'), 4000);
+})();
+
 function openInitialStockModal(productId, productName, currentStock, initialStock) {
     document.getElementById('modal_product_id').value = productId;
     document.getElementById('modal_product_name').textContent = productName;
